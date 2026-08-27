@@ -1,0 +1,159 @@
+import React from 'react';
+import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { SKY_GRADIENT, theme } from '../ui/theme';
+
+const ITEMS = [
+  { id: 'game', title: 'Jogar', subtitle: 'Toque para voar', primary: true },
+  { id: 'leaderboard', title: 'Ranking', subtitle: 'Compare seus voos' },
+  { id: 'settings', title: 'Configuracoes', subtitle: 'Som e conta' },
+];
+
+export default function HomeScreen({ onNavigate, best }) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  // Em paisagem sobra largura e falta altura: marca de um lado, menu do outro.
+  const side = width > height;
+
+  return (
+    <View style={styles.root}>
+      <LinearGradient colors={SKY_GRADIENT} locations={[0, 0.3, 0.56, 0.8, 1]} style={StyleSheet.absoluteFill} />
+      <View style={styles.vignette} />
+
+      <View
+        style={[
+          styles.content,
+          side && styles.contentSide,
+          {
+            paddingTop: insets.top + (side ? 12 : 32),
+            paddingBottom: insets.bottom + 24,
+            paddingLeft: insets.left + 24,
+            paddingRight: insets.right + 24,
+          },
+        ]}
+      >
+        <View style={[styles.brand, side && styles.brandSide]}>
+          {/* Mesma arte do icone/splash do app, em vez de um desenho paralelo. */}
+          <Image
+            source={require('../../assets/splash-icon.png')}
+            style={[styles.badge, side && styles.badgeSide]}
+            resizeMode="contain"
+          />
+          <Text style={styles.title}>NEON FLYER</Text>
+          <Text style={styles.subtitle}>
+            Toque para bater as asas. Solte e a gravidade cobra o preco.
+          </Text>
+          <View style={styles.bestPill}>
+            <Text style={styles.bestLabel}>RECORDE</Text>
+            <Text style={styles.bestValue}>{best}</Text>
+          </View>
+        </View>
+
+        <View style={[styles.menu, side && styles.menuSide]}>
+          {ITEMS.map((item) => (
+            <MenuButton key={item.id} item={item} onPress={() => onNavigate(item.id)} />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function MenuButton({ item, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.item,
+        item.primary ? styles.itemPrimary : styles.itemGhost,
+        pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+      ]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.itemTitle, item.primary && styles.itemTitlePrimary]}>{item.title}</Text>
+        <Text style={[styles.itemSubtitle, item.primary && styles.itemSubtitlePrimary]}>
+          {item.subtitle}
+        </Text>
+      </View>
+      <Text style={[styles.itemChevron, item.primary && styles.itemTitlePrimary]}>›</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.skyTop },
+  vignette: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6,9,26,0.45)' },
+
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  contentSide: { flexDirection: 'row', gap: 44 },
+
+  brand: { alignItems: 'center', maxWidth: 400, marginBottom: 30 },
+  brandSide: { marginBottom: 0, flex: 1, maxWidth: 340 },
+
+  // A arte ja traz o halo, entao nada de sombra por cima (que no Android
+  // viraria `elevation` e mudaria a ordem de desenho).
+  badge: { width: 148, height: 148, marginBottom: 8 },
+  badgeSide: { width: 108, height: 108, marginBottom: 4 },
+
+  title: {
+    color: theme.text,
+    fontSize: 36,
+    fontWeight: '900',
+    letterSpacing: 4,
+    textShadowColor: 'rgba(46,230,197,0.55)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
+  },
+  subtitle: {
+    color: theme.textDim,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginTop: 10,
+  },
+  bestPill: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  bestLabel: { color: theme.textDim, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
+  bestValue: { color: theme.bird, fontSize: 20, fontWeight: '900' },
+
+  menu: { width: '100%', maxWidth: 380, gap: 12 },
+  menuSide: { flex: 1, maxWidth: 340 },
+
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    borderWidth: 1.5,
+  },
+  itemPrimary: {
+    backgroundColor: theme.pillar,
+    borderColor: theme.pillarLight,
+    shadowColor: theme.pillar,
+    shadowOpacity: 0.55,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
+  itemGhost: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.18)' },
+
+  itemTitle: { color: theme.text, fontSize: 18, fontWeight: '800' },
+  itemTitlePrimary: { color: '#04231D' },
+  itemSubtitle: { color: theme.textDim, fontSize: 12, marginTop: 2 },
+  itemSubtitlePrimary: { color: 'rgba(4,35,29,0.7)' },
+  itemChevron: { color: theme.textDim, fontSize: 26, marginTop: -3 },
+});
