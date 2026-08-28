@@ -1,18 +1,19 @@
 {
   "expo": {
-    "name": "Neon Flyer",
-    "slug": "neon-flyer",
+    "name": "Major Flyer",
+    "slug": "major-flyer",
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#080C22",
     "icon": "./assets/icon.png",
     "ios": {
+      "bundleIdentifier": "com.abqlab.majorflyer",
       "supportsTablet": true,
       "requireFullScreen": true
     },
     "android": {
-      "package": "com.andre.neonflyer",
+      "package": "com.abqlab.majorflyer",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#080C22"
@@ -32,6 +33,21 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#080C22"
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-6744388004633498~5213266367",
+          "iosAppId": "ca-app-pub-6744388004633498~9033091878"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.2.21"
+          }
         }
       ]
     ]

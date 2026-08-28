@@ -1,4 +1,4 @@
-# Neon Flyer
+# Major Flyer
 
 Jogo estilo *Flappy Bird* feito em **React Native (Expo)** com física real do
 **matter-js**. Toque na tela para bater as asas; sem toque, a gravidade puxa o
@@ -60,7 +60,7 @@ npm test
 
 | Tela | O que tem |
 |------|-----------|
-| **Início** | Jogar, Ranking, Configurações e o recorde do aparelho |
+| **Início** | Jogar, Ranking, Configurações, o recorde do aparelho e as 5 partidas |
 | **Ranking** | Aba *Global* (Google Play Jogos) e aba *Seus voos* (histórico local) |
 | **Configurações** | Música de fundo, som do toque, efeitos, conta do Play Jogos, apagar recordes |
 | **Jogo** | Partida, placar ao vivo, pausa e fim de jogo |
@@ -169,13 +169,13 @@ Para ligar de verdade:
    **leaderboard**. Guarde o ID (`CgkI…`).
 2. Crie o módulo nativo:
    ```bash
-   npx create-expo-module --local neon-flyer-play-games
+   npx create-expo-module --local major-flyer-play-games
    ```
 3. No Kotlin do módulo, use `com.google.android.gms:play-services-games-v2` e
    exponha os métodos do **contrato** documentado no topo de
    [playGames.js](src/services/playGames.js) (`signInAsync`, `getPlayerAsync`,
    `submitScoreAsync`, `loadTopScoresAsync`, `showLeaderboardAsync`). Registre o
-   módulo com o nome `NeonFlyerPlayGames`.
+   módulo com o nome `MajorFlyerPlayGames`.
 4. Cole o ID do leaderboard em `LEADERBOARD_ID`, no mesmo arquivo.
 5. Gere a build — a partir daqui não roda mais no Expo Go:
    ```bash
@@ -195,6 +195,207 @@ lá, e não numa tela de abertura.
 
 ---
 
+## Fases e anúncios
+
+A cada **`STAGE_LENGTH` obstáculos** a fase fecha: o mundo congela, aparece o
+painel de fim de fase e a partida continua na fase seguinte — cenário novo,
+obstáculos novos e **+10% de velocidade** sobre a velocidade inicial.
+
+```js
+// src/game/constants.js
+export const STAGE_LENGTH = 10; // TESTE. Em producao: 50.
+```
+
+Esse é o único número a mudar para sair do modo de teste.
+
+### As 5 fases
+
+| # | Fase | Velocidade | Cenário | Obstáculo |
+|---|------|-----------|---------|-----------|
+| 1 | Neon Dusk | 1,0x | crepúsculo roxo/laranja | coluna neon arredondada |
+| 2 | Chuva Ciber | 1,1x | azul profundo, torres altas | vidro azul, topo chanfrado |
+| 3 | Tempestade Solar | 1,2x | céu em brasa | chapa metálica com rebites |
+| 4 | Selva Tóxica | 1,3x | verde tóxico, copas redondas | coluna orgânica |
+| 5 | Circuito Vazio | 1,4x | vazio magenta | energia com núcleo brilhante |
+
+Passou da fase 5? A contagem de fases continua (e o anúncio também), mas o
+visual e a velocidade **param de subir** — senão vira injogável.
+
+Fase é só dado: tudo vive em [`src/game/stages.js`](src/game/stages.js), numa
+tabela de cores e medidas. Para inventar uma fase 6, acrescente um item na
+lista — não existe `if` de fase espalhado pelo código.
+
+### Os anúncios
+
+Uma regra do AdMob molda a tela: **vídeo premiado exige que o jogador escolha
+assistir e receba algo em troca** — obrigar a ver para continuar é violação de
+política, e o formato certo para pausa obrigatória é o **intersticial**.
+
+Daí a divisão: **premiado onde há prêmio, intersticial na virada de fase**.
+
+O painel de fim de fase tem duas saídas, e **cada fase mostra um anúncio, nunca
+dois**:
+
+- **Assistir e ganhar escudo** — vídeo premiado; a recompensa é um escudo (anel
+  azul em volta do pássaro) que perdoa a batida seguinte. Ele **não some no
+  impacto**: começa a se dissipar, pisca e leva ~1,5 s para apagar — e
+  *enquanto ainda houver anel na tela toda colisão continua sendo perdoada*, seja
+  a outra coluna do mesmo par, a coluna seguinte ou o chão. O tempo está em
+  `SHIELD_FADE_FRAMES` ([constants.js](src/game/constants.js)).
+- **Continuar sem prêmio** — entra o **intersticial** e a fase vira. É a pausa
+  natural do jogo (fase fechada, jogador parado, painel na tela), que é
+  exatamente onde a política do AdMob quer esse formato — e nunca por cima de um
+  toque dado esperando outra coisa.
+
+Quem assiste ao premiado **não** leva o intersticial em seguida: dois anúncios
+seguidos é o caminho curto para a desinstalação, e o premiado paga mais. Para
+cobrar os dois, é um `await showInterstitial()` antes do `advanceStage` em
+`watchAd` ([GameScreen.js](src/screens/GameScreen.js)).
+
+Os dois formatos começam a **carregar quando a fase fecha**, não no clique:
+anúncio que só carrega na hora faz o jogador apertar o botão e não ver nada
+acontecer. Se mesmo assim não estiver pronto, a fase avança sem anúncio — o jogo
+nunca fica esperando.
+
+### As 5 partidas
+
+O jogador começa com **5 partidas**. Cada partida iniciada — pelo *Jogar* da
+Home ou pelo *Jogar de novo* do fim de jogo — apaga um dos cinco pássaros que
+ficam logo abaixo do recorde. O pássaro gasto **não some da fileira**: fica
+transparente, senão o jogador não teria como saber quantas ele tinha.
+
+Zerou, o botão principal vira **Assistir e ganhar 5 vidas** (vídeo premiado),
+tanto na Home quanto no painel de fim de jogo.
+
+O que vale saber:
+
+- **O número vive na memória** ([lives.js](src/services/lives.js)), e o disco
+  (`@major-flyer/lives`) só guarda entre uma sessão e outra — sem isso, fechar e
+  abrir o app seria a maneira mais fácil de jogar para sempre.
+
+  A ordem importa: gastar e recarregar valem **na hora**, e a gravação vai
+  atrás numa fila. Quando era o contrário — cada mudança esperando uma ida e
+  volta ao AsyncStorage para só então voltar à tela por props —, dava para
+  assistir ao vídeo, ganhar as cinco vidas, começar outra partida e o painel
+  ainda marcar cinco. No Android, com a thread de JS ocupada pelo jogo, esse
+  atraso passava de segundos.
+- Pela mesma razão, **as vidas não viajam por props**: cada tela lê o serviço
+  direto (`livesNow()` para decidir, `useLives()` para redesenhar). Um número
+  que atravessa três componentes chega tarde justamente quando importa.
+- **Girar o aparelho não cobra outra vida**: a remontagem da tela não passa por
+  nenhum dos dois caminhos de entrada de uma partida.
+- Sem SDK, sem IDs ou na web não existe vídeo nenhum — e nesse caso a recarga
+  sai assim mesmo. Anúncio não pode ser a única porta de saída de uma tela.
+- `MAX_LIVES` está em [lives.js](src/services/lives.js), e `npm test` cobre a
+  regra: não passa de zero por baixo nem de cinco por cima, e valor corrompido
+  no disco não tranca ninguém.
+
+`showInterstitial()` já está implementado em
+[`src/services/ads.js`](src/services/ads.js) para quando/se a pausa obrigatória
+for o caminho.
+
+**O jogo nunca depende do anúncio.** Sem SDK, sem IDs ou sem rede, as funções
+respondem "não deu" na hora e a fase avança. Enquanto não houver AdMob
+configurado, o botão roda uma *propaganda simulada* de 3 s — só para dar para
+testar o fluxo inteiro (desligue em `SIMULATE_WHEN_UNAVAILABLE`).
+
+### AdMob: o que já está ligado
+
+A conta existe e as duas plataformas estão configuradas:
+
+| Plataforma | O quê | ID |
+|---|---|---|
+| Android | App ID | `ca-app-pub-6744388004633498~5213266367` |
+| Android | Rewarded | `ca-app-pub-6744388004633498/7044011331` |
+| Android | Intersticial | `ca-app-pub-6744388004633498/9670174671` |
+| iOS | App ID | `ca-app-pub-6744388004633498~9033091878` |
+| iOS | Rewarded | `ca-app-pub-6744388004633498/7720010204` |
+| iOS | Intersticial | *ainda não criado no AdMob* |
+
+Os **App IDs** ficam no `app.json` (props do plugin) porque quem precisa deles é
+o código **nativo**: viram `<meta-data>` no `AndroidManifest.xml` e
+`GADApplicationIdentifier` no `Info.plist` durante o `prebuild`. As **unidades**
+ficam no JS, em `AD_UNITS`.
+
+**Teste em dev, real em produção.** `USE_TEST_UNITS = __DEV__`: todo `expo start`
+e toda build de debug mostram a unidade de teste do Google, e só a build de
+release mostra o anúncio de verdade. Isso não é preciosismo — **clicar num
+anúncio real do próprio app é o jeito mais rápido de o AdMob suspender a conta**,
+e é exatamente o que acontece quando se testa clicando.
+
+Uma trava a mais: quando uma plataforma não tem unidade real cadastrada para um
+formato, `unitId()` responde vazio **mesmo em modo de teste**. É o que faz o
+intersticial do iOS não existir hoje em vez de tentar usar a unidade de teste
+num app que ainda não tem esse bloco. E foi o que impediu, antes de o iOS ter
+App ID, que o SDK nativo fosse inicializado sem `GADApplicationIdentifier` — o
+que derruba o app na abertura.
+
+**A propaganda simulada também é só de desenvolvimento**
+(`SIMULATE_WHEN_UNAVAILABLE = __DEV__`). Ela é uma tela de anúncio que não é
+anúncio nenhum: útil para testar o fluxo no navegador, indefensável para quem
+baixou o jogo. Em produção, formato que não existe simplesmente não aparece — a
+fase troca direto.
+
+**Falta para o iOS:** criar o bloco **intersticial** no AdMob e colar em
+`AD_UNITS.ios.interstitial`. Sem ele, a troca de fase no iPhone acontece sem
+anúncio; o escudo e as vidas, que são premiados, funcionam normalmente.
+
+Depois de mexer no App ID ou nos plugins do `app.json`, o projeto nativo precisa
+ser refeito — é lá que o App ID vira `<meta-data>` no manifesto:
+
+```bash
+npx expo prebuild --clean
+```
+
+Anúncio é código nativo: **não roda no Expo Go nem na web**. Nessas duas
+situações o app cai na propaganda simulada, e o jogo segue igual.
+
+Referência de receita (BR, aproximada): banner US$ 0,10–0,50 · intersticial
+US$ 1–4 · premiado US$ 3–9 de eCPM.
+
+### Kotlin: por que a versão do SDK de anúncios está fixa
+
+Instalar o SDK de anúncios quebrava a build Android com dezenas de linhas assim:
+
+> `Module was compiled with an incompatible version of Kotlin. The binary version
+> of its metadata is 2.3.0, expected version is 2.1.0.`
+
+O React Native 0.86 compila com **Kotlin 2.1.20**, e **um compilador não lê
+metadata de versão maior que a sua** (o contrário funciona: compilador novo lê
+binário antigo). O Google vem publicando o `play-services-ads` compilado com
+Kotlin cada vez mais novo — lendo o cabeçalho dos `.kotlin_module` dentro dos
+próprios `.aar`:
+
+| `play-services-ads` | metadata Kotlin | vem com |
+|---|---|---|
+| 23.6.0 | 1.9.0 | — |
+| 24.0.0 – 24.5.0 | 2.1.0 | — |
+| 24.9.0 | 2.2.0 | RNGMA 16.0.3 |
+| **25.0.0** | **2.2.0** | **RNGMA 16.1.0 – 16.3.4** |
+| 25.4.0 | 2.3.0 | RNGMA 16.4.0+ |
+
+E subir o Kotlin até 2.3 **não é opção**: o Expo SDK 57 só conhece KSP até
+**Kotlin 2.2.21** (`KSPLookup` em `expo-modules-autolinking`). Com 2.3.21 o
+build morre em `expo-modules-core` e `react-native-safe-area-context` com
+*Internal compiler error* — testado.
+
+Daí a combinação que está no projeto, a mais nova que fecha dos dois lados:
+
+- `"react-native-google-mobile-ads": "16.3.4"` — **sem `^`, de propósito**: a
+  16.4.0 puxa o `play-services-ads` 25.4.0 e quebra tudo de novo.
+- `kotlinVersion: "2.2.21"` via `expo-build-properties` no [app.json](app.json),
+  que vira `android.kotlinVersion` no `gradle.properties` gerado.
+
+```json
+["expo-build-properties", { "android": { "kotlinVersion": "2.2.21" } }]
+```
+
+**Quando dá para atualizar o SDK de anúncios:** quando o Expo passar a suportar
+Kotlin 2.3 (basta a chave `"2.3.x"` aparecer no `KSPLookup`). Aí é subir os dois
+juntos — o SDK e o `kotlinVersion` — nunca só um.
+
+---
+
 ## Como está montado
 
 ```
@@ -204,9 +405,10 @@ src/
   game/
     constants.js             passo fixo de 60 Hz e estados do jogo
     layout.js                todas as medidas derivadas do tamanho da tela
+    stages.js                tabela das 5 fases: cores, formas e velocidade
     World.js                 motor de fisica (matter-js): gravidade e colisoes
     session.js               o que sobrevive a uma rotacao no meio da partida
-    render/                  ceu, passaro, colunas e chao (so Views)
+    render/                  ceu, passaro, colunas, chao e placar (so Views)
   screens/
     HomeScreen.js            Jogar / Ranking / Configuracoes
     GameScreen.js            game loop, HUD, pausa e fim de jogo
@@ -214,10 +416,16 @@ src/
     SettingsScreen.js        som, conta e dados
   services/
     scores.js                historico local de partidas
+    lives.js                 as 5 partidas, gravadas no disco
     playGames.js             ponte opcional com o Google Play Jogos
+    ads.js                   AdMob (premiado/intersticial), desligavel e opcional
+    adsSdk.js                carrega o SDK nativo (.web.js devolve null)
   state/SettingsContext.js   preferencias persistidas
-  hooks/useScores.js         recorde + envio de placar
-  ui/                        tema, botao, moldura de tela e linhas de ajuste
+  hooks/
+    useScores.js             recorde + envio de placar
+    useLives.js              gasta e repoe vidas, sempre lendo o disco antes
+    useAds.js                premiado e intersticial vistos pela tela
+  ui/                        tema, botao, passaros de vida, cobertura do anuncio
 tools/
   generate-audio.js          sintetiza assets/audio
   generate-icons.js          desenha icone, splash e favicon
@@ -264,8 +472,27 @@ o jogo não pedir um mergulho do teto ao chão entre duas colunas.
 ### Performance
 
 O game loop escreve em `Animated.Value`, não em `setState`. O React só
-re-renderiza quando o placar ou o estado do jogo muda — os 60 fps vão direto para
-as views nativas.
+re-renderiza quando o estado do jogo muda — os 60 fps vão direto para as views
+nativas.
+
+**O placar é atualizado no frame do ponto.** Duas coisas garantem isso:
+
+1. O ponto vale quando o pássaro **emerge** da coluna (o bico passa a borda
+   direita dela). A regra anterior esperava a coluna passar pela *cauda*, o que
+   custava `2 × raio ÷ velocidade` frames — 0,33 s de placar atrasado num
+   iPhone em retrato. `npm test` mede essa folga em duas telas.
+2. **O número não passa pelo React.** Isolar o placar num componente próprio e
+   chamá-lo por `ref` resolveu na web e **não resolveu no Android**: lá o som
+   saía na hora e o número aparecia segundos depois. O commit do React entra na
+   fila atrás do game loop, que naquele mesmo frame já empurrou uns vinte
+   valores animados — e reconciliar a árvore do jogo no celular custa muito mais
+   do que trocar um nó de texto no navegador.
+
+   A saída foi desenhar o placar como **rolo de dígitos**
+   ([ScoreDigits.js](src/game/render/ScoreDigits.js)): cada casa é uma coluna
+   com os dez algarismos empilhados, e mudar o número é mover um `translateY`.
+   O placar passou a andar pelo mesmo caminho do pássaro e das colunas — o
+   único que já chegava em dia.
 
 ---
 
@@ -279,13 +506,16 @@ as views nativas.
 | Girar o aparelho | Adapta a tela, mantendo o placar |
 | Tela de fim de jogo | Toque (após 0,65 s) reinicia |
 
-Dificuldade sobe até 40 pontos: a velocidade aumenta ~55% e o vão fecha ~14%.
+A dificuldade agora vem das **fases** (seção abaixo), e não mais de uma rampa
+ligada ao placar.
 
 ---
 
 ## Próximos passos possíveis
 
 - Módulo nativo do Play Jogos (roteiro acima) e conquistas.
+- `STAGE_LENGTH` de 10 para 50 quando a troca de fase estiver aprovada.
+- Fases 6+ (é só mais um item em `src/game/stages.js`).
 - Vibração no impacto (`expo-haptics`).
 - Skins do pássaro liberadas por pontuação.
 - Build instalável: `npx expo prebuild` + `eas build -p android --profile preview`.

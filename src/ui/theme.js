@@ -21,6 +21,10 @@ export const theme = {
   ground: '#0C1230',
   groundLine: '#2EE6C5',
 
+  // Fria de proposito: nao se confunde com o passaro nem com a paleta de
+  // nenhuma das fases.
+  shield: '#8FF7FF',
+
   text: '#F4F7FF',
   textDim: '#96A1CE',
   danger: '#FF5C7A',

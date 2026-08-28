@@ -1,8 +1,14 @@
 import Matter from 'matter-js';
-import { FIXED_DT, PHASE } from './constants';
+import { FIXED_DT, PHASE, SHIELD_FADE_FRAMES, STAGE_LENGTH } from './constants';
+import { STAGE_COUNT, stageAt } from './stages';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const randRange = (a, b) => a + Math.random() * (b - a);
+
+// Contato continuo (raspar na coluna, arrastar no chao) rende varios
+// 'collisionStart' seguidos. Duas absorcoes a menos de 8 frames contam como a
+// mesma batida para efeito de som e estilhaco.
+const ABSORB_COOLDOWN = 8;
 
 /**
  * Mundo do jogo.
@@ -13,6 +19,10 @@ const randRange = (a, b) => a + Math.random() * (b - a);
  * contato e dispara `collisionStart`, mas nao empurra o passaro.
  *
  * A classe nao conhece React: quem desenha apenas le `birdY`, `pillars`, etc.
+ *
+ * FASES: a cada STAGE_LENGTH obstaculos o mundo congela em STAGE_CLEAR e
+ * espera alguem chamar `nextStage()` (a tela faz isso depois do anuncio). Cada
+ * fase traz sua propria velocidade e seu proprio vao, vindos de `stages.js`.
  */
 export default class World {
   constructor(layout) {
@@ -75,8 +85,11 @@ export default class World {
     this.frame = 0;
     this._hit = false;
     this.settled = false;
-    this.speed = L.speed;
-    this.gap = L.gap;
+    this.stage = 0;
+    this.shieldHits = 0;
+    this._lastAbsorbFrame = -ABSORB_COOLDOWN;
+    this._clearShield();
+    this.applyStage();
     this.wing = 0;
     this.lastGapCenter = null;
     this.groundOffset = 0;
@@ -98,9 +111,92 @@ export default class World {
     }
   }
 
+  /**
+   * Aplica a fase atual: velocidade, vao e quantos pontos fecham a fase.
+   * O multiplicador de velocidade e absoluto sobre a base do layout (fase 1 =
+   * 1.0, fase 2 = 1.1 ...), e nao composto — e o que o projeto pediu.
+   *
+   * Passou da ultima fase? O visual e a velocidade param de subir (senao vira
+   * injogavel), mas a contagem de fases continua, e o anuncio tambem.
+   */
+  applyStage() {
+    const L = this.layout;
+    const s = stageAt(this.stage);
+    this.speed = L.speed * s.speed;
+    // gapMin e o piso: nenhuma fase pode apertar o vao alem do jogavel.
+    this.gap = Math.max(L.gap * s.gap, L.gapMin);
+    this.stageTarget = (this.stage + 1) * STAGE_LENGTH;
+    for (const p of this.pillars) {
+      p.gap = this.gap;
+      this._syncPillar(p);
+    }
+  }
+
+  /**
+   * Alinha a fase ao placar. Cada fase tem exatamente STAGE_LENGTH obstaculos,
+   * entao a fase e sempre `placar / STAGE_LENGTH` — usado ao retomar uma
+   * partida que atravessou uma rotacao de tela.
+   */
+  syncStageToScore() {
+    this.stage = Math.floor(this.score / STAGE_LENGTH);
+    this.applyStage();
+  }
+
+  /** Quantos obstaculos ja foram nesta fase (0..STAGE_LENGTH). */
+  get stageProgress() {
+    return this.score - this.stage * STAGE_LENGTH;
+  }
+
+  /** Existe fase nova depois desta, ou daqui para frente e so repeteco? */
+  get hasNextLook() {
+    return this.stage + 1 < STAGE_COUNT;
+  }
+
+  /**
+   * Comeca a proxima fase, mantendo o placar. As colunas voltam para fora da
+   * tela e o mundo fica em READY: depois de um anuncio o dedo do jogador nao
+   * esta mais na tela, entao ninguem deve morrer por causa disso.
+   */
+  nextStage() {
+    const L = this.layout;
+    this.stage += 1;
+    this.applyStage();
+    this.phase = PHASE.READY;
+    this.settled = false;
+    this._hit = false;
+    this.lastGapCenter = null;
+    this.birdRotation = 0;
+
+    Matter.Body.setPosition(this.bird, { x: L.birdX, y: L.playHeight / 2 });
+    Matter.Body.setVelocity(this.bird, { x: 0, y: 0 });
+    this.birdY = L.playHeight / 2;
+
+    let x = L.width + L.pillarWidth;
+    for (const p of this.pillars) {
+      p.x = x;
+      p.gap = this.gap;
+      p.gapCenter = this._randomGapCenter(this.gap);
+      p.scored = false;
+      this._syncPillar(p);
+      x += L.spacing;
+    }
+  }
+
+  /**
+   * Recompensa do anuncio premiado. O escudo fica inteiro ate a primeira
+   * batida; dali em diante ele se dissipa aos poucos, perdoando tudo o que
+   * acontecer enquanto ainda estiver na tela (ver `_absorbHit`).
+   */
+  grantShield() {
+    this.shield = true;
+    this.shieldLevel = 1;
+    this.shieldFading = false;
+    this.shieldFrames = 0;
+  }
+
   /** Toque na tela: sobe. Retorna true se o toque foi consumido. */
   flap() {
-    if (this.phase === PHASE.OVER) return false;
+    if (this.phase === PHASE.OVER || this.phase === PHASE.STAGE_CLEAR) return false;
     if (this.phase === PHASE.READY) this.phase = PHASE.PLAYING;
     Matter.Body.setVelocity(this.bird, { x: 0, y: this.layout.flapVelocity });
     return true;
@@ -111,6 +207,7 @@ export default class World {
    * Quem desenha usa isso para parar de empurrar valores a cada frame.
    */
   isIdle() {
+    if (this.phase === PHASE.STAGE_CLEAR) return true; // congelado esperando o anuncio
     return this.phase === PHASE.OVER && this.settled;
   }
 
@@ -132,19 +229,23 @@ export default class World {
       return;
     }
 
-    // Dificuldade progressiva: acelera e fecha um pouco o vao ate 40 pontos.
-    const t = Math.min(this.score / 40, 1);
-    this.speed = L.speed * (1 + 0.55 * t);
-    this.gap = L.gap - (L.gap - L.gapMin) * t;
-
+    // Velocidade e vao sao da fase (ver applyStage), nao do placar.
     if (this.phase === PHASE.PLAYING) {
       for (const p of this.pillars) {
         p.x -= this.speed;
         p.gap = this.gap;
 
-        if (!p.scored && p.x + L.pillarWidth / 2 < L.birdX - L.birdRadius) {
+        // O ponto vale no instante em que o passaro EMERGE do outro lado da
+        // coluna (o bico passa a borda direita dela). A regra anterior esperava
+        // a coluna inteira passar pela CAUDA, o que custava 2*raio/velocidade
+        // frames — cerca de 0,3 s de placar chegando atrasado.
+        if (!p.scored && p.x + L.pillarWidth / 2 < L.birdX + L.birdRadius) {
           p.scored = true;
           this.score++;
+          if (this.score >= this.stageTarget) {
+            // Fase fechada: congela tudo e espera a tela chamar nextStage().
+            this.phase = PHASE.STAGE_CLEAR;
+          }
         }
 
         if (p.x + L.pillarWidth / 2 < 0) {
@@ -162,6 +263,7 @@ export default class World {
       this.groundOffset += this.speed;
       this.skyOffset += this.speed * 0.12;
       this.wing = Math.sin(this.frame / 4.5);
+      this._decayShield();
     }
 
     // --- fisica ---
@@ -184,7 +286,10 @@ export default class World {
     // Colisao com coluna, detectada pelo proprio matter-js.
     if (this._hit) {
       this._hit = false;
-      if (this.phase === PHASE.PLAYING) this.phase = PHASE.OVER;
+      if (this.phase === PHASE.PLAYING) {
+        if (this.shield) this._absorbHit();
+        else this.phase = PHASE.OVER;
+      }
     }
 
     // Chao.
@@ -192,14 +297,64 @@ export default class World {
     if (this.bird.position.y >= floorY) {
       Matter.Body.setPosition(this.bird, { x: L.birdX, y: floorY });
       Matter.Body.setVelocity(this.bird, { x: 0, y: 0 });
-      if (this.phase === PHASE.PLAYING) this.phase = PHASE.OVER;
-      else if (this.phase === PHASE.OVER) this.settled = true;
+      if (this.phase === PHASE.PLAYING) {
+        if (this.shield) {
+          // Escudo tambem salva do chao: absorve e devolve o passaro para o ar.
+          this._absorbHit();
+          Matter.Body.setVelocity(this.bird, { x: 0, y: L.flapVelocity });
+        } else {
+          this.phase = PHASE.OVER;
+        }
+      } else if (this.phase === PHASE.OVER) {
+        this.settled = true;
+      }
     }
 
     this.birdY = this.bird.position.y;
 
     const target = clamp(this.bird.velocity.y * (85 / (L.maxFall * 1.15)), -26, 88);
     this.birdRotation += (target - this.birdRotation) * 0.18;
+  }
+
+  /**
+   * Uma batida chega e o escudo a engole.
+   *
+   * A primeira colisao NAO apaga o escudo: ela dispara a dissipacao. Enquanto
+   * sobrar anel na tela (`shieldLevel > 0`) qualquer colisao seguinte tambem e
+   * perdoada — a outra coluna do mesmo par, a coluna seguinte, o chao. Sem
+   * isso o passaro, que no frame seguinte ainda esta DENTRO da coluna, morreria
+   * do mesmo jeito; a diferenca e que agora o perdao e visivel em vez de ser
+   * uma invulnerabilidade escondida.
+   */
+  _absorbHit() {
+    if (this.frame - this._lastAbsorbFrame >= ABSORB_COOLDOWN) {
+      // Quem desenha observa este contador para soltar o estilhaco e o som.
+      this.shieldHits++;
+      this._lastAbsorbFrame = this.frame;
+    }
+    if (!this.shieldFading) {
+      this.shieldFading = true;
+      this.shieldFrames = SHIELD_FADE_FRAMES;
+    }
+  }
+
+  /** Um frame de dissipacao: `shieldLevel` cai de 1 a 0 e o escudo acaba. */
+  _decayShield() {
+    if (!this.shieldFading) return;
+    this.shieldFrames--;
+    if (this.shieldFrames <= 0) {
+      this._clearShield();
+      return;
+    }
+    this.shieldLevel = this.shieldFrames / SHIELD_FADE_FRAMES;
+  }
+
+  /** Sem escudo nenhum: nem anel na tela, nem perdao. */
+  _clearShield() {
+    this.shield = false;
+    this.shieldLevel = 0;
+    this.shieldFading = false;
+    this.shieldFrames = 0;
   }
 
   /**

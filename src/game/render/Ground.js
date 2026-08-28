@@ -1,12 +1,13 @@
 import React from 'react';
 import { Animated, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme } from '../../ui/theme';
+import { stageAt } from '../stages';
 
 export const GROUND_TILE = 46;
 
-export default function Ground({ layout, offset }) {
+export default function Ground({ layout, offset, stage }) {
   const count = Math.ceil(layout.width / GROUND_TILE) + 2;
+  const look = (typeof stage === 'object' && stage ? stage : stageAt(stage || 0)).ground;
 
   return (
     <View
@@ -21,7 +22,7 @@ export default function Ground({ layout, offset }) {
       }}
     >
       <LinearGradient
-        colors={['#131C44', theme.ground, '#070B1E']}
+        colors={look.gradient}
         style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
       />
       <View
@@ -31,8 +32,8 @@ export default function Ground({ layout, offset }) {
           right: 0,
           top: 0,
           height: 3,
-          backgroundColor: theme.groundLine,
-          shadowColor: theme.groundLine,
+          backgroundColor: look.line,
+          shadowColor: look.line,
           shadowOpacity: 0.9,
           shadowRadius: 8,
           shadowOffset: { width: 0, height: 0 },
@@ -59,7 +60,7 @@ export default function Ground({ layout, offset }) {
                 width: GROUND_TILE * 0.42,
                 height: 3,
                 borderRadius: 2,
-                backgroundColor: 'rgba(46,230,197,0.30)',
+                backgroundColor: look.dashA,
               }}
             />
             <View
@@ -70,7 +71,7 @@ export default function Ground({ layout, offset }) {
                 width: GROUND_TILE * 0.3,
                 height: 3,
                 borderRadius: 2,
-                backgroundColor: 'rgba(255,213,74,0.18)',
+                backgroundColor: look.dashB,
               }}
             />
           </View>

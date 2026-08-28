@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   AppState,
@@ -10,7 +18,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FIXED_DT, MAX_STEPS_PER_FRAME, PHASE } from '../game/constants';
+import { FIXED_DT, MAX_STEPS_PER_FRAME, PHASE, STAGE_LENGTH } from '../game/constants';
+import { stageAt, stageNumber } from '../game/stages';
 import { computeLayout } from '../game/layout';
 import World from '../game/World';
 import { captureSession, restoreSession } from '../game/session';
@@ -18,17 +27,27 @@ import Backdrop from '../game/render/Backdrop';
 import Bird from '../game/render/Bird';
 import Ground, { GROUND_TILE } from '../game/render/Ground';
 import PillarPair from '../game/render/PillarPair';
+import ScoreDigits from '../game/render/ScoreDigits';
+import ShieldBurst, { BURST_DURATION } from '../game/render/ShieldBurst';
 import audio from '../audio/AudioManager';
+import useAds from '../hooks/useAds';
+import useLives from '../hooks/useLives';
+import ads from '../services/ads';
+import { livesNow, refillLives, spendLife } from '../services/lives';
+import AdCover from '../ui/AdCover';
 import Button from '../ui/Button';
+import LifeBirds from '../ui/LifeBirds';
 import { theme } from '../ui/theme';
 
 const RESTART_DELAY = 650; // ms de carencia para nao reiniciar sem querer
-const HINT_LINGER = 2000; // ms que o aviso "Toque para voar" ainda fica apos o toque
+const HINT_LINGER = 1000; // ms que o aviso "Toque para voar" ainda fica apos o toque
 const HINT_FADE = 320; // ms do desaparecimento
+const SCORE_FONT = 56; // tamanho do numero do placar
+const PROGRESS_FONT = 10; // tamanho do contador de obstaculos da fase
 const SCORE_BLOCK = 74; // altura ocupada pelo placar (fonte 56 + folga)
 
 // Chute inicial da altura de cada painel, so para o primeiro frame.
-const PANEL_ESTIMATE = { hint: 112, pause: 128, over: 256 };
+const PANEL_ESTIMATE = { hint: 112, pause: 128, over: 300, stage: 250 };
 
 export default function GameScreen({ onExit, best, onScore }) {
   // O jogo sempre ocupa a tela inteira (desenha ate a borda e o HUD respeita os
@@ -82,6 +101,9 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
       wing: new Animated.Value(0),
       ground: new Animated.Value(0),
       sky: new Animated.Value(0),
+      // Quanto ainda resta do escudo (1 = inteiro, 0 = acabou). E um valor
+      // animado porque cai a cada frame enquanto ele se dissipa.
+      shieldLevel: new Animated.Value(world.shieldLevel),
       pillars: world.pillars.map((p) => ({
         x: new Animated.Value(p.x),
         top: new Animated.Value(p.gapCenter - p.gap / 2),
@@ -92,15 +114,21 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   const a = anim.current;
 
   const [phase, setPhase] = useState(world.phase);
-  const [score, setScore] = useState(world.score);
   const [paused, setPaused] = useState(false);
   const [isNewBest, setIsNewBest] = useState(false);
   const [hintVisible, setHintVisible] = useState(true);
+  const [hintKind, setHintKind] = useState(resumedRef.current ? 'resumed' : 'start');
+  const [stageIndex, setStageIndex] = useState(world.stage);
+  const [shield, setShield] = useState(world.shield);
+  const { adState, adSeconds, showRewarded, showRewardedOrGrant, showInterstitial } = useAds();
+  // O hook so serve para redesenhar o painel de fim de jogo quando as vidas
+  // mudam; quem decide alguma coisa le livesNow(), que nunca esta atrasado.
+  const { lives } = useLives();
+  const [burst, setBurst] = useState(0); // chave do estilhaco; 0 = nenhum
   const hintFade = useRef(null);
   if (hintFade.current === null) hintFade.current = new Animated.Value(1);
   // Uma vez dispensado, o aviso nao volta ate a proxima partida. Sem essa
-  // trava, qualquer re-render (a cada ponto marcado, por exemplo) podia
-  // ressuscita-lo no meio do voo.
+  // trava, qualquer re-render da tela podia ressuscita-lo no meio do voo.
   const hintDoneRef = useRef(false);
   const hintTimersRef = useRef([]);
 
@@ -114,6 +142,11 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   const pausedRef = useRef(false);
   const overAtRef = useRef(0);
   const idleRef = useRef(false);
+  const shieldRef = useRef(world.shield);
+  const shieldHitsRef = useRef(world.shieldHits);
+  // O placar nao passa mais pelo render desta tela: o loop fala direto com ele.
+  const scoreHudRef = useRef(null);
+  const burstTimerRef = useRef(null);
   const onScoreRef = useRef(onScore);
   onScoreRef.current = onScore;
 
@@ -127,6 +160,7 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
     a.wing.setValue(world.wing);
     a.ground.setValue(-(world.groundOffset % GROUND_TILE));
     a.sky.setValue(-(world.skyOffset % layout.width));
+    a.shieldLevel.setValue(world.shieldLevel);
     for (let i = 0; i < world.pillars.length; i++) {
       const p = world.pillars[i];
       const t = a.pillars[i];
@@ -158,14 +192,26 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
         Animated.timing(hintFade.current, {
           toValue: 0,
           duration: HINT_FADE,
-          // driver JS de proposito: com o nativo, um re-render (a cada ponto)
-          // reaplica os props e devolve a opacidade para 1.
+          // driver JS de proposito: com o nativo, um re-render da tela reaplica
+          // os props e devolve a opacidade para 1.
           useNativeDriver: false,
         }).start();
         hintTimersRef.current.push(setTimeout(() => setHintVisible(false), HINT_FADE));
       }, HINT_LINGER)
     );
   }, []);
+
+  /** Traz o aviso de volta (nova partida ou fase nova) com o relogio zerado. */
+  const showHint = useCallback(
+    (kind) => {
+      clearHintTimers();
+      hintDoneRef.current = false;
+      hintFade.current.setValue(1);
+      setHintKind(kind);
+      setHintVisible(true);
+    },
+    [clearHintTimers]
+  );
 
   /** Some com o aviso agora, sem carencia (morreu ou pausou). */
   const hideHintNow = useCallback(() => {
@@ -176,6 +222,18 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   }, [clearHintTimers]);
 
   useEffect(() => clearHintTimers, [clearHintTimers]);
+
+  /**
+   * Dispara o estilhaco do escudo. Quem tira da tela e um setTimeout, e nao o
+   * callback da animacao — mesma licao do aviso de "toque para voar".
+   */
+  const burstShield = useCallback(() => {
+    setBurst((n) => n + 1);
+    clearTimeout(burstTimerRef.current);
+    burstTimerRef.current = setTimeout(() => setBurst(0), BURST_DURATION + 80);
+  }, []);
+
+  useEffect(() => () => clearTimeout(burstTimerRef.current), []);
 
   const measurePanel = useCallback((key, height) => {
     const h = Math.round(height);
@@ -212,6 +270,17 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
       if (acc > FIXED_DT) acc = 0;
       if (steps === 0) return;
 
+      // O placar vem antes de tudo, de proposito: o ponto vale no frame em que
+      // foi feito, e qualquer trabalho na frente dele vira atraso visivel. O
+      // aviso vai direto para o HUD, que se redesenha sozinho — nada aqui
+      // depende de a tela inteira renderizar de novo.
+      const scored = world.score !== scoreRef.current;
+      if (scored) {
+        scoreRef.current = world.score;
+        scoreHudRef.current?.set(world.score, world.stageProgress);
+        audio.playScore();
+      }
+
       // Depois da queda o mundo congela. Continuar empurrando ~20 valores
       // animados por frame so rouba thread de JS de quem precisa dela: o
       // painel de fim de partida. Sincroniza uma ultima vez e para.
@@ -219,20 +288,40 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
       if (!idle || !idleRef.current) sync();
       idleRef.current = idle;
 
-      if (world.score !== scoreRef.current) {
-        scoreRef.current = world.score;
-        setScore(world.score);
-        audio.playScore();
-        syncCarry();
+      if (scored) syncCarry(); // disco/estado: pode esperar o placar aparecer
+
+      if (world.shield !== shieldRef.current) {
+        shieldRef.current = world.shield;
+        setShield(world.shield);
+      }
+      if (world.shieldHits !== shieldHitsRef.current) {
+        shieldHitsRef.current = world.shieldHits;
+        // Batida perdoada: estilhaco na tela e o som do impacto, senao ela
+        // passa despercebida. O escudo NAO acaba aqui — ele comeca a se
+        // dissipar, e segue valendo enquanto houver anel em volta do passaro.
+        burstShield();
+        audio.playHit();
       }
       if (world.phase !== phaseRef.current) {
         phaseRef.current = world.phase;
         setPhase(world.phase);
         syncCarry();
+        if (world.phase === PHASE.STAGE_CLEAR) {
+          // Fase fechada: o mundo ja congelou sozinho (World.isIdle). Os dois
+          // anuncios da troca comecam a carregar agora, porque so um deles vai
+          // ser usado e nao da para saber qual ate o jogador escolher.
+          hideHintNow();
+          ads.preloadRewarded();
+          ads.preloadInterstitial();
+        }
         if (world.phase === PHASE.OVER) {
           overAtRef.current = Date.now();
           audio.playHit();
           hideHintNow();
+          // Ultima vida gasta: o painel vai oferecer o video, entao ele comeca
+          // a carregar agora — anuncio que so carrega no clique faz o jogador
+          // apertar o botao e nao ver nada acontecer.
+          if (livesNow() <= 0) ads.preloadRewarded();
           // Gravar o historico e falar com o Play Jogos custa disco e rede. Se
           // isso entrar na frente, o painel demora a aparecer — entao ele vai
           // para o proximo tick, depois que a tela ja mostrou o resultado.
@@ -250,7 +339,7 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
     syncCarry();
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [world, sync, syncCarry, layout.landscape, hideHintNow]);
+  }, [world, sync, syncCarry, layout.landscape, hideHintNow, burstShield]);
 
   // Pausa sozinho quando o app sai da frente.
   useEffect(() => {
@@ -266,23 +355,102 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   useEffect(() => () => world.destroy(), [world]);
 
   const restart = useCallback(() => {
+    // Sem vida nao ha partida nova: quem libera e o video premiado. A pergunta
+    // vai direto ao servico — esperar o numero voltar por props ja custou uma
+    // partida de graca no Android, onde o render chega bem depois do toque.
+    if (livesNow() <= 0) return;
+    spendLife();
     world.reset();
     resumedRef.current = false;
     phaseRef.current = world.phase;
     scoreRef.current = 0;
     setPhase(world.phase);
-    setScore(0);
+    scoreHudRef.current?.set(0, 0);
     setIsNewBest(false);
-    clearHintTimers();
-    hintDoneRef.current = false;
-    hintFade.current.setValue(1);
-    setHintVisible(true);
+    setStageIndex(world.stage);
+    setShield(world.shield);
+    shieldRef.current = world.shield;
+    shieldHitsRef.current = world.shieldHits;
+    resumedRef.current = false;
+    showHint('start');
     syncCarry();
     sync();
-  }, [world, sync, syncCarry, clearHintTimers]);
+  }, [world, sync, syncCarry, showHint]);
+
+  /**
+   * Comeca a fase seguinte. Chamado depois do anuncio (assistido, pulado ou
+   * indisponivel) — de propaganda o jogo nunca depende para continuar.
+   */
+  const advanceStage = useCallback(
+    (rewarded) => {
+      if (world.phase !== PHASE.STAGE_CLEAR) return;
+      if (rewarded) world.grantShield();
+      world.nextStage();
+      phaseRef.current = world.phase;
+      setPhase(world.phase);
+      // Fase nova: o placar segue, o contador de obstaculos volta a zero.
+      scoreHudRef.current?.set(world.score, world.stageProgress);
+      setStageIndex(world.stage);
+      setShield(world.shield);
+      shieldRef.current = world.shield;
+      shieldHitsRef.current = world.shieldHits;
+      resumedRef.current = false;
+      // Nada de "toque para voar" da fase 2 em diante: quem chegou ate aqui ja
+      // sabe jogar. Quem diz onde o jogador esta e o selo de fase no topo.
+      hideHintNow();
+      syncCarry();
+      sync();
+    },
+    [world, sync, syncCarry, hideHintNow]
+  );
+
+  /**
+   * Botao "assistir": tenta o video premiado de verdade e, se ainda nao houver
+   * SDK/IDs, roda a propaganda simulada — assim da para testar o fluxo inteiro
+   * antes de a conta do AdMob existir. Em qualquer caminho a fase avanca.
+   */
+  /**
+   * Botao "assistir": video PREMIADO, com o escudo como recompensa.
+   *
+   * Escudo e premio, nao pedagio: assistido, pulado ou indisponivel, a fase
+   * avanca do mesmo jeito — so o escudo depende do video. Quem passa por aqui
+   * nao ve o intersticial da troca de fase: um anuncio por fase basta, e dois
+   * seguidos e o caminho curto para a desinstalacao. (Para cobrar os dois,
+   * bastaria um `await showInterstitial()` antes do `advanceStage`.)
+   */
+  const watchAd = useCallback(async () => {
+    const { rewarded } = await showRewarded();
+    advanceStage(rewarded);
+  }, [advanceStage, showRewarded]);
+
+  /**
+   * Botao "continuar sem premio": aqui entra o INTERSTICIAL da troca de fase.
+   *
+   * E a pausa natural do jogo — fase fechada, jogador parado, painel na tela —
+   * que e exatamente onde a politica do AdMob quer esse formato, e nunca por
+   * cima de um toque dado esperando outra coisa. Anuncio que nao carregou nao
+   * segura ninguem: `showInterstitial` responde na hora e a fase avanca.
+   */
+  const skipAd = useCallback(async () => {
+    await showInterstitial();
+    advanceStage(false);
+  }, [advanceStage, showInterstitial]);
+
+  /**
+   * Fim das cinco partidas: um video premiado devolve as cinco. Sem SDK, sem
+   * IDs ou na web nao ha video nenhum, e ai `showOrGrant` libera assim mesmo —
+   * ninguem pode ficar preso na tela de fim de jogo por causa de um anuncio que
+   * nao existe.
+   */
+  const watchAdForLives = useCallback(async () => {
+    if (await showRewardedOrGrant()) refillLives();
+  }, [showRewardedOrGrant]);
 
   const handleTap = useCallback(() => {
     if (pausedRef.current) return;
+    // Fim de fase tem botoes proprios: um toque solto aqui nao pode pular o
+    // anuncio nem fazer o passaro bater asa com o mundo congelado.
+    if (world.phase === PHASE.STAGE_CLEAR) return;
     if (world.phase === PHASE.OVER) {
       if (Date.now() - overAtRef.current < RESTART_DELAY) return;
       restart();
@@ -309,9 +477,33 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   // entao ele vai para o centro (o proprio Overlay decide, com a altura medida).
   const panelTop = hudTop + 40 + SCORE_BLOCK + 16;
 
+  const look = stageAt(stageIndex);
+  const nextLook = stageAt(stageIndex + 1);
+  // Depois da ultima fase o cenario repete: stageAt trava no fim. A tela nao
+  // deve prometer novidade que nao existe.
+  const hasNewLook = nextLook !== look;
+  const nextLine = hasNewLook
+    ? `A seguir: ${nextLook.name} · +${Math.round((nextLook.speed - 1) * 100)}% de velocidade`
+    : `A seguir: fase ${stageNumber(stageIndex) + 1} · velocidade no maximo`;
+  const rewardOffered = ads.canShow('rewarded');
+
+  // Duas situacoes, so. O aviso de abertura e da fase 1; o de tela girada
+  // aparece em qualquer fase porque sem ele ninguem descobre que o jogo esta
+  // parado esperando um toque.
+  const hint =
+    hintKind === 'resumed'
+      ? {
+          title: 'Tela girada',
+          text: `Sua partida continua de onde parou, com ${world.score} ponto${world.score === 1 ? '' : 's'}. Toque para seguir.`,
+        }
+      : {
+          title: 'Toque para voar',
+          text: 'Cada toque impulsiona. Sem toque, a gravidade faz o resto.',
+        };
+
   return (
     <View style={styles.root}>
-      <Backdrop layout={layout} skyOffset={a.sky} />
+      <Backdrop layout={layout} skyOffset={a.sky} stage={look} />
 
       {/* Area de jogo: recorta as colunas que passam do chao. */}
       <View
@@ -326,21 +518,40 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
         }}
       >
         {a.pillars.map((t, i) => (
-          <PillarPair key={i} layout={layout} x={t.x} topEdge={t.top} bottomEdge={t.bottom} />
+          <PillarPair
+            key={i}
+            layout={layout}
+            x={t.x}
+            topEdge={t.top}
+            bottomEdge={t.bottom}
+            stage={look}
+          />
         ))}
-        <Bird layout={layout} y={a.birdY} rotation={a.birdRot} wing={a.wing} />
+        <Bird
+          layout={layout}
+          y={a.birdY}
+          rotation={a.birdRot}
+          wing={a.wing}
+          shield={shield}
+          shieldLevel={a.shieldLevel}
+        />
+        {burst > 0 && <ShieldBurst key={burst} layout={layout} y={a.birdY} />}
       </View>
 
-      <Ground layout={layout} offset={a.ground} />
+      <Ground layout={layout} offset={a.ground} stage={look} />
 
       {/* Superficie de toque: fica abaixo do HUD na ordem de render. */}
       <Pressable style={StyleSheet.absoluteFill} onPressIn={handleTap} />
 
       {/* ---------- HUD ---------- */}
       {phase !== PHASE.OVER && (
-        <View style={[styles.scoreWrap, { pointerEvents: 'none', top: hudTop + 40 }]}>
-          <Text style={styles.score}>{score}</Text>
-        </View>
+        <ScoreHud
+          ref={scoreHudRef}
+          world={world}
+          stageLabel={`FASE ${stageNumber(stageIndex)} · ${look.name.toUpperCase()}`}
+          scoreTop={hudTop + 40}
+          stageTop={hudTop + 10}
+        />
       )}
 
       <View
@@ -371,14 +582,8 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
           style={{ opacity: hintFade.current }}
         >
           <View style={styles.hintCard}>
-            <Text style={styles.hintTitle}>
-              {resumedRef.current ? 'Tela girada' : 'Toque para voar'}
-            </Text>
-            <Text style={styles.hintText}>
-              {resumedRef.current
-                ? `Sua partida continua de onde parou, com ${score} ponto${score === 1 ? '' : 's'}. Toque para seguir.`
-                : 'Cada toque impulsiona. Sem toque, a gravidade faz o resto.'}
-            </Text>
+            <Text style={styles.hintTitle}>{hint.title}</Text>
+            <Text style={styles.hintText}>{hint.text}</Text>
           </View>
         </Overlay>
       )}
@@ -401,6 +606,44 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
         </Overlay>
       )}
 
+      {phase === PHASE.STAGE_CLEAR && (
+        <Overlay
+          layout={layout}
+          insets={insets}
+          portraitTop={panelTop}
+          height={panelHeights.stage}
+          onMeasure={(h) => measurePanel('stage', h)}
+        >
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>
+              {`Fase ${stageNumber(stageIndex)} concluida`}
+            </Text>
+            <Text style={styles.panelText}>{nextLine}</Text>
+
+            <View style={styles.stageButtons}>
+              {rewardOffered && (
+                <Button
+                  title="Assistir e ganhar escudo"
+                  onPress={watchAd}
+                  style={styles.stageButton}
+                />
+              )}
+              <Button
+                title="Continuar sem premio"
+                variant={rewardOffered ? 'ghost' : 'primary'}
+                onPress={skipAd}
+                style={styles.stageButton}
+              />
+            </View>
+            <Text style={styles.tapHint}>
+              {rewardOffered
+                ? 'O escudo perdoa uma batida. Sem ele, entra um anuncio curto.'
+                : 'Anuncios entram quando o AdMob for configurado.'}
+            </Text>
+          </View>
+        </Overlay>
+      )}
+
       {phase === PHASE.OVER && (
         <Overlay
           layout={layout}
@@ -413,22 +656,115 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
             <Text style={styles.panelTitle}>{isNewBest ? 'Novo recorde!' : 'Voo encerrado'}</Text>
 
             <View style={styles.statsRow}>
-              <Stat label="Pontos" value={score} highlight />
+              {/* Tambem direto do mundo: o resultado final e a ultima coisa
+                  que pode aparecer com um ponto a menos. */}
+              <Stat label="Pontos" value={world.score} highlight />
               <View style={styles.divider} />
-              <Stat label="Recorde" value={Math.max(best, score)} />
+              <Stat label="Recorde" value={Math.max(best, world.score)} />
             </View>
 
-            <View style={styles.row}>
-              <Button title="Jogar de novo" onPress={restart} />
-              <Button title="Menu" variant="ghost" onPress={onExit} style={{ marginLeft: 12 }} />
+            {/* Antes de escolher entre jogar de novo e o video, o jogador
+                precisa ver quantas partidas ainda lhe restam. */}
+            <View style={styles.livesRow}>
+              <Text style={styles.livesLabel}>PARTIDAS</Text>
+              <LifeBirds lives={lives} size={19} gap={7} />
             </View>
-            <Text style={styles.tapHint}>ou toque na tela</Text>
+
+            {lives > 0 ? (
+              <>
+                <View style={styles.row}>
+                  <Button title="Jogar de novo" onPress={restart} />
+                  <Button title="Menu" variant="ghost" onPress={onExit} style={{ marginLeft: 12 }} />
+                </View>
+                <Text style={styles.tapHint}>ou toque na tela</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.outOfLives}>
+                  Suas 5 partidas acabaram. Assista a um video e ganhe outras 5.
+                </Text>
+                <View style={styles.stageButtons}>
+                  <Button
+                    title="Assistir e ganhar 5 vidas"
+                    onPress={watchAdForLives}
+                    style={styles.stageButton}
+                  />
+                  <Button
+                    title="Menu"
+                    variant="ghost"
+                    onPress={onExit}
+                    style={styles.stageButton}
+                  />
+                </View>
+              </>
+            )}
           </View>
         </Overlay>
       )}
+
+      {/* Cobertura do anuncio: por cima de tudo e engolindo os toques. */}
+      <AdCover state={adState} seconds={adSeconds} />
     </View>
   );
 }
+
+/**
+ * Os dois placares do topo: o numero da partida e o `x/10` da fase.
+ *
+ * Nenhum dos dois passa pelo React quando muda. O game loop chama `set()` no
+ * mesmo frame em que o ponto vale, e os numeros sao rolos de digitos movidos
+ * por `Animated` (ver [ScoreDigits](../game/render/ScoreDigits.js)) — o unico
+ * caminho que chega em dia no Android com o jogo rodando.
+ *
+ * As props `world` e `stageLabel` valem so para o primeiro desenho e para a
+ * troca de fase, que sao os momentos em que a tela renderiza de qualquer jeito.
+ */
+const ScoreHud = forwardRef(function ScoreHud({ world, stageLabel, scoreTop, stageTop }, ref) {
+  const scoreRef = useRef(null);
+  const progressRef = useRef(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      set(score, progress) {
+        scoreRef.current?.set(score);
+        progressRef.current?.set(Math.min(progress, STAGE_LENGTH));
+      },
+    }),
+    []
+  );
+
+  return (
+    <>
+      <View style={[styles.scoreWrap, { pointerEvents: 'none', top: scoreTop }]}>
+        <ScoreDigits
+          ref={scoreRef}
+          places={4}
+          value={world.score}
+          fontSize={SCORE_FONT}
+          centered
+          style={styles.score}
+        />
+      </View>
+
+      <View style={[styles.stageWrap, { pointerEvents: 'none', top: stageTop }]}>
+        <Text style={styles.stageChip} numberOfLines={1}>
+          {stageLabel}
+        </Text>
+        <View style={styles.stageProgressRow}>
+          <ScoreDigits
+            ref={progressRef}
+            places={2}
+            value={Math.min(world.stageProgress, STAGE_LENGTH)}
+            fontSize={PROGRESS_FONT}
+            style={styles.stageProgress}
+          />
+          <Text style={styles.stageProgress}>{`/${STAGE_LENGTH}`}</Text>
+        </View>
+      </View>
+    </>
+  );
+});
 
 /**
  * Caixa flutuante do jogo (aviso, pausa e fim de partida).
@@ -483,7 +819,7 @@ const styles = StyleSheet.create({
   scoreWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   score: {
     color: theme.text,
-    fontSize: 56,
+    fontSize: SCORE_FONT,
     fontWeight: '900',
     letterSpacing: 1,
     textShadowColor: 'rgba(0,0,0,0.55)',
@@ -495,6 +831,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  stageWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  stageChip: {
+    color: theme.textDim,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  stageProgressRow: { flexDirection: 'row', alignItems: 'center' },
+  stageProgress: { color: theme.textDim, fontSize: PROGRESS_FONT, letterSpacing: 1, opacity: 0.7 },
   hintCard: {
     paddingVertical: 16,
     paddingHorizontal: 24,
@@ -523,7 +871,34 @@ const styles = StyleSheet.create({
     minWidth: 300,
   },
   panelTitle: { color: theme.text, fontSize: 22, fontWeight: '800', marginBottom: 16 },
-  statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 22 },
+  panelText: {
+    color: theme.textDim,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: -8,
+    marginBottom: 18,
+    maxWidth: 280,
+  },
+  stageButtons: { alignSelf: 'stretch', gap: 10 },
+  stageButton: { alignSelf: 'stretch' },
+  statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  livesRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
+  livesLabel: {
+    color: theme.textDim,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  outOfLives: {
+    color: theme.textDim,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+    maxWidth: 280,
+  },
   stat: { alignItems: 'center', minWidth: 92 },
   statLabel: {
     color: theme.textDim,

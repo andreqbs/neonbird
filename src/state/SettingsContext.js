@@ -1,7 +1,27 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = '@neon-flyer/settings';
+const KEY = '@major-flyer/settings';
+
+// Chave de quando o app se chamava Neon Flyer: lida uma vez e migrada, para
+// ninguem ter que reconfigurar o som por causa da troca de nome.
+const LEGACY_KEY = '@neon-flyer/settings';
+
+async function readSettings() {
+  const raw = await AsyncStorage.getItem(KEY);
+  if (raw) return raw;
+
+  const legacy = await AsyncStorage.getItem(LEGACY_KEY);
+  if (legacy) {
+    try {
+      await AsyncStorage.setItem(KEY, legacy);
+      await AsyncStorage.removeItem(LEGACY_KEY);
+    } catch (e) {
+      // sem disco: as preferencias desta sessao ainda valem
+    }
+  }
+  return legacy;
+}
 
 export const DEFAULT_SETTINGS = {
   music: true, // trilha de fundo em loop
@@ -21,7 +41,7 @@ export function SettingsProvider({ children }) {
 
   useEffect(() => {
     let alive = true;
-    AsyncStorage.getItem(KEY)
+    readSettings()
       .then((raw) => {
         if (!alive) return;
         if (raw) {

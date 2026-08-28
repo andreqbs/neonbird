@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const RUNS_KEY = '@neon-flyer/runs';
+const RUNS_KEY = '@major-flyer/runs';
+
+// Chaves de quando o app se chamava Neon Flyer. Sao lidas uma vez e migradas:
+// trocar o nome do jogo nao pode custar o recorde de ninguem.
+const LEGACY_RUNS_KEY = '@neon-flyer/runs';
 const LEGACY_BEST_KEY = '@neon-flyer/best';
 
 /** Quantas partidas guardamos no historico local. */
@@ -18,9 +22,9 @@ function sortRuns(runs) {
   return runs.slice().sort((a, b) => b.score - a.score || b.at - a.at);
 }
 
-export async function loadRuns() {
+async function readRuns(key) {
   try {
-    const raw = await AsyncStorage.getItem(RUNS_KEY);
+    const raw = await AsyncStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -29,6 +33,24 @@ export async function loadRuns() {
     }
   } catch (e) {
     // historico corrompido: trata como vazio
+  }
+  return null;
+}
+
+export async function loadRuns() {
+  const runs = await readRuns(RUNS_KEY);
+  if (runs) return runs;
+
+  // Migra o historico gravado sob o nome antigo do app.
+  const legacyRuns = await readRuns(LEGACY_RUNS_KEY);
+  if (legacyRuns && legacyRuns.length) {
+    try {
+      await AsyncStorage.setItem(RUNS_KEY, JSON.stringify(legacyRuns));
+      await AsyncStorage.removeItem(LEGACY_RUNS_KEY);
+    } catch (e) {
+      // sem disco: a lista da sessao ainda vale
+    }
+    return legacyRuns;
   }
 
   // Migra o recorde solto gravado pelas primeiras versoes do app.
@@ -75,7 +97,7 @@ export async function addRun(score, { landscape = false } = {}) {
 
 export async function clearRuns() {
   try {
-    await AsyncStorage.multiRemove([RUNS_KEY, LEGACY_BEST_KEY]);
+    await AsyncStorage.multiRemove([RUNS_KEY, LEGACY_RUNS_KEY, LEGACY_BEST_KEY]);
   } catch (e) {
     // nada a fazer
   }

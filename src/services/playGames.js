@@ -14,14 +14,14 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
  * normalmente com o ranking local e a interface diz o que falta.
  *
  * Para ativar de verdade (resumo; passo a passo no README):
- *   1. `npx create-expo-module --local neon-flyer-play-games`
+ *   1. `npx create-expo-module --local major-flyer-play-games`
  *   2. No Kotlin do modulo, use `com.google.android.gms:play-services-games-v2`
  *      e exponha os metodos que este arquivo espera (veja CONTRATO abaixo).
  *   3. Cadastre o jogo e um placar no Google Play Console e cole o ID em
  *      LEADERBOARD_ID.
  *   4. `npx expo prebuild` + `eas build -p android` (nao roda mais no Expo Go).
  *
- * CONTRATO do modulo nativo (nome registrado: "NeonFlyerPlayGames"):
+ * CONTRATO do modulo nativo (nome registrado: "MajorFlyerPlayGames"):
  *   isAvailable(): boolean
  *   signInAsync(): Promise<{ signedIn: boolean, playerName?: string, playerId?: string }>
  *   getPlayerAsync(): Promise<{ signedIn: boolean, playerName?: string, playerId?: string }>
@@ -34,7 +34,7 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 // Cole aqui o ID gerado no Play Console (algo como "CgkI8...QAQ").
 export const LEADERBOARD_ID = '';
 
-const Native = requireOptionalNativeModule('NeonFlyerPlayGames');
+const Native = requireOptionalNativeModule('MajorFlyerPlayGames');
 
 export const UNAVAILABLE_REASON = {
   PLATFORM: 'platform', // iOS/web: Play Jogos e so Android

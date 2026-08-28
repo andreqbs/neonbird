@@ -20,8 +20,11 @@ export function captureSession(world) {
     score: world.score,
     // Uma partida "viva" e a que esta rolando, ou a que ja foi retomada uma vez
     // e ainda espera o toque. Depois de perder (OVER) nao ha o que carregar.
+    // Girar durante a tela de fim de fase tambem conta: o placar e a fase
+    // seguem, so o anuncio daquela troca e que fica para tras.
     live:
       world.phase === PHASE.PLAYING ||
+      world.phase === PHASE.STAGE_CLEAR ||
       (world.phase === PHASE.READY && world.score > 0),
   };
 }
@@ -33,5 +36,9 @@ export function captureSession(world) {
 export function restoreSession(world, session) {
   if (!session || !session.live || !(session.score > 0)) return false;
   world.score = session.score;
+  // A fase nao precisa viajar no pacote: ela E o placar dividido pelo tamanho
+  // da fase. Derivar evita o pior caso — girar o aparelho na tela de fim de
+  // fase e voltar com o alvo ja batido, fechando fase a cada ponto.
+  world.syncStageToScore();
   return true;
 }

@@ -131,7 +131,7 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
       </Card>
 
       <View style={styles.about}>
-        <Text style={styles.aboutText}>Neon Flyer</Text>
+        <Text style={styles.aboutText}>Major Flyer</Text>
         <Text style={styles.aboutDim}>
           Fisica: matter-js · {Platform.OS === 'ios' ? 'iOS' : Platform.OS === 'android' ? 'Android' : 'Web'}
         </Text>

@@ -16,7 +16,7 @@ import { theme } from '../../ui/theme';
  *    folga, entao nenhuma plataforma as recorta.
  * Resultado: o mesmo desenho na web, no Android e no iOS.
  */
-export default function Bird({ layout, y, rotation, wing }) {
+export default function Bird({ layout, y, rotation, wing, shield, shieldLevel }) {
   const s = layout.birdRadius * 2; // diametro do corpo
   const pad = s * 0.42; // folga para halo, cauda e bico
   const box = s + pad * 2;
@@ -37,6 +37,22 @@ export default function Bird({ layout, y, rotation, wing }) {
   const wingRotate = wing.interpolate({
     inputRange: [-1, 1],
     outputRange: ['-34deg', '26deg'],
+    extrapolate: 'clamp',
+  });
+
+  // O escudo nao apaga de uma vez: `shieldLevel` cai de 1 a 0 durante a
+  // dissipacao, e a opacidade acompanha. Os degraus no fim da faixa fazem o
+  // anel piscar duas vezes antes de acabar — como o nivel cai junto com o
+  // tempo, oscilar no nivel e oscilar no tempo, sem um segundo relogio.
+  const shieldOpacity = shieldLevel.interpolate({
+    inputRange: [0, 0.12, 0.24, 0.36, 0.48, 1],
+    outputRange: [0, 0.85, 0.3, 0.85, 0.4, 0.9],
+    extrapolate: 'clamp',
+  });
+  // Dissipar tambem e abrir: o anel cresce um pouco enquanto perde a cor.
+  const shieldScale = shieldLevel.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.18, 1],
     extrapolate: 'clamp',
   });
 
@@ -161,6 +177,27 @@ export default function Bird({ layout, y, rotation, wing }) {
           }}
         />
       </View>
+
+      {/* Escudo do anuncio premiado: um anel em volta do passaro. A primeira
+          batida nao o apaga — ela comeca a dissipacao, e enquanto sobrar anel
+          na tela toda colisao continua sendo perdoada. O que o jogador ve e
+          exatamente quanto de perdao ainda lhe resta. */}
+      {shield ? (
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: box,
+            height: box,
+            borderRadius: box / 2,
+            borderWidth: Math.max(2, s * 0.08),
+            borderColor: theme.shield,
+            opacity: shieldOpacity,
+            transform: [{ scale: shieldScale }],
+          }}
+        />
+      ) : null}
     </Animated.View>
   );
 }

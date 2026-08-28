@@ -9,7 +9,9 @@ import HomeScreen from './src/screens/HomeScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import useScores from './src/hooks/useScores';
+import { spendLife } from './src/services/lives';
 import audio from './src/audio/AudioManager';
+import ads from './src/services/ads';
 import { SettingsProvider, useSettings } from './src/state/SettingsContext';
 import { theme } from './src/ui/theme';
 
@@ -32,6 +34,12 @@ function Root() {
   // jogo e derivado do tamanho, entao girar so recalcula as medidas.
   useEffect(() => {
     ScreenOrientation.unlockAsync().catch(() => {});
+  }, []);
+
+  // Liga o AdMob e ja deixa o primeiro video premiado carregando. Sem SDK ou
+  // sem IDs cadastrados isso nao faz nada — e o jogo segue igual.
+  useEffect(() => {
+    ads.initialize().catch(() => {});
   }, []);
 
   // So liga o audio depois que as preferencias salvas chegaram do disco: comecar
@@ -64,11 +72,26 @@ function Root() {
 
   const goHome = useCallback(() => setScreen('home'), []);
 
+  /**
+   * Comecar uma partida custa uma vida.
+   *
+   * O desconto fica aqui e na tela do jogo (o "jogar de novo"), que sao os dois
+   * unicos jeitos de uma partida comecar. Girar o aparelho no meio do voo
+   * remonta a tela, mas nao passa por nenhum dos dois — e nao cobra de novo.
+   */
+  const startGame = useCallback(() => {
+    spendLife();
+    setScreen('game');
+  }, []);
+
   return (
     <View style={styles.root}>
       <StatusBar style="light" hidden={screen === 'game'} />
 
-      {screen === 'home' && <HomeScreen onNavigate={setScreen} best={best} />}
+      {/* Vidas nao viajam por props: cada tela le o servico direto. Numero que
+          atravessa tres componentes chega tarde justamente quando importa — no
+          Android, com o jogo ocupando a thread de JS. */}
+      {screen === 'home' && <HomeScreen onNavigate={setScreen} onPlay={startGame} best={best} />}
 
       {screen === 'game' && (
         <GameScreen onExit={goHome} best={best} onScore={handleScore} />
