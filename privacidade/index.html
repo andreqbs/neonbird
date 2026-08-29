@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidade — Major Flyer</title>
+<meta name="description" content="Política de Privacidade do jogo Major Flyer (com.aqblab.majorflyer). O desenvolvedor não coleta, não armazena e não compartilha dados pessoais dos jogadores.">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#080C22">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Política de Privacidade — Major Flyer">
+<meta property="og:description" content="O desenvolvedor do Major Flyer não coleta, não armazena e não compartilha dados pessoais dos jogadores.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#128509;</text></svg>">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --bg:#080C22; --bg-2:#0D1330; --card:#111838; --line:#1E2A55;
+    --ink:#E8ECFF; --ink-2:#A7B0D8; --ink-3:#7580AC;
+    --accent:#4CE0FF; --accent-2:#FF5FD1; --ok:#3BE08A; --warn:#FFC85C;
+    --radius:14px; --wrap:860px;
+  }
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:84px}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-size:16.5px;line-height:1.72;
+    background-image:
+      radial-gradient(900px 500px at 12% -8%, rgba(76,224,255,.12), transparent 60%),
+      radial-gradient(800px 480px at 92% 4%, rgba(255,95,209,.10), transparent 62%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:var(--wrap);margin:0 auto;padding:0 20px}
+
+  /* ---- topo ---- */
+  header.top{padding:56px 0 28px;text-align:center}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);border:1px solid rgba(76,224,255,.35);border-radius:999px;padding:5px 14px;
+    background:rgba(76,224,255,.07)}
+  h1{font-size:clamp(28px,5.4vw,42px);line-height:1.18;margin:18px 0 10px;letter-spacing:-.02em}
+  .sub{color:var(--ink-2);margin:0 auto;max-width:56ch}
+  .meta{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .chip{font-size:13px;color:var(--ink-2);background:var(--bg-2);border:1px solid var(--line);
+    border-radius:999px;padding:5px 13px;white-space:nowrap}
+  .chip b{color:var(--ink);font-weight:600}
+
+  /* ---- idioma ---- */
+  .langbar{position:sticky;top:0;z-index:50;background:rgba(8,12,34,.86);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);margin-top:34px}
+  .langbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding-top:10px;padding-bottom:10px}
+  .langbar .who{font-size:13px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .switch{display:flex;gap:6px;flex:none}
+  .switch button{font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+    color:var(--ink-2);background:transparent;border:1px solid var(--line);
+    border-radius:9px;padding:6px 14px;transition:.15s}
+  .switch button:hover{color:var(--ink);border-color:var(--accent)}
+  .switch button[aria-pressed="true"]{color:#04121C;background:var(--accent);border-color:var(--accent)}
+
+  /* ---- conteudo ---- */
+  main{padding:8px 0 40px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:26px 26px 22px;margin:18px 0}
+  section > h2{display:flex;gap:12px;align-items:baseline;font-size:20px;line-height:1.35;
+    margin:0 0 14px;letter-spacing:-.01em;scroll-margin-top:84px}
+  section > h2 .n{flex:none;font-size:13px;font-variant-numeric:tabular-nums;color:var(--accent);
+    border:1px solid rgba(76,224,255,.3);border-radius:8px;padding:2px 8px;background:rgba(76,224,255,.07)}
+  h3{font-size:16px;margin:22px 0 8px;color:var(--ink)}
+  p{margin:0 0 12px}
+  ul,ol{margin:0 0 12px;padding-left:22px}
+  li{margin:7px 0}
+  li::marker{color:var(--accent)}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(76,224,255,.35)}
+  a:hover{border-bottom-color:var(--accent)}
+  strong{color:#fff;font-weight:650}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;
+    background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;
+    color:var(--accent);word-break:break-word}
+  hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+
+  .lead{background:linear-gradient(160deg,rgba(76,224,255,.09),rgba(255,95,209,.05));
+    border-color:rgba(76,224,255,.28)}
+  .lead h2 .n{display:none}
+
+  .callout{border-left:3px solid var(--accent);background:var(--bg-2);border-radius:0 10px 10px 0;
+    padding:14px 16px;margin:16px 0}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.ok{border-left-color:var(--ok)}
+  .callout p:last-child{margin-bottom:0}
+  .callout .tag{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:6px}
+
+  .tick li{list-style:none;position:relative;padding-left:26px}
+  .tick{padding-left:0}
+  .tick li::before{content:"✕";position:absolute;left:0;top:0;color:var(--accent-2);font-weight:700}
+  .tick.yes li::before{content:"✓";color:var(--ok)}
+
+  /* ---- tabela ---- */
+  .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:14px 0;
+    border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;min-width:520px;font-size:14.5px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--bg-2);color:var(--ink);font-weight:650;font-size:13px;
+    letter-spacing:.04em;text-transform:uppercase}
+  tbody tr:last-child td{border-bottom:0}
+  td.no{color:var(--ok);font-weight:600;white-space:nowrap}
+
+  /* ---- indice ---- */
+  nav.toc{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:18px 0}
+  nav.toc h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  nav.toc ol{columns:2;column-gap:30px;padding-left:20px;margin:0;font-size:14.5px}
+  nav.toc li{margin:5px 0;break-inside:avoid}
+  nav.toc a{border-bottom:0;color:var(--ink-2)}
+  nav.toc a:hover{color:var(--accent)}
+  @media (max-width:640px){nav.toc ol{columns:1}}
+
+  footer{border-top:1px solid var(--line);margin-top:28px;padding:28px 0 60px;
+    color:var(--ink-3);font-size:13.5px;text-align:center}
+  footer p{margin:5px 0}
+
+  [hidden]{display:none !important}
+
+  @media (max-width:520px){
+    body{font-size:16px}
+    section{padding:22px 18px 18px;border-radius:12px}
+    header.top{padding:40px 0 20px}
+  }
+  @media print{
+    body{background:#fff;color:#000;font-size:11pt;background-image:none}
+    .langbar,nav.toc,footer{display:none}
+    section{border:1px solid #ccc;background:#fff;break-inside:avoid;page-break-inside:avoid}
+    a{color:#000;border:0}
+    strong,h1,h2,h3,section>h2 .n{color:#000}
+    code{background:#f2f2f2;color:#000;border-color:#ddd}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================ PORTUGUES ================================ -->
+<div data-lang="pt">
+<header class="top">
+  <div class="wrap">
+    <span class="badge">Política de Privacidade</span>
+    <h1>Major Flyer</h1>
+    <p class="sub">O desenvolvedor deste jogo <strong>não coleta, não armazena, não transmite e não comercializa</strong> qualquer dado pessoal dos jogadores.</p>
+    <div class="meta">
+      <span class="chip"><b>Aplicativo:</b> Major Flyer</span>
+      <span class="chip"><b>ID:</b> com.aqblab.majorflyer</span>
+      <span class="chip"><b>Versão:</b> 1.0</span>
+      <span class="chip"><b>Vigência:</b> 29 de agosto de 2026</span>
+    </div>
+  </div>
+</header>
+</div>
+
+<div class="langbar">
+  <div class="wrap">
+    <span class="who">Major Flyer · com.aqblab.majorflyer</span>
+    <div class="switch" role="group" aria-label="Idioma / Language">
+      <button type="button" data-set="pt" aria-pressed="true">Português</button>
+      <button type="button" data-set="en" aria-pressed="false">English</button>
+    </div>
+  </div>
+</div>
+
+<div data-lang="pt">
+<main class="wrap">
+
+  <section class="lead">
+    <h2><span class="n"></span>Resumo em linguagem simples</h2>
+    <p>Esta seção é um resumo de cortesia e não substitui o texto integral abaixo. Havendo divergência, prevalecem as cláusulas completas.</p>
+    <ul class="tick yes">
+      <li>O Major Flyer <strong>não pede cadastro, login, e-mail, telefone, nome ou qualquer identificação</strong>. Você abre o jogo e joga.</li>
+      <li>O desenvolvedor <strong>não possui servidores, banco de dados ou back-end</strong>. Não existe lugar para onde os seus dados possam ser enviados.</li>
+      <li>Seus recordes, vidas e preferências ficam <strong>gravados apenas na memória do seu próprio aparelho</strong> e nunca saem dele.</li>
+      <li>O jogo <strong>não usa a câmera, o microfone, a agenda de contatos, o GPS, as fotos, os arquivos, o SMS ou a lista de chamadas</strong>.</li>
+      <li>O jogo <strong>não usa cookies, pixels, analytics, rastreadores, relatórios de erro ou perfis de comportamento</strong>.</li>
+      <li>Nada é vendido, alugado, cedido ou compartilhado com terceiros para fins comerciais, publicitários ou de marketing. <strong>Jamais.</strong></li>
+    </ul>
+    <div class="callout warn">
+      <span class="tag">A única exceção — leia com atenção</span>
+      <p>O jogo exibe <strong>anúncios do Google AdMob</strong>. O SDK de anúncios do Google é um componente de terceiro que, para funcionar, processa por conta própria dados técnicos do aparelho (como endereço IP e identificador de publicidade). Esses dados <strong>vão direto do seu aparelho para o Google</strong> — o desenvolvedor não os recebe, não os vê, não os armazena e não tem acesso a eles em nenhum momento. Esse tratamento é regido pela <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Política de Privacidade do Google</a>. Detalhes na <a href="#pt-7">Seção 7</a>.</p>
+    </div>
+  </section>
+
+  <nav class="toc" aria-label="Índice">
+    <h2>Índice</h2>
+    <ol>
+      <li><a href="#pt-1">Quem é o controlador</a></li>
+      <li><a href="#pt-2">Objeto e âmbito de aplicação</a></li>
+      <li><a href="#pt-3">Aceitação</a></li>
+      <li><a href="#pt-4">Dados que NÃO são coletados</a></li>
+      <li><a href="#pt-5">Dados gravados no seu aparelho</a></li>
+      <li><a href="#pt-6">Permissões do sistema</a></li>
+      <li><a href="#pt-7">Terceiros: publicidade (AdMob)</a></li>
+      <li><a href="#pt-8">Terceiros: lojas e serviços</a></li>
+      <li><a href="#pt-9">Como recusar anúncios personalizados</a></li>
+      <li><a href="#pt-10">Crianças e adolescentes</a></li>
+      <li><a href="#pt-11">Bases legais (LGPD e GDPR)</a></li>
+      <li><a href="#pt-12">Seus direitos como titular</a></li>
+      <li><a href="#pt-13">Retenção e eliminação</a></li>
+      <li><a href="#pt-14">Segurança da informação</a></li>
+      <li><a href="#pt-15">Transferência internacional</a></li>
+      <li><a href="#pt-16">Incidentes de segurança</a></li>
+      <li><a href="#pt-17">Este site</a></li>
+      <li><a href="#pt-18">Segurança de Dados do Google Play</a></li>
+      <li><a href="#pt-19">Isenções e limitação de responsabilidade</a></li>
+      <li><a href="#pt-20">Alterações desta política</a></li>
+      <li><a href="#pt-21">Lei aplicável e foro</a></li>
+      <li><a href="#pt-22">Contato e Encarregado (DPO)</a></li>
+    </ol>
+  </nav>
+
+  <section>
+    <h2 id="pt-1"><span class="n">1</span>Quem é o controlador dos dados</h2>
+    <p>O aplicativo móvel <strong>Major Flyer</strong> (identificador de pacote <code>com.aqblab.majorflyer</code>), doravante "Aplicativo" ou "Jogo", é desenvolvido e distribuído por:</p>
+    <div class="tablewrap">
+      <table>
+        <tbody>
+          <tr><th style="width:34%">Desenvolvedor / Controlador</th><td>[NOME COMPLETO OU RAZÃO SOCIAL]</td></tr>
+          <tr><th>Documento</th><td>[CPF ou CNPJ]</td></tr>
+          <tr><th>Localidade</th><td>[CIDADE / ESTADO] — Brasil</td></tr>
+          <tr><th>E-mail de contato</th><td><a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a></td></tr>
+          <tr><th>Encarregado (DPO)</th><td>O próprio desenvolvedor, pelo e-mail acima</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Doravante referido como <strong>"Desenvolvedor"</strong>, "nós" ou "controlador". O termo <strong>"Usuário"</strong>, "você" ou "titular" designa qualquer pessoa que instale, execute ou utilize o Aplicativo.</p>
+    <div class="callout">
+      <span class="tag">Nota sobre a figura de controlador</span>
+      <p>Nos termos do art. 5º, VI, da Lei nº 13.709/2018 (LGPD), controlador é quem toma as decisões referentes ao tratamento de dados pessoais. Considerando que o Desenvolvedor <strong>não realiza qualquer operação de tratamento de dados pessoais</strong> — não coleta, não recebe, não acessa, não armazena e não transmite dados —, a qualificação acima é declarada por transparência e para fins de contato, e não implica reconhecimento de tratamento inexistente.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2 id="pt-2"><span class="n">2</span>Objeto e âmbito de aplicação</h2>
+    <p>Esta Política de Privacidade ("Política") descreve, de forma clara, adequada e ostensiva, como o Aplicativo lida com informações do Usuário, em atendimento ao art. 9º da LGPD, aos arts. 12, 13 e 14 do Regulamento (UE) 2016/679 (GDPR), ao art. 7º, VIII, da Lei nº 12.965/2014 (Marco Civil da Internet), ao art. 6º, III, da Lei nº 8.078/1990 (Código de Defesa do Consumidor) e às políticas de programa do Google Play para desenvolvedores.</p>
+    <h3>2.1 O que esta Política cobre</h3>
+    <ul>
+      <li>O aplicativo <strong>Major Flyer</strong> em todas as suas versões e canais de distribuição, incluindo <em>teste interno</em>, <em>teste fechado</em>, <em>teste aberto</em> e <em>produção</em> no Google Play, bem como builds distribuídas via Expo/EAS.</li>
+      <li>Esta página web, quando acessada pelo Usuário (ver <a href="#pt-17">Seção 17</a>).</li>
+    </ul>
+    <h3>2.2 O que esta Política NÃO cobre</h3>
+    <ul>
+      <li>Serviços operados por terceiros e acessados a partir do Aplicativo ou desta página, incluindo Google AdMob, Google Play e Google Play Jogos. Cada terceiro possui política própria, à qual o Usuário se submete diretamente.</li>
+      <li>O sistema operacional do aparelho (Android ou iOS), o fabricante do dispositivo, a operadora de telefonia ou o provedor de acesso à internet do Usuário.</li>
+      <li>Aplicativos, sites ou serviços de terceiros eventualmente alcançados por links externos.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 id="pt-3"><span class="n">3</span>Aceitação</h2>
+    <p>Ao instalar, executar ou continuar utilizando o Aplicativo, o Usuário declara que <strong>leu, compreendeu e concorda integralmente</strong> com os termos desta Política. Caso não concorde, no todo ou em parte, a providência adequada é <strong>não instalar o Aplicativo ou desinstalá-lo imediatamente</strong> — ato que, por si só, encerra qualquer relação regida por este documento.</p>
+    <p>O Usuário reconhece que a utilização do Aplicativo é <strong>voluntária, gratuita e não essencial</strong>, tratando-se de produto de entretenimento sem qualquer caráter de necessidade, urgência ou dependência.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-4"><span class="n">4</span>Dados que NÃO são coletados</h2>
+    <p>De forma expressa, categórica e verificável: <strong>o Desenvolvedor não coleta absolutamente nenhum dado pessoal do Usuário, para nenhuma finalidade.</strong> O Aplicativo <strong>não possui servidor, back-end, API própria, banco de dados remoto ou qualquer infraestrutura</strong> capaz de receber informações do Usuário. Não existe destino para onde os seus dados possam ser enviados pelo Desenvolvedor, porque tal destino simplesmente não foi construído.</p>
+    <p>A título ilustrativo e não exaustivo, o Aplicativo <strong>não</strong> coleta, solicita, acessa, deduz, armazena, transmite ou trata:</p>
+    <ul class="tick">
+      <li><strong>Dados de identificação:</strong> nome, apelido, data de nascimento, CPF, RG, passaporte, assinatura ou qualquer documento.</li>
+      <li><strong>Dados de contato:</strong> e-mail, telefone, endereço residencial, comercial ou de entrega.</li>
+      <li><strong>Credenciais:</strong> não há cadastro, login, senha, token, conta de usuário ou autenticação de qualquer espécie.</li>
+      <li><strong>Dados financeiros:</strong> cartão de crédito ou débito, conta bancária, chave PIX, carteira digital ou histórico de compras. <em>O Aplicativo não realiza vendas nem compras dentro do app.</em></li>
+      <li><strong>Localização:</strong> GPS, localização aproximada, geolocalização por rede, Wi-Fi ou torre de celular.</li>
+      <li><strong>Dados sensíveis</strong> (art. 5º, II, da LGPD): origem racial ou étnica, convicção religiosa, opinião política, filiação a sindicato ou a organização de caráter religioso, filosófico ou político, dados referentes à saúde ou à vida sexual, dado genético ou biométrico.</li>
+      <li><strong>Conteúdo do aparelho:</strong> fotos, vídeos, áudios, documentos, downloads, arquivos ou qualquer mídia armazenada.</li>
+      <li><strong>Comunicações:</strong> SMS, MMS, registro de chamadas, agenda de contatos, e-mails ou mensagens de qualquer aplicativo.</li>
+      <li><strong>Sensores e periféricos:</strong> câmera, microfone, biometria, leitor de digital, reconhecimento facial, NFC ou Bluetooth.</li>
+      <li><strong>Comportamento e navegação:</strong> analytics, telemetria, métricas de uso, eventos de sessão, mapas de calor, gravação de tela, relatórios de erro (<em>crash reporting</em>) ou perfilamento comportamental.</li>
+      <li><strong>Rastreamento:</strong> cookies, pixels, <em>fingerprinting</em>, SDKs de atribuição, redes sociais ou publicidade cruzada operada pelo Desenvolvedor.</li>
+      <li><strong>Inventário do aparelho:</strong> lista de aplicativos instalados, histórico de navegação ou similares.</li>
+    </ul>
+    <div class="callout ok">
+      <span class="tag">Compromisso vinculante</span>
+      <p>O Desenvolvedor <strong>não vende, não aluga, não licencia, não cede, não permuta e não compartilha</strong> dados pessoais do Usuário com qualquer pessoa física ou jurídica, para qualquer finalidade — comercial, publicitária, estatística, de marketing, de treinamento de modelos de inteligência artificial ou de qualquer outra natureza. Isso é consequência direta e inevitável do fato de que o Desenvolvedor <strong>nunca teve posse desses dados</strong>.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2 id="pt-5"><span class="n">5</span>Dados gravados exclusivamente no seu aparelho</h2>
+    <p>Para que o jogo funcione — lembrar o seu recorde, o seu progresso e as suas preferências — o Aplicativo grava um conjunto mínimo de informações no <strong>armazenamento local privado do próprio aparelho</strong>, em área reservada ao Aplicativo pelo sistema operacional.</p>
+    <div class="callout ok">
+      <p><strong>Essas informações nunca são transmitidas.</strong> Elas não saem do aparelho, não trafegam pela internet, não chegam ao Desenvolvedor, não são enviadas a terceiros e não são objeto de backup em nuvem controlado pelo Desenvolvedor. São o equivalente digital de uma anotação guardada na gaveta do seu próprio aparelho.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>O que é gravado</th><th>Para quê</th><th>Sai do aparelho?</th></tr></thead>
+        <tbody>
+          <tr><td>Histórico das últimas partidas (pontuação e data/hora)</td><td>Exibir o seu recorde e a aba "Seus voos"</td><td class="no">Não</td></tr>
+          <tr><td>Quantidade de vidas disponíveis</td><td>Manter o progresso entre sessões</td><td class="no">Não</td></tr>
+          <tr><td>Preferências (som, música, orientação de tela)</td><td>Preservar suas escolhas de configuração</td><td class="no">Não</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Tecnicamente, esses valores são gravados pelo mecanismo de armazenamento chave-valor do sistema (<code>AsyncStorage</code>), sob chaves com o prefixo <code>@major-flyer/</code> (e chaves legadas equivalentes, migradas automaticamente).</p>
+    <h3>5.1 Natureza dessas informações</h3>
+    <p>Nenhuma dessas informações é, isoladamente ou em conjunto, apta a identificar ou tornar identificável o Usuário. Um número de pontos e um horário de partida não constituem dado pessoal na acepção do art. 5º, I, da LGPD. Ainda assim, são tratadas com o mesmo cuidado, por precaução.</p>
+    <h3>5.2 Como apagar essas informações a qualquer momento</h3>
+    <p>O Usuário tem controle total e imediato, sem depender de solicitação, prazo, justificativa ou intermediação do Desenvolvedor:</p>
+    <ol>
+      <li><strong>Dentro do jogo:</strong> abra <em>Configurações</em> e toque em <strong>"Apagar recordes locais"</strong>.</li>
+      <li><strong>Pelo sistema Android:</strong> <em>Configurações → Apps → Major Flyer → Armazenamento → Limpar dados</em>.</li>
+      <li><strong>Desinstalando o Aplicativo:</strong> a remoção elimina definitivamente todo o armazenamento local.</li>
+    </ol>
+    <p>Como o Desenvolvedor nunca teve cópia dessas informações, apagá-las no aparelho é ato <strong>completo, definitivo e irreversível</strong>. Não há nada residual em lugar nenhum.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-6"><span class="n">6</span>Permissões do sistema operacional</h2>
+    <p>O Aplicativo declara no manifesto Android o conjunto mínimo de permissões necessário ao seu funcionamento e às bibliotecas que utiliza:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Permissão</th><th>Finalidade real</th></tr></thead>
+        <tbody>
+          <tr><td><code>INTERNET</code><br><code>ACCESS_NETWORK_STATE</code></td><td>Incluídas automaticamente pela plataforma e utilizadas <strong>exclusivamente</strong> pelo SDK de anúncios do Google para carregar o conteúdo publicitário. Não são usadas para enviar qualquer informação ao Desenvolvedor. O jogo funciona integralmente sem conexão.</td></tr>
+          <tr><td><code>MODIFY_AUDIO_SETTINGS</code></td><td>Ajustar volume e roteamento dos efeitos sonoros e da trilha do jogo.</td></tr>
+          <tr><td><code>FOREGROUND_SERVICE</code><br><code>FOREGROUND_SERVICE_MEDIA_PLAYBACK</code></td><td>Requisitos técnicos da biblioteca de áudio para reprodução contínua da trilha sonora sem interrupções.</td></tr>
+          <tr><td><code>RECORD_AUDIO</code></td><td><strong>Declarada pela biblioteca de áudio, porém não utilizada pelo Jogo.</strong> O Major Flyer <strong>não grava, não capta, não processa e não transmite áudio ambiente</strong> em nenhuma hipótese. Nenhuma linha do código do Jogo invoca funcionalidade de gravação. O Android <strong>não concede</strong> acesso ao microfone sem solicitação explícita em tempo de execução — solicitação que o Jogo nunca faz. Consequentemente, o microfone permanece tecnicamente inacessível ao Aplicativo.</td></tr>
+          <tr><td><code>AD_ID</code></td><td>Declarada pelo SDK de anúncios do Google. Permite ao Google acessar o Identificador de Publicidade do Android para limitar a frequência de exibição e prevenir fraude. O Desenvolvedor não acessa nem recebe esse identificador (ver <a href="#pt-7">Seção 7</a>).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>O Aplicativo <strong>não solicita</strong> permissões de câmera, localização, contatos, telefone, SMS, calendário, saúde, arquivos, fotos ou notificações.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-7"><span class="n">7</span>Terceiros: publicidade (Google AdMob)</h2>
+    <p>Esta é a <strong>única</strong> situação em que dados técnicos deixam o aparelho do Usuário em razão do Aplicativo, e ela merece a explicação mais detalhada deste documento — por dever de transparência.</p>
+    <h3>7.1 Como o jogo usa anúncios</h3>
+    <p>O Major Flyer é gratuito e sustentado por publicidade, exibida por meio do <strong>Google AdMob</strong> (Google Mobile Ads SDK), operado pela Google LLC / Google Ireland Limited. Dois formatos são utilizados:</p>
+    <ul>
+      <li><strong>Vídeo premiado (<em>rewarded</em>):</strong> exibido <strong>apenas se o Usuário escolher assisti-lo</strong>, em troca de um benefício no jogo (como um escudo). É sempre opcional — há sempre a alternativa de seguir sem assistir.</li>
+      <li><strong>Intersticial:</strong> anúncio de tela cheia exibido entre etapas do jogo.</li>
+    </ul>
+    <h3>7.2 O papel do Desenvolvedor e o papel do Google</h3>
+    <div class="callout warn">
+      <p>O SDK do Google é um <strong>componente fechado de terceiro</strong> incorporado ao Aplicativo. Quando um anúncio é solicitado, a comunicação ocorre <strong>diretamente entre o aparelho do Usuário e os servidores do Google</strong>. O Desenvolvedor <strong>não intermedeia, não roteia, não registra, não recebe cópia e não tem qualquer acesso técnico</strong> ao conteúdo dessa comunicação. Ao Desenvolvedor, o Google disponibiliza unicamente <strong>relatórios estatísticos agregados e anônimos</strong> (por exemplo: total de exibições, receita estimada, país agregado), <strong>que não permitem identificar, isolar ou individualizar qualquer Usuário</strong>.</p>
+    </div>
+    <p>Para os fins do art. 5º, VI e VII, da LGPD e do art. 4º, itens 7 e 8, do GDPR, o <strong>Google atua como controlador independente</strong> dos dados que coleta por meio de seu SDK, definindo autonomamente as finalidades e os meios desse tratamento. O Desenvolvedor <strong>não determina, não influencia e não tem ingerência</strong> sobre tal tratamento.</p>
+    <h3>7.3 Que dados o SDK do Google pode processar</h3>
+    <p>Segundo a documentação pública do Google, o SDK de anúncios pode processar, de forma autônoma:</p>
+    <ul>
+      <li>Endereço IP do dispositivo (necessário a qualquer conexão de internet) e localização aproximada dele derivada;</li>
+      <li>Identificador de Publicidade do Android (<em>Advertising ID</em> / AAID) — identificador redefinível pelo Usuário e não vinculado à sua identidade civil;</li>
+      <li>Informações técnicas do aparelho: modelo, fabricante, versão do sistema operacional, idioma, fuso horário, resolução de tela e tipo de conexão;</li>
+      <li>Dados de exibição do anúncio: qual anúncio foi mostrado, por quanto tempo e se houve interação, para fins de medição, limitação de frequência, faturamento e prevenção a fraude e abuso.</li>
+    </ul>
+    <h3>7.4 Anúncios NÃO personalizados por padrão</h3>
+    <div class="callout ok">
+      <p>Por decisão deliberada do Desenvolvedor, <strong>todas as requisições de anúncio do Major Flyer são feitas com a diretiva de anúncios NÃO personalizados</strong> (parâmetro <code>requestNonPersonalizedAdsOnly: true</code>, verificável no código-fonte do Aplicativo). Isso significa que os anúncios exibidos <strong>não são selecionados com base em perfil comportamental, histórico de navegação ou interesses inferidos do Usuário</strong>. Anúncios não personalizados ainda utilizam informações contextuais mínimas e dados técnicos para limitação de frequência, medição e combate a fraude, conforme descrito pelo Google.</p>
+    </div>
+    <h3>7.5 Referências oficiais do Google</h3>
+    <ul>
+      <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Política de Privacidade do Google</a></li>
+      <li><a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">Como o Google usa dados de sites e apps de parceiros</a></li>
+      <li><a href="https://support.google.com/admob/answer/6128543" target="_blank" rel="noopener noreferrer">Central de Ajuda do AdMob — Privacidade e dados</a></li>
+      <li><a href="https://business.safety.google/privacy/" target="_blank" rel="noopener noreferrer">Google — Privacidade e Termos para Empresas</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 id="pt-8"><span class="n">8</span>Terceiros: lojas de aplicativos e demais serviços</h2>
+    <h3>8.1 Google Play</h3>
+    <p>A distribuição do Aplicativo — em produção ou em faixas de teste interno, fechado e aberto — é feita pelo Google Play, operado pelo Google. Download, instalação, atualizações e participação em programas de teste são <strong>relações estabelecidas diretamente entre o Usuário e o Google</strong>, regidas pelos <a href="https://play.google.com/intl/pt-BR/about/play-terms/" target="_blank" rel="noopener noreferrer">Termos de Serviço do Google Play</a> e pela Política de Privacidade do Google.</p>
+    <p>Quando um Usuário é convidado para um <strong>teste interno ou fechado</strong>, o Google exige que o e-mail associado à conta Google do testador conste de uma lista de acesso no Play Console. Sobre isso:</p>
+    <ul>
+      <li>Esse e-mail é fornecido <strong>voluntariamente pelo próprio testador</strong>, fora do Aplicativo, com a finalidade única de viabilizar o convite;</li>
+      <li>É utilizado <strong>exclusivamente</strong> para liberar o acesso à versão de teste na plataforma do Google;</li>
+      <li>É armazenado na infraestrutura do Google Play Console, e <strong>não em qualquer sistema do Desenvolvedor</strong>;</li>
+      <li><strong>Não é usado para marketing, não é compartilhado, não é vendido e não é agregado a qualquer outra base</strong>;</li>
+      <li>É <strong>removido da lista de testadores ao término do respectivo programa</strong> ou a pedido do testador, a qualquer tempo, pelo e-mail de contato desta Política.</li>
+    </ul>
+    <p>Nenhum dado é coletado <em>pelo Aplicativo</em> em razão da participação em testes: a versão de teste e a versão de produção são funcionalmente idênticas quanto à privacidade.</p>
+    <h3>8.2 Google Play Jogos (Play Games Services)</h3>
+    <p>O Aplicativo contempla, em seu código, integração <strong>opcional e atualmente inativa</strong> com o Google Play Jogos, destinada a um futuro ranking global. Enquanto esse recurso permanecer inativo, <strong>nenhuma comunicação ocorre com esse serviço</strong>.</p>
+    <p>Caso venha a ser ativado em versão futura, será, em qualquer hipótese: <strong>(i)</strong> facultativo, dependente de ação afirmativa e inequívoca do Usuário; <strong>(ii)</strong> operado inteiramente pelo Google, com autenticação na infraestrutura do Google; <strong>(iii)</strong> limitado ao envio da pontuação e do apelido público que o próprio Usuário escolheu no Play Jogos, sem que o Desenvolvedor receba, armazene ou processe qualquer dado de conta. Esta Política será atualizada previamente à ativação do recurso.</p>
+    <h3>8.3 Ausência de outros terceiros</h3>
+    <p>O Aplicativo <strong>não integra</strong> nenhum outro serviço de terceiro. Em especial, não utiliza: Firebase Analytics, Google Analytics, Crashlytics, Sentry, Meta/Facebook SDK, TikTok SDK, Unity Analytics, AppsFlyer, Adjust, OneSignal, redes sociais, provedores de login federado, gateways de pagamento ou qualquer plataforma de atribuição, <em>engagement</em> ou <em>growth</em>.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-9"><span class="n">9</span>Como recusar ou limitar anúncios personalizados</h2>
+    <p>Embora o Aplicativo já solicite apenas anúncios não personalizados, o Usuário mantém controles adicionais no próprio sistema operacional:</p>
+    <h3>Android</h3>
+    <ol>
+      <li><em>Configurações → Google → Todos os serviços → Anúncios</em> (o caminho pode variar conforme fabricante e versão do Android).</li>
+      <li>Selecione <strong>"Excluir ID de publicidade"</strong> para impedir que aplicativos usem o identificador, ou <strong>"Redefinir ID de publicidade"</strong> para desvinculá-lo de qualquer histórico anterior.</li>
+    </ol>
+    <h3>iOS</h3>
+    <ol>
+      <li><em>Ajustes → Privacidade e Segurança → Rastreamento</em> e desative <strong>"Permitir que os apps solicitem rastreamento"</strong>.</li>
+      <li><em>Ajustes → Privacidade e Segurança → Publicidade da Apple</em> e desative <strong>"Anúncios Personalizados"</strong>.</li>
+    </ol>
+    <p>Controles do próprio Google estão disponíveis em <a href="https://adssettings.google.com" target="_blank" rel="noopener noreferrer">adssettings.google.com</a>. Anúncios continuarão a ser exibidos, porém sem qualquer personalização.</p>
+    <p>Usuários residentes no Espaço Econômico Europeu, no Reino Unido ou na Suíça poderão visualizar, quando aplicável, o formulário de consentimento apresentado pela plataforma do Google (Mensagem de Privacidade e Consentimento do Usuário), no qual poderão manifestar ou revogar sua escolha diretamente.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-10"><span class="n">10</span>Crianças e adolescentes</h2>
+    <p>O Aplicativo <strong>não é dirigido a crianças</strong> e não integra o programa <em>Projetado para Famílias</em> (<em>Designed for Families</em>) do Google Play. O público-alvo declarado é de pessoas com <strong>13 (treze) anos de idade ou mais</strong>. Para Usuários residentes em jurisdições que estabeleçam idade mínima superior para o tratamento de dados sem consentimento parental — como determinados Estados-Membros da União Europeia, que podem fixar o limite em até 16 anos —, prevalece a idade mínima local.</p>
+    <p>Considerando que o Desenvolvedor <strong>não coleta qualquer dado pessoal</strong>, não há, no âmbito do Aplicativo, tratamento de dados de crianças ou adolescentes que exigisse consentimento específico e em destaque de ao menos um dos pais ou do responsável legal, nos termos do art. 14, §1º, da LGPD.</p>
+    <p>Caso pai, mãe ou responsável legal identifique que criança sob sua responsabilidade forneceu dados pessoais em razão do Aplicativo — hipótese que o Desenvolvedor considera tecnicamente inexistente, dada a ausência de qualquer canal de coleta —, solicita-se contato imediato pelo e-mail da <a href="#pt-22">Seção 22</a>, comprometendo-se o Desenvolvedor a apurar e, se confirmado, eliminar de imediato o que for encontrado.</p>
+    <p>Recomenda-se aos responsáveis o uso das ferramentas de <strong>controle parental</strong> do Google Play e do sistema operacional para supervisionar o uso de aplicativos e a exposição a publicidade por menores sob sua guarda.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-11"><span class="n">11</span>Bases legais do tratamento</h2>
+    <p>Como o Desenvolvedor não realiza tratamento de dados pessoais, <strong>não há base legal a ser por ele invocada</strong>. A tabela abaixo é apresentada por completude e transparência, indicando as bases aplicáveis às operações realizadas por terceiros:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Operação</th><th>Responsável</th><th>Base legal</th></tr></thead>
+        <tbody>
+          <tr><td>Gravação de recordes e preferências no aparelho</td><td>Aplicativo (local)</td><td>Não configura tratamento de dado pessoal (art. 5º, I, LGPD). Subsidiariamente: execução de funcionalidade solicitada pelo titular (art. 7º, V, LGPD; art. 6º(1)(b), GDPR)</td></tr>
+          <tr><td>Exibição de anúncios não personalizados</td><td>Google</td><td>Legítimo interesse e/ou consentimento obtido pelo próprio Google, conforme a jurisdição (art. 7º, IX, LGPD; art. 6º(1)(a) e (f), GDPR)</td></tr>
+          <tr><td>Distribuição e atualização pelo Google Play</td><td>Google</td><td>Execução de contrato entre o Usuário e o Google (art. 7º, V, LGPD; art. 6º(1)(b), GDPR)</td></tr>
+          <tr><td>Lista de e-mails de testadores no Play Console</td><td>Google (armazenamento) / Desenvolvedor (indicação)</td><td>Consentimento livre e informado do próprio testador (art. 7º, I, LGPD; art. 6º(1)(a), GDPR)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Não há tratamento de dados pessoais para finalidades secundárias, nem decisões automatizadas que produzam efeitos jurídicos ou afetem significativamente os interesses do Usuário (art. 20 da LGPD; art. 22 do GDPR).</p>
+  </section>
+
+  <section>
+    <h2 id="pt-12"><span class="n">12</span>Seus direitos como titular de dados</h2>
+    <p>A LGPD (art. 18), o GDPR (arts. 15 a 22) e legislações análogas asseguram ao Usuário um conjunto de direitos. O Desenvolvedor os reconhece integralmente e compromete-se a atendê-los, ainda que, na prática, <strong>a maioria deles seja materialmente inaplicável pela simples razão de que não existem dados sob a custódia do Desenvolvedor</strong>.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Direito</th><th>Situação no Major Flyer</th></tr></thead>
+        <tbody>
+          <tr><td>Confirmação da existência de tratamento</td><td>Confirmamos: <strong>não há</strong> tratamento de dados pessoais pelo Desenvolvedor. Este documento serve como resposta formal e permanente.</td></tr>
+          <tr><td>Acesso aos dados</td><td>Não há dados a fornecer. Os dados locais estão, a todo tempo, sob domínio exclusivo do Usuário, no próprio aparelho.</td></tr>
+          <tr><td>Correção de dados incompletos, inexatos ou desatualizados</td><td>Não aplicável — não há registro a corrigir.</td></tr>
+          <tr><td>Anonimização, bloqueio ou eliminação</td><td>Não aplicável quanto ao Desenvolvedor. Quanto ao aparelho, a eliminação é imediata e integral pelos meios da <a href="#pt-5">Seção 5.2</a>.</td></tr>
+          <tr><td>Portabilidade</td><td>Não aplicável — não há base de dados a portar.</td></tr>
+          <tr><td>Informação sobre compartilhamento</td><td>Prestada nas <a href="#pt-7">Seções 7</a> e <a href="#pt-8">8</a>. O Desenvolvedor não compartilha dados pessoais com ninguém.</td></tr>
+          <tr><td>Revogação do consentimento</td><td>Não há consentimento coletado pelo Aplicativo. A desinstalação encerra qualquer relação.</td></tr>
+          <tr><td>Oposição ao tratamento</td><td>Exercível diretamente perante o Google quanto à publicidade (<a href="#pt-9">Seção 9</a>) e pela desinstalação do Aplicativo.</td></tr>
+          <tr><td>Petição perante a autoridade</td><td>Garantido: ANPD (Brasil), autoridade de proteção de dados competente (UE/EEE) ou órgão equivalente na jurisdição do Usuário.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>12.1 Como exercer</h3>
+    <p>Basta enviar mensagem para <a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a> com o assunto <strong>"LGPD/GDPR — Major Flyer"</strong>. O Desenvolvedor responderá em <strong>até 15 (quinze) dias corridos</strong>, conforme o art. 19, §3º, da LGPD, ou em até 30 (trinta) dias no caso do art. 12(3) do GDPR, prorrogáveis nos termos da lei. O atendimento é <strong>gratuito</strong>.</p>
+    <p>Por não haver base de dados, o Desenvolvedor <strong>não é capaz de identificar o Usuário</strong> nem de vincular uma solicitação a qualquer registro (art. 11 do GDPR). Dessa forma, a resposta consistirá na confirmação documental da inexistência de tratamento.</p>
+    <h3>12.2 Usuários da Califórnia (CCPA/CPRA)</h3>
+    <p>O Desenvolvedor <strong>não coleta, não vende e não compartilha</strong> informações pessoais na acepção do <em>California Consumer Privacy Act</em>, conforme alterado pelo <em>California Privacy Rights Act</em>. Não há, portanto, direito de <em>opt-out</em> a ser exercido perante o Desenvolvedor, tampouco prática de discriminação por exercício de direitos. O tratamento realizado pelo Google rege-se pelas políticas do Google.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-13"><span class="n">13</span>Retenção e eliminação</h2>
+    <ul>
+      <li><strong>Dados no aparelho:</strong> retidos enquanto o Aplicativo estiver instalado e até que o Usuário os apague. O histórico de partidas é limitado às <strong>25 partidas mais recentes</strong>, com descarte automático das mais antigas.</li>
+      <li><strong>Dados sob custódia do Desenvolvedor:</strong> <strong>zero</strong>, com período de retenção igualmente <strong>zero</strong>. Não existe base de dados, backup, arquivo morto, planilha ou cópia de qualquer natureza.</li>
+      <li><strong>Dados sob custódia do Google:</strong> regidos pelas políticas de retenção do Google, sobre as quais o Desenvolvedor não exerce controle.</li>
+      <li><strong>Lista de testadores no Play Console:</strong> mantida apenas durante a vigência do respectivo programa de testes, sendo removida em seguida.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 id="pt-14"><span class="n">14</span>Segurança da informação</h2>
+    <p>O Desenvolvedor adota a medida de segurança mais eficaz que existe: <strong>a minimização absoluta</strong>. Dado que não é coletado não pode vazar, não pode ser furtado, não pode ser vendido e não pode ser objeto de sequestro por <em>ransomware</em>.</p>
+    <p>Adicionalmente:</p>
+    <ul>
+      <li>O armazenamento local do Aplicativo reside na área <em>sandbox</em> privada do aparelho, isolada pelo sistema operacional e inacessível a outros aplicativos;</li>
+      <li>O Aplicativo não expõe portas, serviços de rede, <em>WebViews</em> com conteúdo remoto ou canais de entrada de dados;</li>
+      <li>As builds de produção são assinadas digitalmente e distribuídas exclusivamente pelo Google Play, com verificação de integridade pela própria plataforma;</li>
+      <li>As comunicações do SDK de anúncios com os servidores do Google utilizam TLS, conforme implementação do Google.</li>
+    </ul>
+    <p>Nos termos do art. 46 da LGPD, tais medidas são compatíveis com a natureza da informação tratada, com o risco envolvido — que é residual — e com o estado da técnica.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-15"><span class="n">15</span>Transferência internacional</h2>
+    <p>O Desenvolvedor <strong>não realiza transferência internacional de dados pessoais</strong>, por não deter dados a transferir.</p>
+    <p>Os dados técnicos processados pelo SDK de anúncios podem ser tratados pelo Google em servidores localizados fora do país de residência do Usuário, inclusive nos Estados Unidos. Tais transferências são realizadas pelo Google, sob sua exclusiva responsabilidade, amparadas nos mecanismos por ele adotados — como <em>Cláusulas Contratuais Padrão</em> da Comissão Europeia e o <em>EU-U.S. Data Privacy Framework</em> —, nos termos dos arts. 33 a 36 da LGPD e do Capítulo V do GDPR.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-16"><span class="n">16</span>Incidentes de segurança</h2>
+    <p>Na hipótese, considerada tecnicamente improvável, de incidente de segurança envolvendo dados pessoais sob responsabilidade do Desenvolvedor, este compromete-se a: <strong>(i)</strong> comunicar a Autoridade Nacional de Proteção de Dados (ANPD) e os titulares afetados em prazo razoável, nos termos do art. 48 da LGPD, e em até 72 horas quando aplicável o art. 33 do GDPR; <strong>(ii)</strong> descrever a natureza dos dados, os titulares envolvidos, as medidas técnicas empregadas e os riscos decorrentes; <strong>(iii)</strong> adotar as medidas de mitigação cabíveis.</p>
+    <p>Incidentes ocorridos na infraestrutura do Google são de responsabilidade exclusiva do Google e sujeitos aos procedimentos de notificação daquela empresa.</p>
+    <p>Vulnerabilidades identificadas no Aplicativo podem ser comunicadas de forma responsável ao e-mail da <a href="#pt-22">Seção 22</a>.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-17"><span class="n">17</span>Este site</h2>
+    <p>Esta página é <strong>estática</strong>. Ela <strong>não utiliza cookies, não executa scripts de rastreamento, não possui formulários, não integra analytics, não carrega fontes, imagens ou scripts de servidores externos e não cria perfis de visitante</strong>. Todo o conteúdo — estilos, ícone e script de troca de idioma — está embutido neste próprio arquivo.</p>
+    <p>A única informação eventualmente gravada no seu navegador é a <strong>preferência de idioma</strong> desta página, mantida em <code>localStorage</code>, exclusivamente no seu dispositivo, e jamais transmitida.</p>
+    <p>Como ocorre com qualquer servidor web, o servidor que hospeda esta página pode registrar, em <em>logs</em> técnicos padrão, o endereço IP e o agente de usuário das requisições recebidas, para fins de operação, segurança e diagnóstico da infraestrutura. Esses registros não são utilizados para identificar, perfilar ou rastrear visitantes, não são cruzados com outras bases e não são compartilhados com terceiros. Registro semelhante é exigido pelo art. 15 da Lei nº 12.965/2014 para provedores de aplicações.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-18"><span class="n">18</span>Declaração de Segurança de Dados do Google Play</h2>
+    <p>Para conveniência do Usuário e das autoridades, reproduz-se abaixo o teor da declaração prestada pelo Desenvolvedor na seção <em>Segurança de Dados</em> da ficha do Aplicativo no Google Play:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Item</th><th>Declaração</th></tr></thead>
+        <tbody>
+          <tr><td>O app coleta ou compartilha dados do usuário?</td><td><strong>Sim</strong> — exclusivamente por meio do SDK de publicidade de terceiro, na categoria "Informações do dispositivo ou outros IDs → ID do dispositivo ou outro ID", para a finalidade "Publicidade ou marketing".</td></tr>
+          <tr><td>Os dados são criptografados em trânsito?</td><td><strong>Sim</strong>, por meio de TLS.</td></tr>
+          <tr><td>O usuário pode solicitar a exclusão dos dados?</td><td><strong>Sim</strong> — integralmente e de imediato, pelos meios da <a href="#pt-5">Seção 5.2</a>, sem depender de solicitação ao Desenvolvedor.</td></tr>
+          <tr><td>Há coleta de dados pessoais, financeiros, de saúde, localização, mensagens, fotos, arquivos ou contatos?</td><td><strong>Não.</strong></td></tr>
+          <tr><td>Os dados são vendidos ou compartilhados para fins não relacionados ao funcionamento?</td><td><strong>Não.</strong></td></tr>
+          <tr><td>O app é dirigido a crianças?</td><td><strong>Não.</strong> Público de 13 anos ou mais.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Havendo divergência entre esta seção e a ficha vigente no Google Play, prevalecerá a informação constante da ficha da loja, comprometendo-se o Desenvolvedor a harmonizar este documento na primeira oportunidade.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-19"><span class="n">19</span>Isenções e limitação de responsabilidade</h2>
+    <p>As disposições desta seção aplicam-se <strong>na máxima extensão permitida pela legislação aplicável</strong> e <strong>não afastam, não limitam e não excluem</strong> quaisquer direitos irrenunciáveis do Usuário, notadamente os previstos na Lei nº 8.078/1990 (Código de Defesa do Consumidor), na Lei nº 13.709/2018 (LGPD) e em normas de ordem pública.</p>
+    <h3>19.1 Fornecimento "no estado em que se encontra"</h3>
+    <p>O Aplicativo é gratuito e fornecido <strong>"no estado em que se encontra"</strong> (<em>as is</em>), sem garantia de disponibilidade ininterrupta, ausência de erros ou adequação a finalidade específica não expressamente prometida.</p>
+    <h3>19.2 Atos de terceiros</h3>
+    <p>O Desenvolvedor <strong>não responde</strong> por ações, omissões, políticas, práticas de tratamento de dados, falhas ou incidentes de terceiros — em especial do Google (AdMob, Google Play, Play Jogos), do fabricante do aparelho, do desenvolvedor do sistema operacional, da operadora de telecomunicações ou do provedor de acesso —, os quais atuam de forma autônoma e independente, sem subordinação ao Desenvolvedor.</p>
+    <h3>19.3 Conteúdo publicitário</h3>
+    <p>Os anúncios exibidos são selecionados e veiculados <strong>integralmente pelo Google</strong>. O Desenvolvedor <strong>não escolhe, não aprova, não revisa, não endossa e não tem controle prévio</strong> sobre os anunciantes ou o conteúdo dos anúncios, tampouco sobre produtos, serviços, sites ou ofertas neles divulgados. Reclamações relativas a conteúdo publicitário devem ser dirigidas ao Google. Sem prejuízo, o Usuário pode comunicar ao Desenvolvedor, pelo e-mail da <a href="#pt-22">Seção 22</a>, anúncio que repute inadequado, comprometendo-se o Desenvolvedor a encaminhar a comunicação aos canais competentes do Google.</p>
+    <h3>19.4 Uso do aparelho pelo Usuário</h3>
+    <p>O Desenvolvedor não responde por perda dos dados locais decorrente de desinstalação, limpeza de dados, restauração de fábrica, troca, extravio, furto, dano ou defeito do aparelho, tampouco por acesso realizado por terceiro que detenha a posse física do dispositivo do Usuário.</p>
+    <h3>19.5 Modificação não autorizada</h3>
+    <p>Esta Política aplica-se <strong>exclusivamente</strong> à versão oficial do Aplicativo, distribuída pelos canais oficiais e assinada pelo Desenvolvedor. Versões modificadas, recompiladas, clonadas, obtidas de repositórios não oficiais (<em>APKs</em> piratas) ou executadas em ambientes adulterados <strong>não são de responsabilidade do Desenvolvedor</strong>, podendo conter código malicioso e práticas de coleta absolutamente estranhas a este documento.</p>
+    <h3>19.6 Autonomia das cláusulas</h3>
+    <p>A eventual declaração de nulidade, invalidade ou inexequibilidade de qualquer disposição desta Política <strong>não prejudicará</strong> a validade e a eficácia das demais, que permanecerão em pleno vigor.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-20"><span class="n">20</span>Alterações desta Política</h2>
+    <p>Esta Política poderá ser atualizada a qualquer tempo, para refletir alterações no Aplicativo, na legislação aplicável ou nas exigências das lojas de aplicativos. A versão vigente é sempre a publicada neste endereço, identificada pelo <strong>número de versão</strong> e pela <strong>data de vigência</strong> indicados no topo.</p>
+    <p>Alterações <strong>materiais</strong> — assim entendidas aquelas que introduzam qualquer forma de coleta de dados pessoais pelo Desenvolvedor ou que ampliem significativamente o compartilhamento com terceiros — serão comunicadas com <strong>destaque</strong>, por meio de aviso dentro do Aplicativo e/ou nas notas de versão do Google Play, <strong>com antecedência razoável à sua entrada em vigor</strong>, assegurado ao Usuário o direito de não anuir e desinstalar o Aplicativo.</p>
+    <p>Recomenda-se a consulta periódica a esta página. O uso continuado do Aplicativo após a entrada em vigor de uma nova versão implica ciência do seu conteúdo.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-21"><span class="n">21</span>Lei aplicável e foro</h2>
+    <p>Esta Política é regida e interpretada de acordo com as <strong>leis da República Federativa do Brasil</strong>, com destaque para a Lei nº 13.709/2018 (LGPD), a Lei nº 12.965/2014 (Marco Civil da Internet), a Lei nº 8.078/1990 (Código de Defesa do Consumidor) e a Lei nº 10.406/2002 (Código Civil).</p>
+    <p>Fica eleito o foro da comarca de <strong>[CIDADE / ESTADO]</strong> para dirimir controvérsias oriundas deste documento, <strong>ressalvado</strong> o direito do Usuário consumidor de ajuizar demanda no foro de seu próprio domicílio, na forma do art. 101, I, do Código de Defesa do Consumidor, e ressalvadas as competências legais e a aplicação de normas cogentes de proteção de dados vigentes na jurisdição de residência do Usuário.</p>
+  </section>
+
+  <section>
+    <h2 id="pt-22"><span class="n">22</span>Contato e Encarregado pelo Tratamento de Dados</h2>
+    <p>Para qualquer dúvida, solicitação, exercício de direitos, reclamação ou comunicação de vulnerabilidade relacionada a esta Política ou ao Aplicativo:</p>
+    <div class="tablewrap">
+      <table>
+        <tbody>
+          <tr><th style="width:34%">E-mail</th><td><a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a></td></tr>
+          <tr><th>Assunto sugerido</th><td>"Privacidade — Major Flyer"</td></tr>
+          <tr><th>Encarregado (DPO)</th><td>[NOME COMPLETO OU RAZÃO SOCIAL] — art. 41 da LGPD</td></tr>
+          <tr><th>Prazo de resposta</th><td>Até 15 dias corridos (LGPD) / até 30 dias (GDPR)</td></tr>
+          <tr><th>Custo</th><td>Gratuito</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>O Usuário pode ainda apresentar reclamação diretamente à <strong>Autoridade Nacional de Proteção de Dados (ANPD)</strong>, em <a href="https://www.gov.br/anpd" target="_blank" rel="noopener noreferrer">gov.br/anpd</a>, ou à autoridade de proteção de dados competente em sua jurisdição.</p>
+  </section>
+
+  <section class="lead">
+    <h2><span class="n"></span>Declaração final</h2>
+    <p>O Desenvolvedor declara que as informações constantes deste documento são <strong>verdadeiras, completas e verificáveis</strong>, e que o Aplicativo <strong>Major Flyer</strong> foi projetado desde a concepção segundo os princípios de <em>privacy by design</em> e <em>privacy by default</em> (art. 46, §2º, da LGPD; art. 25 do GDPR), <strong>não coletando dado pessoal algum de seus Usuários para qualquer finalidade</strong>.</p>
+    <p style="margin-bottom:0"><strong>Documento versão 1.0 — vigente desde 29 de agosto de 2026.</strong></p>
+  </section>
+
+</main>
+</div>
+
+<!-- ================================= ENGLISH ================================= -->
+<div data-lang="en" hidden>
+<header class="top">
+  <div class="wrap">
+    <span class="badge">Privacy Policy</span>
+    <h1>Major Flyer</h1>
+    <p class="sub">The developer of this game <strong>does not collect, store, transmit or sell</strong> any personal data of its players.</p>
+    <div class="meta">
+      <span class="chip"><b>Application:</b> Major Flyer</span>
+      <span class="chip"><b>ID:</b> com.aqblab.majorflyer</span>
+      <span class="chip"><b>Version:</b> 1.0</span>
+      <span class="chip"><b>Effective:</b> August 29, 2026</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="lead">
+    <h2><span class="n"></span>Plain-language summary</h2>
+    <p>This summary is provided for convenience and does not replace the full text below. In case of conflict, the full clauses prevail.</p>
+    <ul class="tick yes">
+      <li>Major Flyer <strong>requires no sign-up, login, e-mail, phone number, name or identification of any kind</strong>. You open the game and play.</li>
+      <li>The developer <strong>operates no servers, no database and no back end</strong>. There is nowhere for your data to be sent.</li>
+      <li>Your high scores, lives and settings are <strong>stored only in your own device's memory</strong> and never leave it.</li>
+      <li>The game <strong>does not use the camera, microphone, contacts, GPS, photos, files, SMS or call logs</strong>.</li>
+      <li>The game uses <strong>no cookies, pixels, analytics, trackers, crash reporting or behavioural profiling</strong>.</li>
+      <li>Nothing is sold, rented, licensed or shared with third parties for commercial, advertising or marketing purposes. <strong>Ever.</strong></li>
+    </ul>
+    <div class="callout warn">
+      <span class="tag">The one exception — please read</span>
+      <p>The game displays <strong>Google AdMob advertising</strong>. Google's ad SDK is a third-party component which, in order to work, independently processes technical device data (such as IP address and advertising identifier). That data travels <strong>directly from your device to Google</strong> — the developer never receives it, never sees it, never stores it and has no access to it at any time. That processing is governed by <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's Privacy Policy</a>. Full detail in <a href="#en-7">Section 7</a>.</p>
+    </div>
+  </section>
+
+  <nav class="toc" aria-label="Table of contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#en-1">Who the controller is</a></li>
+      <li><a href="#en-2">Purpose and scope</a></li>
+      <li><a href="#en-3">Acceptance</a></li>
+      <li><a href="#en-4">Data that is NOT collected</a></li>
+      <li><a href="#en-5">Data stored on your device</a></li>
+      <li><a href="#en-6">System permissions</a></li>
+      <li><a href="#en-7">Third parties: advertising (AdMob)</a></li>
+      <li><a href="#en-8">Third parties: stores and services</a></li>
+      <li><a href="#en-9">Opting out of personalised ads</a></li>
+      <li><a href="#en-10">Children</a></li>
+      <li><a href="#en-11">Legal bases</a></li>
+      <li><a href="#en-12">Your rights</a></li>
+      <li><a href="#en-13">Retention and deletion</a></li>
+      <li><a href="#en-14">Information security</a></li>
+      <li><a href="#en-15">International transfers</a></li>
+      <li><a href="#en-16">Security incidents</a></li>
+      <li><a href="#en-17">This website</a></li>
+      <li><a href="#en-18">Google Play Data Safety</a></li>
+      <li><a href="#en-19">Disclaimers and limitation of liability</a></li>
+      <li><a href="#en-20">Changes to this policy</a></li>
+      <li><a href="#en-21">Governing law and venue</a></li>
+      <li><a href="#en-22">Contact and Data Protection Officer</a></li>
+    </ol>
+  </nav>
+
+  <section>
+    <h2 id="en-1"><span class="n">1</span>Who the data controller is</h2>
+    <p>The mobile application <strong>Major Flyer</strong> (package identifier <code>com.aqblab.majorflyer</code>), hereinafter the "Application" or "Game", is developed and distributed by:</p>
+    <div class="tablewrap">
+      <table>
+        <tbody>
+          <tr><th style="width:34%">Developer / Controller</th><td>[FULL LEGAL NAME OR COMPANY NAME]</td></tr>
+          <tr><th>Tax ID</th><td>[CPF or CNPJ]</td></tr>
+          <tr><th>Location</th><td>[CITY / STATE] — Brazil</td></tr>
+          <tr><th>Contact e-mail</th><td><a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a></td></tr>
+          <tr><th>Data Protection Officer</th><td>The developer, at the e-mail address above</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Hereinafter the <strong>"Developer"</strong>, "we" or "controller". The term <strong>"User"</strong>, "you" or "data subject" means any person who installs, runs or uses the Application.</p>
+    <div class="callout">
+      <span class="tag">Note on the controller role</span>
+      <p>Under art. 5, VI of Brazilian Law 13.709/2018 (LGPD) and art. 4(7) GDPR, the controller is the party that determines the purposes and means of processing personal data. Since the Developer <strong>carries out no personal data processing operation whatsoever</strong> — it does not collect, receive, access, store or transmit data — the designation above is stated for transparency and contact purposes only, and does not amount to an acknowledgment of processing that does not exist.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2 id="en-2"><span class="n">2</span>Purpose and scope</h2>
+    <p>This Privacy Policy (the "Policy") describes, in a clear and conspicuous manner, how the Application handles User information, in compliance with art. 9 LGPD, arts. 12–14 of Regulation (EU) 2016/679 (GDPR), art. 7, VIII of Brazilian Law 12.965/2014 (Internet Civil Framework), art. 6, III of Brazilian Law 8.078/1990 (Consumer Protection Code) and the Google Play Developer Program Policies.</p>
+    <h3>2.1 What this Policy covers</h3>
+    <ul>
+      <li>The <strong>Major Flyer</strong> application in all versions and distribution channels, including <em>internal testing</em>, <em>closed testing</em>, <em>open testing</em> and <em>production</em> on Google Play, as well as builds distributed via Expo/EAS.</li>
+      <li>This web page, when accessed by the User (see <a href="#en-17">Section 17</a>).</li>
+    </ul>
+    <h3>2.2 What this Policy does NOT cover</h3>
+    <ul>
+      <li>Third-party services reached from the Application or this page, including Google AdMob, Google Play and Google Play Games. Each third party has its own policy, to which the User is directly subject.</li>
+      <li>The device operating system (Android or iOS), the device manufacturer, the mobile carrier or the User's internet service provider.</li>
+      <li>Third-party applications, websites or services reached through external links.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 id="en-3"><span class="n">3</span>Acceptance</h2>
+    <p>By installing, running or continuing to use the Application, the User declares that they have <strong>read, understood and fully agree</strong> with the terms of this Policy. If the User does not agree, in whole or in part, the appropriate course of action is <strong>not to install the Application, or to uninstall it immediately</strong> — an act which in itself terminates any relationship governed by this document.</p>
+    <p>The User acknowledges that use of the Application is <strong>voluntary, free of charge and non-essential</strong>, it being an entertainment product with no character of necessity, urgency or dependency.</p>
+  </section>
+
+  <section>
+    <h2 id="en-4"><span class="n">4</span>Data that is NOT collected</h2>
+    <p>Expressly, categorically and verifiably: <strong>the Developer collects no personal data of the User whatsoever, for any purpose.</strong> The Application <strong>has no server, no back end, no proprietary API, no remote database and no infrastructure of any kind</strong> capable of receiving User information. There is no destination to which your data could be sent by the Developer, because no such destination was ever built.</p>
+    <p>By way of illustration and without limitation, the Application does <strong>not</strong> collect, request, access, infer, store, transmit or process:</p>
+    <ul class="tick">
+      <li><strong>Identification data:</strong> name, nickname, date of birth, national ID, passport, signature or any document.</li>
+      <li><strong>Contact data:</strong> e-mail, telephone, home, business or delivery address.</li>
+      <li><strong>Credentials:</strong> there is no registration, login, password, token, user account or authentication of any kind.</li>
+      <li><strong>Financial data:</strong> credit or debit card, bank account, digital wallet or purchase history. <em>The Application makes no sales and has no in-app purchases.</em></li>
+      <li><strong>Location:</strong> GPS, approximate location, network, Wi-Fi or cell-tower geolocation.</li>
+      <li><strong>Special category data</strong> (art. 9 GDPR; art. 5, II LGPD): racial or ethnic origin, religious belief, political opinion, trade union membership, health or sex life data, genetic or biometric data.</li>
+      <li><strong>Device content:</strong> photos, videos, audio, documents, downloads, files or any stored media.</li>
+      <li><strong>Communications:</strong> SMS, MMS, call logs, contact lists, e-mails or messages from any application.</li>
+      <li><strong>Sensors and peripherals:</strong> camera, microphone, biometrics, fingerprint reader, face recognition, NFC or Bluetooth.</li>
+      <li><strong>Behaviour and usage:</strong> analytics, telemetry, usage metrics, session events, heatmaps, session recording, crash reporting or behavioural profiling.</li>
+      <li><strong>Tracking:</strong> cookies, tracking pixels, fingerprinting, attribution SDKs, social networks or cross-app advertising operated by the Developer.</li>
+      <li><strong>Device inventory:</strong> list of installed applications, browsing history or similar.</li>
+    </ul>
+    <div class="callout ok">
+      <span class="tag">Binding commitment</span>
+      <p>The Developer <strong>does not sell, rent, license, assign, trade or share</strong> User personal data with any natural or legal person, for any purpose — commercial, advertising, statistical, marketing, artificial-intelligence model training or otherwise. This follows directly and unavoidably from the fact that the Developer <strong>has never held such data</strong>.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2 id="en-5"><span class="n">5</span>Data stored exclusively on your device</h2>
+    <p>So that the game can work — remembering your high score, progress and settings — the Application writes a minimal set of information to the <strong>device's own private local storage</strong>, in the area reserved to the Application by the operating system.</p>
+    <div class="callout ok">
+      <p><strong>This information is never transmitted.</strong> It does not leave the device, does not travel over the internet, never reaches the Developer, is not sent to third parties and is not backed up to any cloud controlled by the Developer. It is the digital equivalent of a note kept in your own device's drawer.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>What is stored</th><th>Why</th><th>Leaves the device?</th></tr></thead>
+        <tbody>
+          <tr><td>Recent run history (score and timestamp)</td><td>To show your best score and the "Your flights" tab</td><td class="no">No</td></tr>
+          <tr><td>Number of available lives</td><td>To keep progress between sessions</td><td class="no">No</td></tr>
+          <tr><td>Settings (sound, music, screen orientation)</td><td>To preserve your configuration choices</td><td class="no">No</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Technically these values are written through the platform key-value storage mechanism (<code>AsyncStorage</code>) under keys prefixed <code>@major-flyer/</code> (and equivalent legacy keys, migrated automatically).</p>
+    <h3>5.1 Nature of this information</h3>
+    <p>None of this information, alone or in combination, is capable of identifying or rendering identifiable the User. A score and a timestamp do not constitute personal data within the meaning of art. 4(1) GDPR or art. 5, I LGPD. They are nevertheless handled with the same care, as a precaution.</p>
+    <h3>5.2 How to erase it at any time</h3>
+    <p>The User has full and immediate control, with no request, waiting period, justification or involvement of the Developer:</p>
+    <ol>
+      <li><strong>In the game:</strong> open <em>Settings</em> and tap <strong>"Erase local scores"</strong>.</li>
+      <li><strong>Through Android:</strong> <em>Settings → Apps → Major Flyer → Storage → Clear data</em>.</li>
+      <li><strong>By uninstalling:</strong> removing the app permanently deletes all of its local storage.</li>
+    </ol>
+    <p>Because the Developer never held a copy of this information, erasing it on the device is <strong>complete, final and irreversible</strong>. Nothing remains anywhere.</p>
+  </section>
+
+  <section>
+    <h2 id="en-6"><span class="n">6</span>Operating system permissions</h2>
+    <p>The Application declares in its Android manifest the minimum set of permissions required for its operation and for the libraries it uses:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Permission</th><th>Actual purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>INTERNET</code><br><code>ACCESS_NETWORK_STATE</code></td><td>Added automatically by the platform and used <strong>exclusively</strong> by Google's ad SDK to load advertising content. They are not used to send any information to the Developer. The game is fully playable offline.</td></tr>
+          <tr><td><code>MODIFY_AUDIO_SETTINGS</code></td><td>To adjust the volume and routing of the game's sound effects and soundtrack.</td></tr>
+          <tr><td><code>FOREGROUND_SERVICE</code><br><code>FOREGROUND_SERVICE_MEDIA_PLAYBACK</code></td><td>Technical requirements of the audio library for uninterrupted soundtrack playback.</td></tr>
+          <tr><td><code>RECORD_AUDIO</code></td><td><strong>Declared by the audio library but not used by the Game.</strong> Major Flyer <strong>does not record, capture, process or transmit ambient audio</strong> under any circumstances. No line of the Game's code invokes recording functionality. Android <strong>does not grant</strong> microphone access without an explicit runtime request — a request the Game never makes. The microphone therefore remains technically inaccessible to the Application.</td></tr>
+          <tr><td><code>AD_ID</code></td><td>Declared by Google's ad SDK. It allows Google to access the Android Advertising ID for frequency capping and fraud prevention. The Developer neither accesses nor receives that identifier (see <a href="#en-7">Section 7</a>).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The Application <strong>does not request</strong> camera, location, contacts, phone, SMS, calendar, health, files, photos or notification permissions.</p>
+  </section>
+
+  <section>
+    <h2 id="en-7"><span class="n">7</span>Third parties: advertising (Google AdMob)</h2>
+    <p>This is the <strong>only</strong> situation in which technical data leaves the User's device because of the Application, and it deserves the most detailed explanation in this document, as a matter of transparency.</p>
+    <h3>7.1 How the game uses ads</h3>
+    <p>Major Flyer is free and supported by advertising served through <strong>Google AdMob</strong> (Google Mobile Ads SDK), operated by Google LLC / Google Ireland Limited. Two formats are used:</p>
+    <ul>
+      <li><strong>Rewarded video:</strong> shown <strong>only if the User chooses to watch it</strong>, in exchange for an in-game benefit (such as a shield). It is always optional — there is always the alternative of continuing without watching.</li>
+      <li><strong>Interstitial:</strong> a full-screen ad shown between stages of the game.</li>
+    </ul>
+    <h3>7.2 The Developer's role and Google's role</h3>
+    <div class="callout warn">
+      <p>Google's SDK is a <strong>closed third-party component</strong> embedded in the Application. When an ad is requested, communication takes place <strong>directly between the User's device and Google's servers</strong>. The Developer <strong>does not intermediate, route, log, receive a copy of, or have any technical access to</strong> the content of that communication. Google provides the Developer only with <strong>aggregated, anonymous statistical reports</strong> (for example: total impressions, estimated revenue, aggregated country), <strong>which do not allow any User to be identified, singled out or individualised</strong>.</p>
+    </div>
+    <p>For the purposes of art. 4(7) and 4(8) GDPR and art. 5, VI and VII LGPD, <strong>Google acts as an independent controller</strong> of the data it collects through its SDK, autonomously determining the purposes and means of that processing. The Developer <strong>does not determine, influence or have any say</strong> in it.</p>
+    <h3>7.3 What data Google's SDK may process</h3>
+    <p>According to Google's public documentation, the ad SDK may autonomously process:</p>
+    <ul>
+      <li>The device IP address (required by any internet connection) and the approximate location derived from it;</li>
+      <li>The Android Advertising ID (AAID) — an identifier that the User can reset and that is not linked to their civil identity;</li>
+      <li>Technical device information: model, manufacturer, OS version, language, time zone, screen resolution and connection type;</li>
+      <li>Ad delivery data: which ad was shown, for how long and whether there was interaction, for measurement, frequency capping, billing and fraud/abuse prevention.</li>
+    </ul>
+    <h3>7.4 Non-personalised ads by default</h3>
+    <div class="callout ok">
+      <p>By deliberate decision of the Developer, <strong>every ad request made by Major Flyer carries the non-personalised ads directive</strong> (parameter <code>requestNonPersonalizedAdsOnly: true</code>, verifiable in the Application's source code). This means displayed ads <strong>are not selected on the basis of a behavioural profile, browsing history or inferred interests of the User</strong>. Non-personalised ads still use minimal contextual information and technical data for frequency capping, measurement and fraud prevention, as described by Google.</p>
+    </div>
+    <h3>7.5 Official Google references</h3>
+    <ul>
+      <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google Privacy Policy</a></li>
+      <li><a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">How Google uses information from sites or apps that use our services</a></li>
+      <li><a href="https://support.google.com/admob/answer/6128543" target="_blank" rel="noopener noreferrer">AdMob Help Centre — Privacy and data</a></li>
+      <li><a href="https://business.safety.google/privacy/" target="_blank" rel="noopener noreferrer">Google — Business Privacy and Terms</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 id="en-8"><span class="n">8</span>Third parties: app stores and other services</h2>
+    <h3>8.1 Google Play</h3>
+    <p>Distribution of the Application — in production or in the internal, closed and open testing tracks — is carried out by Google Play, operated by Google. Download, installation, updates and participation in testing programmes are <strong>relationships established directly between the User and Google</strong>, governed by the <a href="https://play.google.com/intl/en/about/play-terms/" target="_blank" rel="noopener noreferrer">Google Play Terms of Service</a> and the Google Privacy Policy.</p>
+    <p>When a User is invited to <strong>internal or closed testing</strong>, Google requires the e-mail address of the tester's Google account to appear on an access list in the Play Console. In this regard:</p>
+    <ul>
+      <li>That e-mail is provided <strong>voluntarily by the tester</strong>, outside the Application, for the sole purpose of enabling the invitation;</li>
+      <li>It is used <strong>exclusively</strong> to grant access to the test build on Google's platform;</li>
+      <li>It is stored in Google Play Console infrastructure, and <strong>not in any system of the Developer</strong>;</li>
+      <li>It is <strong>not used for marketing, not shared, not sold and not aggregated with any other dataset</strong>;</li>
+      <li>It is <strong>removed from the tester list at the end of the relevant testing programme</strong>, or at the tester's request at any time via the contact e-mail in this Policy.</li>
+    </ul>
+    <p>No data is collected <em>by the Application</em> as a result of participating in testing: the test build and the production build are functionally identical as regards privacy.</p>
+    <h3>8.2 Google Play Games Services</h3>
+    <p>The Application contains, in its code, an <strong>optional and currently inactive</strong> integration with Google Play Games, intended for a future global leaderboard. While that feature remains inactive, <strong>no communication with that service takes place</strong>.</p>
+    <p>Should it be activated in a future version, it will in all cases be: <strong>(i)</strong> optional, requiring an affirmative and unambiguous action by the User; <strong>(ii)</strong> operated entirely by Google, with authentication on Google infrastructure; <strong>(iii)</strong> limited to submitting the score and the public nickname the User has themselves chosen in Play Games, without the Developer receiving, storing or processing any account data. This Policy will be updated before the feature is activated.</p>
+    <h3>8.3 No other third parties</h3>
+    <p>The Application <strong>integrates no other third-party service</strong>. In particular it does not use: Firebase Analytics, Google Analytics, Crashlytics, Sentry, Meta/Facebook SDK, TikTok SDK, Unity Analytics, AppsFlyer, Adjust, OneSignal, social networks, federated login providers, payment gateways or any attribution, engagement or growth platform.</p>
+  </section>
+
+  <section>
+    <h2 id="en-9"><span class="n">9</span>Opting out of or limiting personalised ads</h2>
+    <p>Although the Application already requests non-personalised ads only, the User retains additional controls in the operating system itself:</p>
+    <h3>Android</h3>
+    <ol>
+      <li><em>Settings → Google → All services → Ads</em> (the path may vary by manufacturer and Android version).</li>
+      <li>Choose <strong>"Delete advertising ID"</strong> to prevent apps from using the identifier, or <strong>"Reset advertising ID"</strong> to unlink it from any prior history.</li>
+    </ol>
+    <h3>iOS</h3>
+    <ol>
+      <li><em>Settings → Privacy &amp; Security → Tracking</em> and turn off <strong>"Allow Apps to Request to Track"</strong>.</li>
+      <li><em>Settings → Privacy &amp; Security → Apple Advertising</em> and turn off <strong>"Personalized Ads"</strong>.</li>
+    </ol>
+    <p>Google's own controls are available at <a href="https://adssettings.google.com" target="_blank" rel="noopener noreferrer">adssettings.google.com</a>. Ads will continue to be displayed, but without personalisation.</p>
+    <p>Users resident in the European Economic Area, the United Kingdom or Switzerland may, where applicable, be presented with the consent form provided by Google's platform (User Messaging Platform), through which they may give or withdraw their choice directly.</p>
+  </section>
+
+  <section>
+    <h2 id="en-10"><span class="n">10</span>Children</h2>
+    <p>The Application is <strong>not directed to children</strong> and does not participate in the Google Play <em>Designed for Families</em> programme. The declared target audience is persons aged <strong>13 (thirteen) years or older</strong>. For Users resident in jurisdictions that set a higher minimum age for processing without parental consent — such as certain EU Member States, which may set the threshold as high as 16 — the local minimum age prevails.</p>
+    <p>Given that the Developer <strong>collects no personal data whatsoever</strong>, there is, within the Application, no processing of children's data that would require specific and prominent consent from at least one parent or legal guardian under art. 14, §1 LGPD, nor verifiable parental consent under the U.S. Children's Online Privacy Protection Act (COPPA).</p>
+    <p>If a parent or legal guardian believes that a child in their care has provided personal data because of the Application — a scenario the Developer considers technically impossible, given the absence of any collection channel — please make immediate contact at the e-mail in <a href="#en-22">Section 22</a>; the Developer undertakes to investigate and, if confirmed, immediately delete whatever is found.</p>
+    <p>Guardians are encouraged to use the <strong>parental control</strong> tools of Google Play and of the operating system to supervise app usage and exposure to advertising by minors in their care.</p>
+  </section>
+
+  <section>
+    <h2 id="en-11"><span class="n">11</span>Legal bases for processing</h2>
+    <p>As the Developer carries out no processing of personal data, <strong>there is no legal basis for it to invoke</strong>. The table below is provided for completeness and transparency, indicating the bases applicable to operations carried out by third parties:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Operation</th><th>Responsible party</th><th>Legal basis</th></tr></thead>
+        <tbody>
+          <tr><td>Storing scores and settings on the device</td><td>Application (local)</td><td>Does not constitute processing of personal data (art. 4(1) GDPR; art. 5, I LGPD). In the alternative: performance of a function requested by the data subject (art. 6(1)(b) GDPR; art. 7, V LGPD)</td></tr>
+          <tr><td>Serving non-personalised ads</td><td>Google</td><td>Legitimate interest and/or consent obtained by Google itself, depending on jurisdiction (art. 6(1)(a) and (f) GDPR; art. 7, IX LGPD)</td></tr>
+          <tr><td>Distribution and updates via Google Play</td><td>Google</td><td>Performance of a contract between the User and Google (art. 6(1)(b) GDPR; art. 7, V LGPD)</td></tr>
+          <tr><td>Tester e-mail list in the Play Console</td><td>Google (storage) / Developer (nomination)</td><td>Free and informed consent of the tester (art. 6(1)(a) GDPR; art. 7, I LGPD)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>There is no processing of personal data for secondary purposes, and no automated decision-making producing legal effects or similarly significantly affecting the User (art. 22 GDPR; art. 20 LGPD).</p>
+  </section>
+
+  <section>
+    <h2 id="en-12"><span class="n">12</span>Your rights as a data subject</h2>
+    <p>The GDPR (arts. 15–22), the LGPD (art. 18) and analogous legislation grant the User a set of rights. The Developer fully recognises them and undertakes to honour them, although in practice <strong>most are materially inapplicable for the simple reason that no data exists in the Developer's custody</strong>.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Right</th><th>Position for Major Flyer</th></tr></thead>
+        <tbody>
+          <tr><td>Confirmation that processing takes place</td><td>We confirm: the Developer carries out <strong>no</strong> processing of personal data. This document serves as a formal and standing answer.</td></tr>
+          <tr><td>Access</td><td>There is no data to provide. Local data is at all times under the User's exclusive control, on their own device.</td></tr>
+          <tr><td>Rectification</td><td>Not applicable — there is no record to correct.</td></tr>
+          <tr><td>Erasure, anonymisation or blocking</td><td>Not applicable as regards the Developer. As regards the device, erasure is immediate and complete via <a href="#en-5">Section 5.2</a>.</td></tr>
+          <tr><td>Data portability</td><td>Not applicable — there is no dataset to port.</td></tr>
+          <tr><td>Information about sharing</td><td>Provided in <a href="#en-7">Sections 7</a> and <a href="#en-8">8</a>. The Developer shares personal data with no one.</td></tr>
+          <tr><td>Withdrawal of consent</td><td>No consent is collected by the Application. Uninstalling terminates any relationship.</td></tr>
+          <tr><td>Objection to processing</td><td>Exercisable directly against Google as regards advertising (<a href="#en-9">Section 9</a>), and by uninstalling the Application.</td></tr>
+          <tr><td>Complaint to a supervisory authority</td><td>Guaranteed: ANPD (Brazil), the competent data protection authority (EU/EEA) or the equivalent body in the User's jurisdiction.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>12.1 How to exercise them</h3>
+    <p>Simply write to <a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a> with the subject line <strong>"GDPR/LGPD — Major Flyer"</strong>. The Developer will reply within <strong>15 (fifteen) calendar days</strong> under art. 19, §3 LGPD, or within 30 (thirty) days under art. 12(3) GDPR, extendable as permitted by law. There is <strong>no charge</strong>.</p>
+    <p>Because there is no dataset, the Developer <strong>is not in a position to identify the User</strong> or to link a request to any record (art. 11 GDPR). The reply will therefore consist of documentary confirmation that no processing exists.</p>
+    <h3>12.2 California residents (CCPA/CPRA)</h3>
+    <p>The Developer <strong>does not collect, sell or share</strong> personal information within the meaning of the California Consumer Privacy Act, as amended by the California Privacy Rights Act. There is accordingly no opt-out right to be exercised against the Developer, and no discrimination for the exercise of rights. Processing carried out by Google is governed by Google's policies.</p>
+  </section>
+
+  <section>
+    <h2 id="en-13"><span class="n">13</span>Retention and deletion</h2>
+    <ul>
+      <li><strong>Data on the device:</strong> retained while the Application is installed and until the User erases it. Run history is capped at the <strong>25 most recent runs</strong>, with older entries discarded automatically.</li>
+      <li><strong>Data in the Developer's custody:</strong> <strong>zero</strong>, with a retention period of likewise <strong>zero</strong>. There is no database, backup, archive, spreadsheet or copy of any kind.</li>
+      <li><strong>Data in Google's custody:</strong> governed by Google's retention policies, over which the Developer exercises no control.</li>
+      <li><strong>Tester list in the Play Console:</strong> kept only for the duration of the relevant testing programme and removed thereafter.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 id="en-14"><span class="n">14</span>Information security</h2>
+    <p>The Developer applies the most effective security measure there is: <strong>absolute minimisation</strong>. Data that is never collected cannot leak, cannot be stolen, cannot be sold and cannot be held to ransom.</p>
+    <p>In addition:</p>
+    <ul>
+      <li>The Application's local storage resides in the device's private sandbox, isolated by the operating system and inaccessible to other applications;</li>
+      <li>The Application exposes no ports, no network services, no WebViews with remote content and no data entry channels;</li>
+      <li>Production builds are digitally signed and distributed exclusively through Google Play, with integrity verification by the platform itself;</li>
+      <li>Communications between the ad SDK and Google's servers use TLS, as implemented by Google.</li>
+    </ul>
+    <p>Under art. 46 LGPD and art. 32 GDPR, these measures are appropriate to the nature of the information involved, to the risk — which is residual — and to the state of the art.</p>
+  </section>
+
+  <section>
+    <h2 id="en-15"><span class="n">15</span>International transfers</h2>
+    <p>The Developer <strong>carries out no international transfer of personal data</strong>, holding no data to transfer.</p>
+    <p>Technical data processed by the ad SDK may be processed by Google on servers located outside the User's country of residence, including in the United States. Such transfers are performed by Google under its sole responsibility, relying on the mechanisms it has adopted — such as the European Commission's <em>Standard Contractual Clauses</em> and the <em>EU-U.S. Data Privacy Framework</em> — under Chapter V GDPR and arts. 33–36 LGPD.</p>
+  </section>
+
+  <section>
+    <h2 id="en-16"><span class="n">16</span>Security incidents</h2>
+    <p>In the technically improbable event of a security incident involving personal data under the Developer's responsibility, the Developer undertakes to: <strong>(i)</strong> notify the Brazilian National Data Protection Authority (ANPD) and the affected data subjects within a reasonable period under art. 48 LGPD, and within 72 hours where art. 33 GDPR applies; <strong>(ii)</strong> describe the nature of the data, the data subjects involved, the technical measures in place and the resulting risks; <strong>(iii)</strong> adopt appropriate mitigation measures.</p>
+    <p>Incidents occurring within Google's infrastructure are Google's exclusive responsibility and subject to that company's notification procedures.</p>
+    <p>Vulnerabilities found in the Application may be responsibly disclosed to the e-mail address in <a href="#en-22">Section 22</a>.</p>
+  </section>
+
+  <section>
+    <h2 id="en-17"><span class="n">17</span>This website</h2>
+    <p>This page is <strong>static</strong>. It uses <strong>no cookies, no tracking scripts, no forms, no analytics, no externally hosted fonts, images or scripts, and it builds no visitor profiles</strong>. All content — styles, icon and the language toggle script — is embedded in this very file.</p>
+    <p>The only information that may be written to your browser is this page's <strong>language preference</strong>, held in <code>localStorage</code>, exclusively on your device, and never transmitted.</p>
+    <p>As with any web server, the server hosting this page may record, in standard technical logs, the IP address and user agent of incoming requests, for operation, security and infrastructure diagnostics. These records are not used to identify, profile or track visitors, are not cross-referenced with other datasets and are not shared with third parties. Comparable logging is mandated for application providers by art. 15 of Brazilian Law 12.965/2014.</p>
+  </section>
+
+  <section>
+    <h2 id="en-18"><span class="n">18</span>Google Play Data Safety declaration</h2>
+    <p>For the convenience of Users and authorities, the substance of the Developer's declaration in the <em>Data safety</em> section of the Application's Google Play listing is reproduced below:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Item</th><th>Declaration</th></tr></thead>
+        <tbody>
+          <tr><td>Does the app collect or share user data?</td><td><strong>Yes</strong> — exclusively through the third-party advertising SDK, under "Device or other IDs → Device or other IDs", for the purpose "Advertising or marketing".</td></tr>
+          <tr><td>Is data encrypted in transit?</td><td><strong>Yes</strong>, via TLS.</td></tr>
+          <tr><td>Can users request data deletion?</td><td><strong>Yes</strong> — fully and immediately, through the means in <a href="#en-5">Section 5.2</a>, without any request to the Developer.</td></tr>
+          <tr><td>Is personal, financial, health, location, message, photo, file or contact data collected?</td><td><strong>No.</strong></td></tr>
+          <tr><td>Is data sold or shared for purposes unrelated to app functionality?</td><td><strong>No.</strong></td></tr>
+          <tr><td>Is the app directed to children?</td><td><strong>No.</strong> Audience aged 13 and over.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>In the event of any discrepancy between this section and the current Google Play listing, the store listing prevails, and the Developer undertakes to harmonise this document at the earliest opportunity.</p>
+  </section>
+
+  <section>
+    <h2 id="en-19"><span class="n">19</span>Disclaimers and limitation of liability</h2>
+    <p>The provisions of this section apply <strong>to the fullest extent permitted by applicable law</strong> and <strong>do not waive, limit or exclude</strong> any non-waivable rights of the User, notably those under Brazilian Law 8.078/1990 (Consumer Protection Code), Brazilian Law 13.709/2018 (LGPD) and other mandatory rules of public policy.</p>
+    <h3>19.1 Provided "as is"</h3>
+    <p>The Application is free of charge and provided <strong>"as is"</strong>, without warranty of uninterrupted availability, freedom from errors, or fitness for a particular purpose not expressly promised.</p>
+    <h3>19.2 Acts of third parties</h3>
+    <p>The Developer <strong>is not liable</strong> for the acts, omissions, policies, data processing practices, failures or incidents of third parties — in particular Google (AdMob, Google Play, Play Games), the device manufacturer, the operating system developer, the telecommunications carrier or the internet service provider — which act autonomously and independently, without subordination to the Developer.</p>
+    <h3>19.3 Advertising content</h3>
+    <p>Displayed ads are selected and served <strong>entirely by Google</strong>. The Developer <strong>does not choose, approve, review, endorse or exercise prior control</strong> over advertisers or ad content, nor over the products, services, websites or offers advertised. Complaints about advertising content should be addressed to Google. Without prejudice to that, the User may report an ad they consider inappropriate to the Developer at the e-mail in <a href="#en-22">Section 22</a>, and the Developer undertakes to forward the report to Google's competent channels.</p>
+    <h3>19.4 The User's own device</h3>
+    <p>The Developer is not liable for loss of local data resulting from uninstallation, data clearing, factory reset, device replacement, loss, theft, damage or defect, nor for access by a third party who has physical possession of the User's device.</p>
+    <h3>19.5 Unauthorised modification</h3>
+    <p>This Policy applies <strong>exclusively</strong> to the official version of the Application, distributed through official channels and signed by the Developer. Modified, recompiled, cloned versions, versions obtained from unofficial repositories (pirated APKs) or executed in tampered environments <strong>are not the Developer's responsibility</strong> and may contain malicious code and collection practices entirely foreign to this document.</p>
+    <h3>19.6 Severability</h3>
+    <p>Should any provision of this Policy be held void, invalid or unenforceable, the validity and effectiveness of the remaining provisions <strong>shall not be affected</strong> and they shall remain in full force.</p>
+  </section>
+
+  <section>
+    <h2 id="en-20"><span class="n">20</span>Changes to this Policy</h2>
+    <p>This Policy may be updated at any time to reflect changes in the Application, in applicable law or in app store requirements. The version in force is always the one published at this address, identified by the <strong>version number</strong> and <strong>effective date</strong> shown at the top.</p>
+    <p><strong>Material</strong> changes — meaning those that would introduce any form of personal data collection by the Developer, or significantly expand sharing with third parties — will be communicated <strong>prominently</strong>, through an in-app notice and/or the Google Play release notes, <strong>with reasonable advance notice before taking effect</strong>, the User retaining the right not to accept and to uninstall the Application.</p>
+    <p>Periodic review of this page is recommended. Continued use of the Application after a new version takes effect indicates awareness of its content.</p>
+  </section>
+
+  <section>
+    <h2 id="en-21"><span class="n">21</span>Governing law and venue</h2>
+    <p>This Policy is governed by and construed in accordance with the <strong>laws of the Federative Republic of Brazil</strong>, notably Law 13.709/2018 (LGPD), Law 12.965/2014 (Internet Civil Framework), Law 8.078/1990 (Consumer Protection Code) and Law 10.406/2002 (Civil Code).</p>
+    <p>The courts of <strong>[CITY / STATE], Brazil</strong> are designated to settle disputes arising from this document, <strong>save for</strong> the consumer User's right to bring proceedings in the courts of their own domicile under art. 101, I of the Consumer Protection Code, and save for statutory jurisdiction rules and the application of mandatory data protection rules in force in the User's country of residence.</p>
+  </section>
+
+  <section>
+    <h2 id="en-22"><span class="n">22</span>Contact and Data Protection Officer</h2>
+    <p>For any question, request, exercise of rights, complaint or vulnerability disclosure relating to this Policy or the Application:</p>
+    <div class="tablewrap">
+      <table>
+        <tbody>
+          <tr><th style="width:34%">E-mail</th><td><a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a></td></tr>
+          <tr><th>Suggested subject</th><td>"Privacy — Major Flyer"</td></tr>
+          <tr><th>Data Protection Officer</th><td>[FULL LEGAL NAME OR COMPANY NAME] — art. 41 LGPD</td></tr>
+          <tr><th>Response time</th><td>Within 15 calendar days (LGPD) / within 30 days (GDPR)</td></tr>
+          <tr><th>Cost</th><td>Free of charge</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The User may also lodge a complaint directly with the <strong>Brazilian National Data Protection Authority (ANPD)</strong> at <a href="https://www.gov.br/anpd" target="_blank" rel="noopener noreferrer">gov.br/anpd</a>, or with the competent data protection authority in their jurisdiction.</p>
+  </section>
+
+  <section class="lead">
+    <h2><span class="n"></span>Closing statement</h2>
+    <p>The Developer declares that the information in this document is <strong>true, complete and verifiable</strong>, and that the <strong>Major Flyer</strong> application was designed from the outset in accordance with the principles of <em>privacy by design</em> and <em>privacy by default</em> (art. 25 GDPR; art. 46, §2 LGPD), <strong>collecting no personal data of its Users for any purpose whatsoever</strong>.</p>
+    <p style="margin-bottom:0"><strong>Document version 1.0 — effective from August 29, 2026.</strong></p>
+  </section>
+
+</main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Major Flyer</strong> — com.aqblab.majorflyer</p>
+    <p data-lang="pt">Política de Privacidade v1.0 · Vigente desde 29 de agosto de 2026</p>
+    <p data-lang="en" hidden>Privacy Policy v1.0 · Effective August 29, 2026</p>
+    <p data-lang="pt">Contato: <a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a></p>
+    <p data-lang="en" hidden>Contact: <a href="mailto:andreqbs@gmail.com">andreqbs@gmail.com</a></p>
+    <p data-lang="pt" style="margin-top:14px;font-size:12.5px">Esta página é estática e não utiliza cookies nem rastreadores.</p>
+    <p data-lang="en" hidden style="margin-top:14px;font-size:12.5px">This page is static and uses no cookies or trackers.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var KEY = 'mf-privacy-lang';
+  var buttons = document.querySelectorAll('.switch button');
+
+  function stored() {
+    try { return localStorage.getItem(KEY); } catch (e) { return null; }
+  }
+  function remember(lang) {
+    try { localStorage.setItem(KEY, lang); } catch (e) { /* modo privado: segue sem lembrar */ }
+  }
+
+  function apply(lang) {
+    var nodes = document.querySelectorAll('[data-lang]');
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (node.closest('.switch')) continue;
+      node.hidden = node.getAttribute('data-lang') !== lang;
+    }
+    for (var j = 0; j < buttons.length; j++) {
+      buttons[j].setAttribute('aria-pressed', String(buttons[j].getAttribute('data-set') === lang));
+    }
+    document.documentElement.lang = lang === 'en' ? 'en' : 'pt-BR';
+    document.title = lang === 'en'
+      ? 'Privacy Policy — Major Flyer'
+      : 'Política de Privacidade — Major Flyer';
+  }
+
+  // Preferencia salva > idioma do navegador > portugues.
+  var initial = stored();
+  if (initial !== 'pt' && initial !== 'en') {
+    var nav = (navigator.language || 'pt').toLowerCase();
+    initial = nav.indexOf('pt') === 0 ? 'pt' : 'en';
+  }
+  apply(initial);
+
+  for (var k = 0; k < buttons.length; k++) {
+    buttons[k].addEventListener('click', function () {
+      var lang = this.getAttribute('data-set');
+      apply(lang);
+      remember(lang);
+      window.scrollTo(0, 0);
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

@@ -9,3 +9,10 @@ web-build/
 # geradas por `npx expo prebuild` — nao versionar
 android/
 ios/
+
+# chave de assinatura e segredos: NUNCA versionar
+credentials/
+credentials.json
+*.jks
+*.keystore
+*-credentials.md

@@ -8,9 +8,23 @@
  *
  * Regras de progressao (pedido do projeto):
  *   - a cada STAGE_LENGTH obstaculos, a fase troca;
- *   - cada fase corre 10% mais rapido que a velocidade inicial (1.0, 1.1, ...).
- *     O multiplicador e absoluto sobre a velocidade base do layout, e nao
- *     composto, entao a fase 5 e exatamente 40% mais rapida que a fase 1.
+ *   - cada fase corre 15% mais rapido que a velocidade inicial (1.0, 1.15,
+ *     1.30, ...). O multiplicador e absoluto sobre a velocidade base do layout,
+ *     e nao composto, entao a fase 5 e exatamente 60% mais rapida que a fase 1.
+ *
+ * ARMADILHAS (`traps`): cada fase diz o que pode acontecer nela, e o World le
+ * daqui. Uma por fase ate a 3 — cada uma tem tempo de ser aprendida sozinha —,
+ * e so da fase 4 em diante elas se acumulam.
+ *
+ *   ice   — cubos de gelo saem de um dos canos e apertam o vao. E armadilha DE
+ *           OBSTACULO: o cano que vai solta-los pisca em vermelho antes.
+ *   heavy — a gravidade dobra por alguns segundos. Nao pertence a obstaculo
+ *           nenhum: vale para a fase inteira enquanto dura. Avisa com uma seta
+ *           vermelha no canto da tela 2 s antes, e enquanto esta valendo o topo
+ *           da tela pisca em vermelho.
+ *   drift — o vao desliza na vertical mantendo o tamanho: some a altura fixa da
+ *           passagem, sem o jogo ficar mais apertado. So mexe em coluna que
+ *           ainda esta a dois obstaculos ou mais de distancia.
  */
 
 export const STAGES = [
@@ -20,6 +34,7 @@ export const STAGES = [
     tagline: 'O crepusculo de sempre.',
     speed: 1.0,
     gap: 1.0,
+    traps: { ice: false, heavy: false, drift: false }, // fase de aprender a voar
     sky: ['#080C22', '#22164F', '#5B2172', '#B23A6B', '#F2794F'],
     horizon: { color: '#FFB067', opacity: 0.28 },
     city: '#160E33',
@@ -48,8 +63,9 @@ export const STAGES = [
     id: 'cyber-rain',
     name: 'Chuva Ciber',
     tagline: 'Vidro azul e neblina eletrica.',
-    speed: 1.1,
+    speed: 1.15,
     gap: 1.0,
+    traps: { ice: true, heavy: false, drift: false },
     sky: ['#04121F', '#072A44', '#0B4F6C', '#1B8DA6', '#5FD3D8'],
     horizon: { color: '#7FE6E0', opacity: 0.22 },
     city: '#04212F',
@@ -78,8 +94,10 @@ export const STAGES = [
     id: 'solar-storm',
     name: 'Tempestade Solar',
     tagline: 'Metal quente e ceu em brasa.',
-    speed: 1.2,
+    speed: 1.3,
     gap: 1.0,
+    // So gravidade.
+    traps: { ice: false, heavy: true, drift: false },
     sky: ['#1A0606', '#3E1108', '#7A2408', '#C24A12', '#F2A03C'],
     horizon: { color: '#FFD27A', opacity: 0.32 },
     city: '#2A0C08',
@@ -108,8 +126,10 @@ export const STAGES = [
     id: 'toxic-jungle',
     name: 'Selva Toxica',
     tagline: 'Verde demais para ser saudavel.',
-    speed: 1.3,
+    speed: 1.45,
     gap: 1.0,
+    // So o vao que se mexe: cada fase ate aqui apresenta UMA mecanica nova.
+    traps: { ice: false, heavy: false, drift: true },
     sky: ['#03140C', '#0A2E19', '#14512A', '#2E8F3F', '#8FD64B'],
     horizon: { color: '#C7F06A', opacity: 0.24 },
     city: '#06251A',
@@ -138,8 +158,10 @@ export const STAGES = [
     id: 'void-circuit',
     name: 'Circuito Vazio',
     tagline: 'So voce, o vazio e o magenta.',
-    speed: 1.4,
+    speed: 1.6,
     gap: 1.0,
+    // Ultima fase: a prova final, com tudo o que veio antes ao mesmo tempo.
+    traps: { ice: true, heavy: true, drift: true },
     sky: ['#05030C', '#170729', '#360B4A', '#661056', '#B3226B'],
     horizon: { color: '#FF5FA8', opacity: 0.22 },
     city: '#120424',
@@ -171,6 +193,13 @@ export const STAGE_COUNT = STAGES.length;
 export function stageAt(index) {
   if (!Number.isFinite(index)) return STAGES[0];
   return STAGES[Math.min(Math.max(Math.floor(index), 0), STAGES.length - 1)];
+}
+
+const NO_TRAPS = { ice: false, heavy: false, drift: false };
+
+/** O que a fase deste indice permite. Fase sem `traps` nao tem armadilha. */
+export function trapsAt(index) {
+  return { ...NO_TRAPS, ...(stageAt(index).traps || null) };
 }
 
 /** Numero da fase para mostrar na tela (1..N, sem travar na ultima). */

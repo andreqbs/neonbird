@@ -48,7 +48,16 @@ const { PHASE, SHIELD_FADE_FRAMES, STAGE_LENGTH } = require(path.join(
   BUILD,
   'src/game/constants.js'
 ));
-const { STAGES, stageAt } = require(path.join(BUILD, 'src/game/stages.js'));
+const { STAGES, stageAt, trapsAt } = require(path.join(BUILD, 'src/game/stages.js'));
+const {
+  DRIFT_MIN_AHEAD,
+  DRIFT_MIN_STEP,
+  HEAVY_MULT,
+  HEAVY_WARN_FRAMES,
+  ICE_GAP_BITE,
+  ICE_OUT_SECONDS,
+  ICE_WARN_SECONDS,
+} = require(path.join(BUILD, 'src/game/constants.js'));
 const { captureSession, restoreSession } = require(path.join(BUILD, 'src/game/session.js'));
 
 // O modulo de vidas fala com o AsyncStorage, que so existe no celular. Como
@@ -92,6 +101,20 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
+/**
+ * Onde o vao daquela coluna vai estar quando o passaro chegar nela.
+ *
+ * Conta o gelo INTEIRO, mesmo o que ainda nao saiu: e o que o jogador faz
+ * depois de ver o cano piscar — ele ja se posiciona para o vao que vem.
+ */
+function gapOf(p) {
+  const iceTop = p.ice && p.ice.side === 'top' ? p.ice.max : 0;
+  const iceBottom = p.ice && p.ice.side === 'bottom' ? p.ice.max : 0;
+  const top = p.gapCenter - p.gap / 2 + iceTop;
+  const bottom = p.gapCenter + p.gap / 2 - iceBottom;
+  return { top, bottom, center: (top + bottom) / 2, size: bottom - top };
+}
+
 /** Um passo do bot: mantem o passaro um pouco abaixo do centro do proximo vao. */
 function botStep(world, L) {
   let target = L.playHeight / 2;
@@ -100,10 +123,13 @@ function botStep(world, L) {
     const dx = p.x + L.pillarWidth / 2 - L.birdX;
     if (dx > -L.birdRadius && dx < nearest) {
       nearest = dx;
-      target = p.gapCenter;
+      target = gapOf(p).center;
     }
   }
-  if (world.bird.position.y > target + world.gap * 0.15 && world.bird.velocity.y >= -0.5) {
+  // Com o peso extra o passaro cai o dobro mais rapido: esperar a mesma folga
+  // de sempre para bater asa seria chegar tarde.
+  const slack = world.gap * (world.heavy ? 0.04 : 0.15);
+  if (world.bird.position.y > target + slack && world.bird.velocity.y >= -0.5) {
     world.flap();
   }
   world.update();
@@ -124,6 +150,19 @@ function forceCrash(world, L) {
   p.x = L.width + L.pillarWidth * 2;
   p.gapCenter = L.playHeight / 2;
   world._syncPillar(p);
+}
+
+/** Quanto um unico toque levanta o passaro, em pixels. */
+function apex(world) {
+  const start = world.bird.position.y;
+  world.flap();
+  let top = start;
+  for (let i = 0; i < 180; i++) {
+    world.update();
+    if (world.bird.position.y < top) top = world.bird.position.y;
+    if (world.bird.velocity.y >= 0) break;
+  }
+  return start - top;
 }
 
 /** Bot simples. Ao fechar uma fase faz o que a tela faz: avanca e recomeca. */
@@ -295,9 +334,9 @@ section('Fases, velocidade e escudo');
   const L = computeLayout(390, 844);
 
   check(
-    `cada fase corre 10% mais que a anterior (${STAGES.length} fases)`,
-    STAGES.every((st, i) => Math.abs(st.speed - (1 + i * 0.1)) < 1e-9),
-    STAGES.map((st) => `${st.speed.toFixed(1)}x`).join(' ')
+    `cada fase corre 15% mais que a base (${STAGES.length} fases)`,
+    STAGES.every((st, i) => Math.abs(st.speed - (1 + i * 0.15)) < 1e-9),
+    STAGES.map((st) => `${st.speed.toFixed(2)}x`).join(' ')
   );
   check('passar da ultima fase nao quebra', stageAt(99) === STAGES[STAGES.length - 1]);
 
@@ -313,6 +352,9 @@ section('Fases, velocidade e escudo');
       st.tagline &&
       st.speed > 0 &&
       st.gap > 0 &&
+      st.traps &&
+      typeof st.traps.ice === 'boolean' &&
+      typeof st.traps.heavy === 'boolean' &&
       Array.isArray(st.sky) &&
       st.sky.length === 5 &&
       st.sky.every(isColor) &&
@@ -372,7 +414,7 @@ section('Fases, velocidade e escudo');
   check('toque nao fura a fila do anuncio', world.flap() === false);
 
   world.nextStage();
-  check('fase 2 e 10% mais rapida que a base', Math.abs(world.speed / L.speed - 1.1) < 1e-9);
+  check('fase 2 e 15% mais rapida que a base', Math.abs(world.speed / L.speed - 1.15) < 1e-9);
   check('placar sobrevive a troca de fase', world.score === STAGE_LENGTH, `${world.score}`);
   check('volta para READY depois do anuncio', world.phase === PHASE.READY);
   check('colunas recomecam fora da tela', world.pillars.every((p) => p.x > L.width));
@@ -449,6 +491,259 @@ section('Fases, velocidade e escudo');
   forceCrash(fading, L);
   check('escudo acabado: a batida seguinte encerra a partida', fading.phase === PHASE.OVER);
   fading.destroy();
+
+  // ------------------------------------------------------ armadilhas
+
+  section('Armadilhas de fase');
+
+  check(
+    'fase 1 e limpa: nem gelo nem peso',
+    trapsAt(0).ice === false && trapsAt(0).heavy === false
+  );
+  const soUma = (t) => [t.ice, t.heavy, t.drift].filter(Boolean).length === 1;
+  check('fase 2 tem so o gelo', trapsAt(1).ice === true && soUma(trapsAt(1)));
+  check('fase 3 tem so a gravidade', trapsAt(2).heavy === true && soUma(trapsAt(2)));
+  check('fase 4 tem so o vao que se mexe', trapsAt(3).drift === true && soUma(trapsAt(3)));
+  check(
+    'uma mecanica nova por fase, e a ultima junta tudo',
+    trapsAt(4).ice && trapsAt(4).heavy && trapsAt(4).drift,
+    STAGES.map((st, i) => {
+      const nomes = [st.traps.ice && 'gelo', st.traps.heavy && 'peso', st.traps.drift && 'vao']
+        .filter(Boolean)
+        .join('+');
+      return `${i + 1}:${nomes || '-'}`;
+    }).join(' ')
+  );
+
+  // --- gelo: avisa, sai e aperta o vao ---
+  const iced = new World(L);
+  iced.stage = 1;
+  iced.applyStage(); // fase 2
+  iced.flap();
+
+  const p0 = iced.pillars[0];
+  p0.ice = { side: 'top', max: iced.gap * ICE_GAP_BITE, out: 0, warn: 0 };
+  const vaoLimpo = iced.bottomEdgeOf(p0) - iced.topEdgeOf(p0);
+
+  // longe: nada acontece
+  p0.x = L.birdX + iced.speed * 60 * (ICE_WARN_SECONDS + 0.5);
+  iced._updateTrap(p0);
+  check('longe da coluna o cano nao pisca', p0.ice.warn === 0 && p0.ice.out === 0);
+
+  // dentro da janela do aviso: pisca, mas o gelo ainda nao saiu
+  p0.x = L.birdX + iced.speed * 60 * (ICE_WARN_SECONDS - 0.2);
+  iced._updateTrap(p0);
+  check('o cano avisa antes de soltar o gelo', p0.ice.warn > 0 && p0.ice.out === 0);
+
+  // dentro da janela de saida: o gelo sai e o aviso apaga
+  p0.x = L.birdX + iced.speed * 60 * (ICE_OUT_SECONDS - 0.1);
+  for (let i = 0; i < 40; i++) iced._updateTrap(p0);
+  iced._syncPillar(p0);
+  const vaoApertado = iced.bottomEdgeOf(p0) - iced.topEdgeOf(p0);
+  check('o gelo sai inteiro e o aviso apaga', p0.ice.out === p0.ice.max && p0.ice.warn === 0);
+  check(
+    `o vao aperta ${Math.round(ICE_GAP_BITE * 100)}%`,
+    Math.abs(vaoLimpo - vaoApertado - p0.ice.max) < 0.01,
+    `${vaoLimpo.toFixed(0)}px -> ${vaoApertado.toFixed(0)}px`
+  );
+  check(
+    'o gelo desce a borda de cima, e nao a de baixo',
+    Math.abs(iced.topEdgeOf(p0) - (p0.gapCenter - p0.gap / 2 + p0.ice.max)) < 0.01 &&
+      Math.abs(iced.bottomEdgeOf(p0) - (p0.gapCenter + p0.gap / 2)) < 0.01
+  );
+  iced.destroy();
+
+  // --- o lado do gelo e sorteado ---
+  const sides = new Set();
+  let comArmadilha = 0;
+  for (let i = 0; i < 300; i++) {
+    const w = new World(L);
+    w.stage = 1;
+    w.applyStage();
+    w._rollTrap(w.pillars[0]);
+    if (w.pillars[0].ice) {
+      comArmadilha++;
+      sides.add(w.pillars[0].ice.side);
+    }
+    w.destroy();
+  }
+  check('o gelo sai ora de cima, ora de baixo', sides.size === 2, [...sides].join(' e '));
+  check(
+    'nem toda coluna tem armadilha',
+    comArmadilha > 30 && comArmadilha < 270,
+    `${comArmadilha} de 300`
+  );
+
+  // --- gravidade aumentada ---
+  const base = new World(L);
+  base.flap();
+  const subidaLeve = apex(base);
+  base.destroy();
+
+  const heavy = new World(L);
+  heavy.stage = 2;
+  heavy.applyStage(); // fase 3
+  heavy.flap();
+  heavy._setHeavy(true);
+  const subidaPesada = apex(heavy);
+  check('a fase 3 nao solta gelo', heavy.pillars.every((p) => p.ice === null));
+  check(
+    `com peso (${HEAVY_MULT}x) o mesmo toque sobe menos`,
+    subidaPesada < subidaLeve * 0.65,
+    `${subidaLeve.toFixed(0)}px -> ${subidaPesada.toFixed(0)}px`
+  );
+  check('e o topo da tela pisca enquanto dura', heavy.heavyPulse > 0);
+
+  // deixa o peso acabar sozinho
+  let guard = 0;
+  while (heavy.heavy && guard < 60 * 30) {
+    botStep(heavy, L);
+    guard++;
+  }
+  check('o peso passa sozinho', heavy.heavy === false && heavy.heavyPulse === 0, `${guard} frames`);
+  check(
+    'e a gravidade volta ao normal',
+    Math.abs(heavy.engine.gravity.scale - L.gravity / (1000 / 60) ** 2) < 1e-12
+  );
+  heavy.destroy();
+
+  // --- o aviso vem antes do peso ---
+  const aviso = new World(L);
+  aviso.stage = 2;
+  aviso.applyStage();
+  aviso.flap();
+  const gravidadeNormal = aviso.engine.gravity.scale;
+  aviso.heavyAt = aviso.frame; // a proxima rodada comeca agora
+
+  botStep(aviso, L);
+  check(
+    'a seta aparece antes de a gravidade mudar',
+    aviso.heavyWarn > 0 && aviso.heavy === false,
+    `seta em ${aviso.heavyWarn.toFixed(2)}`
+  );
+  check(
+    'durante o aviso a gravidade ainda e a de sempre',
+    Math.abs(aviso.engine.gravity.scale - gravidadeNormal) < 1e-12
+  );
+
+  let esperou = 1;
+  while (!aviso.heavy && esperou < 400) {
+    botStep(aviso, L);
+    esperou++;
+  }
+  check(
+    `o aviso dura os ${(HEAVY_WARN_FRAMES / 60).toFixed(0)} s combinados`,
+    Math.abs(esperou - HEAVY_WARN_FRAMES) <= 2,
+    `${esperou} frames`
+  );
+  check(
+    'quando o peso entra, a seta some e o topo pisca',
+    aviso.heavyWarn === 0 && aviso.heavy === true && aviso.heavyPulse > 0
+  );
+  check(
+    'e a gravidade dobrou de verdade',
+    Math.abs(aviso.engine.gravity.scale - gravidadeNormal * HEAVY_MULT) < 1e-12
+  );
+  aviso.destroy();
+
+  // --- o vao que se mexe (fase 4) ---
+  const vao = new World(L);
+  vao.stage = 3;
+  vao.applyStage(); // fase 4
+  vao.flap();
+
+  const alvoLonge = vao.pillars[0];
+  alvoLonge.index = vao.stageProgress + DRIFT_MIN_AHEAD; // na janela permitida
+  const centroAntes = alvoLonge.gapCenter;
+  const vaoAntes = vao.bottomEdgeOf(alvoLonge) - vao.topEdgeOf(alvoLonge);
+
+  let tentativas = 0;
+  while (!alvoLonge.drift && tentativas < 200) {
+    alvoLonge.driftDone = false;
+    vao._updateDrift(alvoLonge);
+    tentativas++;
+  }
+  check('a coluna a 2 obstaculos pode se mexer', !!alvoLonge.drift);
+
+  const tamanhos = [];
+  let passos = 0;
+  while (alvoLonge.drift && passos < 400) {
+    vao._updateDrift(alvoLonge);
+    vao._syncPillar(alvoLonge);
+    tamanhos.push(vao.bottomEdgeOf(alvoLonge) - vao.topEdgeOf(alvoLonge));
+    passos++;
+  }
+  check(
+    'o vao mantem o tamanho o tempo todo',
+    tamanhos.every((t) => Math.abs(t - vaoAntes) < 0.01),
+    `${vaoAntes.toFixed(0)}px em ${passos} frames`
+  );
+
+  const faixa =
+    Math.abs(L.playHeight - 2 * L.marginY - vao.gap) || L.playHeight - 2 * L.marginY - vao.gap;
+  const andou = Math.abs(alvoLonge.gapCenter - centroAntes);
+  check(
+    'e o centro anda o bastante para se notar',
+    andou >= faixa * DRIFT_MIN_STEP - 0.5,
+    `${andou.toFixed(0)}px de ${faixa.toFixed(0)}px de faixa`
+  );
+  check(
+    'o vao nao sai da area de jogo',
+    vao.topEdgeOf(alvoLonge) > 0 && vao.bottomEdgeOf(alvoLonge) < L.playHeight,
+    `${vao.topEdgeOf(alvoLonge).toFixed(0)} a ${vao.bottomEdgeOf(alvoLonge).toFixed(0)}`
+  );
+
+  // a coluna logo a frente nunca se mexe
+  const alvoPerto = vao.pillars[1];
+  alvoPerto.index = vao.stageProgress + DRIFT_MIN_AHEAD - 1;
+  for (let i = 0; i < 300; i++) {
+    alvoPerto.driftDone = false;
+    vao._updateDrift(alvoPerto);
+  }
+  check(
+    `coluna a ${DRIFT_MIN_AHEAD - 1} obstaculo de distancia nunca se mexe`,
+    alvoPerto.drift === null
+  );
+
+  // e se o jogador alcancar uma coluna que ainda esta deslizando, ela para
+  const alvoAlcancado = vao.pillars[2];
+  alvoAlcancado.index = vao.stageProgress + DRIFT_MIN_AHEAD;
+  let t2 = 0;
+  while (!alvoAlcancado.drift && t2 < 200) {
+    alvoAlcancado.driftDone = false;
+    vao._updateDrift(alvoAlcancado);
+    t2++;
+  }
+  vao._updateDrift(alvoAlcancado);
+  const paradoEm = alvoAlcancado.gapCenter;
+  vao.score += 1; // o jogador passou mais um obstaculo
+  vao._updateDrift(alvoAlcancado);
+  check(
+    'coluna alcancada pelo jogador para onde esta',
+    alvoAlcancado.drift === null && alvoAlcancado.gapCenter === paradoEm
+  );
+  vao.destroy();
+
+  // fase sem drift nao mexe em nada
+  const parado = new World(L);
+  parado.stage = 1;
+  parado.applyStage(); // fase 2: gelo, sem drift
+  parado.flap();
+  for (const p of parado.pillars) p.index = parado.stageProgress + DRIFT_MIN_AHEAD;
+  for (let i = 0; i < 200; i++) for (const p of parado.pillars) parado._updateDrift(p);
+  check('fase sem a armadilha nao mexe o vao', parado.pillars.every((p) => p.drift === null));
+  parado.destroy();
+
+  // fase sem peso nunca liga a gravidade
+  const clean = new World(L);
+  clean.flap();
+  let ligou = false;
+  for (let f = 0; f < 60 * 40 && clean.phase !== PHASE.OVER; f++) {
+    botStep(clean, L);
+    if (clean.heavy) ligou = true;
+  }
+  check('fase 1 nunca fica pesada', ligou === false);
+  clean.destroy();
 
   // rotacao no meio de uma fase avancada
   const Lx = computeLayout(844, 390);

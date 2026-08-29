@@ -3,6 +3,15 @@ import { Animated, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { stageAt } from '../stages';
 
+/** Cor do aviso: a mesma da armadilha em qualquer fase, para nao dar duvida. */
+const WARN_COLOR = '#FF3B57';
+
+const ICE = {
+  body: 'rgba(202,240,255,0.94)',
+  edge: 'rgba(255,255,255,0.9)',
+  deep: 'rgba(120,200,235,0.95)',
+};
+
 /**
  * Uma metade da coluna. A forma inteira vem da tabela da fase (`stages.js`):
  * raio do corpo, altura e raio do topo, brilho, rebites e nucleo. E por isso
@@ -94,13 +103,76 @@ function Column({ width, height, capAtBottom, look }) {
 }
 
 /**
+ * O bloco de gelo que sai da ponta do cano: tres cubos de alturas diferentes,
+ * para nao parecer que o cano simplesmente cresceu.
+ *
+ * `atTop` diz de que lado ele nasce — os cubos ficam colados na ponta do cano e
+ * as pontas soltas apontam para dentro do vao.
+ */
+function IceBlock({ width, size, atTop }) {
+  const cubes = [0.82, 1, 0.72];
+  const slot = width / cubes.length;
+
+  return (
+    <View style={{ width, height: size }}>
+      {cubes.map((h, i) => (
+        <View
+          key={i}
+          style={{
+            position: 'absolute',
+            left: i * slot + slot * 0.06,
+            width: slot * 0.88,
+            height: size * h,
+            [atTop ? 'top' : 'bottom']: 0,
+            borderRadius: Math.max(2, size * 0.16),
+            backgroundColor: ICE.body,
+            borderWidth: Math.max(1, size * 0.05),
+            borderColor: ICE.edge,
+          }}
+        />
+      ))}
+      {/* sombra fria na raiz, onde o gelo encosta no cano */}
+      <View
+        style={{
+          position: 'absolute',
+          left: 0,
+          width,
+          height: Math.max(2, size * 0.22),
+          [atTop ? 'top' : 'bottom']: 0,
+          backgroundColor: ICE.deep,
+          opacity: 0.55,
+        }}
+      />
+    </View>
+  );
+}
+
+/**
  * Par de colunas. Cada metade tem altura fixa (playHeight) e sobra para fora
  * da tela; so o deslocamento vertical muda, entao nada e remontado durante o jogo.
+ *
+ * ARMADILHA DE GELO: o bloco vive dentro de uma janela de altura fixa
+ * (`iceMax`) com `overflow: hidden`, e quem se move e o bloco la dentro. Anima
+ * `transform`, e nao `height`: altura animada refaz o layout a cada frame, e
+ * este componente roda 60 vezes por segundo com o jogo inteiro na frente.
  */
-export default function PillarPair({ layout, x, topEdge, bottomEdge, stage }) {
+export default function PillarPair({
+  layout,
+  x,
+  topEdge,
+  bottomEdge,
+  stage,
+  iceMax = 0,
+  iceTop,
+  iceBottom,
+  warnTop,
+  warnBottom,
+}) {
   const w = layout.pillarWidth;
   const h = layout.playHeight;
   const look = (typeof stage === 'object' && stage ? stage : stageAt(stage || 0)).pillar;
+  const radius = w * look.bodyRadius;
+  const hasIce = iceMax > 0 && iceTop && iceBottom;
 
   return (
     <Animated.View
@@ -125,6 +197,21 @@ export default function PillarPair({ layout, x, topEdge, bottomEdge, stage }) {
         }}
       >
         <Column width={w} height={h} capAtBottom look={look} />
+        {/* aviso: o cano inteiro pisca em vermelho antes de soltar o gelo */}
+        {warnTop ? (
+          <Animated.View
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: w,
+              height: h,
+              borderRadius: radius,
+              backgroundColor: WARN_COLOR,
+              opacity: warnTop,
+            }}
+          />
+        ) : null}
       </Animated.View>
 
       <Animated.View
@@ -138,7 +225,61 @@ export default function PillarPair({ layout, x, topEdge, bottomEdge, stage }) {
         }}
       >
         <Column width={w} height={h} capAtBottom={false} look={look} />
+        {warnBottom ? (
+          <Animated.View
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: w,
+              height: h,
+              borderRadius: radius,
+              backgroundColor: WARN_COLOR,
+              opacity: warnBottom,
+            }}
+          />
+        ) : null}
       </Animated.View>
+
+      {hasIce ? (
+        <>
+          {/* gelo do cano de cima: nasce em topEdge e desce para o vao */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: w,
+              height: iceMax,
+              overflow: 'hidden',
+              transform: [{ translateY: topEdge }],
+            }}
+          >
+            <Animated.View style={{ transform: [{ translateY: Animated.subtract(iceTop, iceMax) }] }}>
+              <IceBlock width={w} size={iceMax} atTop />
+            </Animated.View>
+          </Animated.View>
+
+          {/* gelo do cano de baixo: a janela termina em bottomEdge e o bloco sobe */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: w,
+              height: iceMax,
+              overflow: 'hidden',
+              transform: [{ translateY: Animated.subtract(bottomEdge, iceMax) }],
+            }}
+          >
+            <Animated.View
+              style={{ transform: [{ translateY: Animated.subtract(iceMax, iceBottom) }] }}
+            >
+              <IceBlock width={w} size={iceMax} atTop={false} />
+            </Animated.View>
+          </Animated.View>
+        </>
+      ) : null}
     </Animated.View>
   );
 }

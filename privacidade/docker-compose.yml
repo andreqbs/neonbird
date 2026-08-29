@@ -1,0 +1,24 @@
+services:
+  privacidade:
+    build: .
+    image: major-flyer-privacidade:1.0
+    container_name: major-flyer-privacidade
+    restart: unless-stopped
+    ports:
+      # Porta 8080 do host para nao brigar com o proxy reverso (Nginx Proxy
+      # Manager, Traefik, Caddy) que provavelmente ja ocupa a 80/443 na VPS.
+      # Se este for o unico servico da VPS, troque para "80:80".
+      - "8080:80"
+    read_only: true
+    tmpfs:
+      # Com o filesystem em somente-leitura o nginx ainda precisa escrever
+      # cache e PID em algum lugar. Estes dois tmpfs resolvem.
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"

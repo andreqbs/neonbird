@@ -1,0 +1,4 @@
+# So o HTML e o nginx.conf importam para a imagem.
+*
+!index.html
+!nginx.conf

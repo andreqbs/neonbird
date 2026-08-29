@@ -11,8 +11,11 @@
     "test": "node tools/selftest.js",
     "audio": "node tools/generate-audio.js",
     "android-build": "expo run:android --device",
+    "prebuild": "expo prebuild --clean",
+    "total-clear": "rm -rf node_modules && rm -rf package-lock.json && rm -rf yarn.lock && rm -rf .expo && rm -rf .expo-shared && rm -rf .vscode && rm -rf android && rm -rf ios",
     "icons": "node tools/generate-icons.js",
-    "assets": "node tools/generate-audio.js && node tools/generate-icons.js"
+    "assets": "node tools/generate-audio.js && node tools/generate-icons.js",
+    "aab": "eas build --platform android --profile production"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",

@@ -32,3 +32,53 @@ export const STAGE_LENGTH = 10;
  * em vez de contar com uma invulnerabilidade invisivel.
  */
 export const SHIELD_FADE_FRAMES = 90;
+
+/**
+ * ARMADILHA DE GELO (fases com `traps.ice`).
+ *
+ * Os tempos sao em SEGUNDOS DE DISTANCIA, nao em pixels: assim o aviso dura o
+ * mesmo tanto em qualquer fase — quanto mais rapida a coluna vem, mais longe
+ * ela comeca a piscar.
+ */
+export const ICE_WARN_SECONDS = 1.2; // com quanta antecedencia o cano pisca
+export const ICE_OUT_SECONDS = 0.45; // quando o gelo comeca a sair de fato
+export const ICE_GROW_FRAMES = 16; // frames ate o bloco sair inteiro
+export const ICE_GAP_BITE = 0.15; // fatia do vao que o gelo come
+export const ICE_CHANCE = 0.55; // quantas colunas, em media, trazem a armadilha
+
+/**
+ * GRAVIDADE AUMENTADA (fases com `traps.heavy`).
+ *
+ * Dobrar a gravidade nao muda o impulso do toque: o mesmo toque passa a subir
+ * metade do que subia, e e isso que faz o jogador precisar tocar mais.
+ */
+export const HEAVY_MULT = 2;
+export const HEAVY_FRAMES = [170, 290]; // ~2,8 a 4,8 s de peso
+export const HEAVY_INTERVAL = [330, 690]; // ~5,5 a 11,5 s de folga entre eles
+
+/**
+ * Quanto tempo a seta vermelha aparece no canto ANTES de o peso entrar.
+ *
+ * Sem esse aviso a gravidade dobraria no meio de uma passagem apertada e o
+ * jogador so descobriria caindo. Dois segundos e o bastante para ele subir um
+ * pouco e se preparar — e e por isso que o aviso vem antes, e nao junto.
+ */
+export const HEAVY_WARN_FRAMES = 120;
+
+/**
+ * VAO QUE SE MEXE (fases com `traps.drift`).
+ *
+ * O par inteiro desliza na vertical mantendo o TAMANHO do vao: o cano de cima
+ * cresce exatamente o que o de baixo encolhe. O jogador nao ganha nem perde
+ * espaco — ele so nao pode mais decorar a altura da passagem.
+ *
+ * `DRIFT_MIN_AHEAD` e a regra de justica: uma coluna so se mexe enquanto
+ * estiver a dois obstaculos ou mais de distancia. Passando no obstaculo 5, o
+ * primeiro que pode mudar e o 7. Com o espacamento atual isso acontece fora da
+ * tela — se quiser que o jogador VEJA a coluna deslizando, baixe para 1, mas ai
+ * ela se mexe com ele ja se posicionando para entrar.
+ */
+export const DRIFT_MIN_AHEAD = 2; // obstaculos de antecedencia
+export const DRIFT_CHANCE = 0.5; // metade das colunas, em media
+export const DRIFT_FRAMES = 70; // ~1,2 s deslizando ate o lugar novo
+export const DRIFT_MIN_STEP = 0.28; // fatia minima da faixa util, para se notar

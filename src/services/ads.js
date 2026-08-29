@@ -10,7 +10,7 @@ import loadSdk from './adsSdk';
  * tela travada esperando um anuncio que nunca vem.
  *
  * ----------------------------------------------------------------------------
- * ESTADO: conta do AdMob criada e ligada nas duas plataformas.
+ * ESTADO: conta do AdMob ligada e COMPLETA nas duas plataformas.
  *
  *   ANDROID  App ID ....... ca-app-pub-6744388004633498~5213266367  (app.json)
  *            Rewarded ..... ca-app-pub-6744388004633498/7044011331
@@ -18,14 +18,14 @@ import loadSdk from './adsSdk';
  *
  *   iOS      App ID ....... ca-app-pub-6744388004633498~9033091878  (app.json)
  *            Rewarded ..... ca-app-pub-6744388004633498/7720010204
- *            Intersticial . ainda nao criado no AdMob
+ *            Intersticial . ca-app-pub-6744388004633498/1651199370
  *
  * Os App IDs moram no app.json (props do plugin), porque quem precisa deles e o
  * codigo NATIVO — vao para o AndroidManifest e para o Info.plist. As unidades
  * moram aqui, em AD_UNITS.
  *
- * FALTA no iOS so o intersticial: enquanto ele nao existir, a troca de fase no
- * iPhone acontece sem anuncio (o escudo, que e premiado, funciona normalmente).
+ * O banner nao e usado pelo jogo: fica vazio de proposito, e `unitId` responde
+ * "nao ha" para ele em qualquer plataforma.
  *
  * Anuncio e codigo nativo: nao roda no Expo Go nem na web. Depois de mexer no
  * app.json, `npx expo prebuild --clean` e uma build de verdade (`eas build` ou
@@ -72,9 +72,7 @@ export const AD_UNITS = {
   },
   ios: {
     rewarded: 'ca-app-pub-6744388004633498/7720010204',
-    // Bloco intersticial de iOS ainda nao criado no AdMob: sem ele a troca de
-    // fase no iPhone segue direto, sem anuncio nenhum.
-    interstitial: '',
+    interstitial: 'ca-app-pub-6744388004633498/1651199370',
     banner: '',
   },
 };

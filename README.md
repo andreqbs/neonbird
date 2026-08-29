@@ -212,11 +212,78 @@ Esse é o único número a mudar para sair do modo de teste.
 
 | # | Fase | Velocidade | Cenário | Obstáculo |
 |---|------|-----------|---------|-----------|
-| 1 | Neon Dusk | 1,0x | crepúsculo roxo/laranja | coluna neon arredondada |
-| 2 | Chuva Ciber | 1,1x | azul profundo, torres altas | vidro azul, topo chanfrado |
-| 3 | Tempestade Solar | 1,2x | céu em brasa | chapa metálica com rebites |
-| 4 | Selva Tóxica | 1,3x | verde tóxico, copas redondas | coluna orgânica |
-| 5 | Circuito Vazio | 1,4x | vazio magenta | energia com núcleo brilhante |
+| 1 | Neon Dusk | 1,00x | crepúsculo roxo/laranja | coluna neon arredondada |
+| 2 | Chuva Ciber | 1,15x | azul profundo, torres altas | vidro azul, topo chanfrado |
+| 3 | Tempestade Solar | 1,30x | céu em brasa | chapa metálica com rebites |
+| 4 | Selva Tóxica | 1,45x | verde tóxico, copas redondas | coluna orgânica |
+| 5 | Circuito Vazio | 1,60x | vazio magenta | energia com núcleo brilhante |
+
+Cada fase corre **15% mais** que a velocidade base (multiplicador absoluto, não
+composto: a fase 5 é exatamente 60% mais rápida que a 1).
+
+### As armadilhas
+
+Cada fase apresenta **uma mecânica nova, sozinha** — ela tem tempo de ser
+aprendida antes da próxima. A última junta tudo.
+
+| Fase | Gelo | Gravidade | Vão que se mexe |
+|---|---|---|---|
+| 1 | — | — | — |
+| 2 | ✅ | — | — |
+| 3 | — | ✅ | — |
+| 4 | — | — | ✅ |
+| 5 | ✅ | ✅ | ✅ |
+
+**Fase 2 — cubos de gelo.** Armadilha *de obstáculo*. Pouco mais da metade das
+colunas a traz. O cano sorteado (às vezes o de cima, às vezes o de baixo — nunca
+dá para decorar) **pisca em vermelho ~1,2 s antes**, e então o bloco de gelo sai
+da ponta e come **15% do vão**. O aviso apaga quando o gelo aparece: dali em
+diante o perigo está à vista, e continuar piscando só poluiria a tela.
+
+O gelo não é um corpo novo no motor de física: ele empurra a borda daquele lado
+para dentro do vão, então a colisão já o enxerga de graça.
+
+**Fase 3 — gravidade aumentada.** Esta **não é de obstáculo nenhum**: vale para
+a fase inteira enquanto dura. O ciclo tem três tempos:
+
+1. **Aviso (2 s)** — uma seta vermelha para baixo aparece no canto superior
+   direito, piscando. A gravidade ainda é a de sempre.
+2. **Peso (3 a 5 s)** — a seta some, a gravidade **dobra** e o **topo da tela
+   pisca em vermelho**. O impulso do toque não muda; o que muda é que ele passa
+   a levantar metade do que levantava, e o jogador precisa tocar bem mais.
+3. **Folga (5 a 11 s)** — tudo volta ao normal até a próxima rodada.
+
+O aviso vem **antes**, e não junto, por um motivo de justiça: dobrar a gravidade
+de surpresa no meio de uma passagem apertada é morte sem chance de reagir. E
+fica no canto, não sobre um cano, porque marcar um obstáculo diria a coisa
+errada — o jogador procuraria a armadilha *naquela* coluna.
+
+**Fase 4 — o vão que se mexe.** O par inteiro desliza na vertical **mantendo o
+tamanho do vão**: o cano de cima cresce exatamente o que o de baixo encolhe. O
+jogador não perde espaço — perde a certeza de onde a passagem vai estar, e não
+dá mais para decorar a altura.
+
+A regra que separa isso de uma sacanagem: **uma coluna só se mexe enquanto
+estiver a dois obstáculos ou mais de distância**. Passando no obstáculo 5, o
+primeiro que pode mudar é o 7; no 9, o 11. Se o jogador alcançar uma coluna que
+ainda está deslizando, ela **para onde estiver** — o vão é válido em qualquer
+ponto do caminho, então parar no meio não cria situação impossível.
+
+Metade das colunas se mexe, em média, e o deslocamento nunca é menor que 28% da
+faixa útil: movimento pequeno demais ninguém nota, e a armadilha viraria só um
+sorteio diferente.
+
+> Com o espaçamento atual, a coluna a dois obstáculos de distância ainda está
+> **fora da tela** — o jogador não vê o movimento acontecendo, ele vê a coluna
+> entrar já no lugar novo. É o que a regra dos dois obstáculos pede. Se quiser
+> que ele veja a coluna deslizando, baixe `DRIFT_MIN_AHEAD` para 1 — mas aí ela
+> se mexe com o jogador já se posicionando para entrar nela.
+
+Os tempos do gelo são contados em **segundos de distância**, não em pixels:
+assim o aviso dura o mesmo tanto em qualquer fase — quanto mais rápida a coluna
+vem, mais longe ela começa a piscar. Tudo isso vive em
+[constants.js](src/game/constants.js), e quais fases têm o quê está na coluna
+`traps` de [stages.js](src/game/stages.js).
 
 Passou da fase 5? A contagem de fases continua (e o anúncio também), mas o
 visual e a velocidade **param de subir** — senão vira injogável.
@@ -310,7 +377,7 @@ A conta existe e as duas plataformas estão configuradas:
 | Android | Intersticial | `ca-app-pub-6744388004633498/9670174671` |
 | iOS | App ID | `ca-app-pub-6744388004633498~9033091878` |
 | iOS | Rewarded | `ca-app-pub-6744388004633498/7720010204` |
-| iOS | Intersticial | *ainda não criado no AdMob* |
+| iOS | Intersticial | `ca-app-pub-6744388004633498/1651199370` |
 
 Os **App IDs** ficam no `app.json` (props do plugin) porque quem precisa deles é
 o código **nativo**: viram `<meta-data>` no `AndroidManifest.xml` e
@@ -324,11 +391,10 @@ anúncio real do próprio app é o jeito mais rápido de o AdMob suspender a con
 e é exatamente o que acontece quando se testa clicando.
 
 Uma trava a mais: quando uma plataforma não tem unidade real cadastrada para um
-formato, `unitId()` responde vazio **mesmo em modo de teste**. É o que faz o
-intersticial do iOS não existir hoje em vez de tentar usar a unidade de teste
-num app que ainda não tem esse bloco. E foi o que impediu, antes de o iOS ter
-App ID, que o SDK nativo fosse inicializado sem `GADApplicationIdentifier` — o
-que derruba o app na abertura.
+formato, `unitId()` responde vazio **mesmo em modo de teste** — é o que hoje
+mantém o banner (que o jogo não usa) fora do ar, e o que impediu, antes de o iOS
+ter App ID, que o SDK nativo fosse inicializado sem `GADApplicationIdentifier`,
+o que derruba o app na abertura.
 
 **A propaganda simulada também é só de desenvolvimento**
 (`SIMULATE_WHEN_UNAVAILABLE = __DEV__`). Ela é uma tela de anúncio que não é
@@ -336,9 +402,9 @@ anúncio nenhum: útil para testar o fluxo no navegador, indefensável para quem
 baixou o jogo. Em produção, formato que não existe simplesmente não aparece — a
 fase troca direto.
 
-**Falta para o iOS:** criar o bloco **intersticial** no AdMob e colar em
-`AD_UNITS.ios.interstitial`. Sem ele, a troca de fase no iPhone acontece sem
-anúncio; o escudo e as vidas, que são premiados, funcionam normalmente.
+**Nada mais falta no AdMob**: as duas plataformas têm App ID, premiado e
+intersticial. O que falta para o iPhone é a build — `eas build --platform ios`,
+já que iOS não compila no Windows.
 
 Depois de mexer no App ID ou nos plugins do `app.json`, o projeto nativo precisa
 ser refeito — é lá que o App ID vira `<meta-data>` no manifesto:
@@ -393,6 +459,30 @@ Daí a combinação que está no projeto, a mais nova que fecha dos dois lados:
 **Quando dá para atualizar o SDK de anúncios:** quando o Expo passar a suportar
 Kotlin 2.3 (basta a chave `"2.3.x"` aparecer no `KSPLookup`). Aí é subir os dois
 juntos — o SDK e o `kotlinVersion` — nunca só um.
+
+---
+
+### R8: app menor e crash legível
+
+A build de release passa pelo **R8** (`enableMinifyInReleaseBuilds` nas props do
+`expo-build-properties`, no [app.json](app.json)). São dois ganhos:
+
+- o app encolhe — R8 remove classes e métodos que ninguém chama;
+- o AAB passa a levar o **arquivo de desofuscação** dentro dele
+  (`BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`), que é o
+  que a Play Console pedia para conseguir mostrar stack trace legível em falhas
+  e ANRs. Não precisa subir nada à mão: o Gradle empacota junto.
+
+O mapping e os símbolos nativos **não vão para o aparelho de ninguém** — a Play
+Store usa esses metadados só do lado dela, e por isso o AAB parece grande
+enquanto o download real continua pequeno.
+
+**Ao mexer nisso, teste a build de release antes de publicar.** R8 renomeia e
+remove código, e biblioteca que usa reflexão pode quebrar só em produção. As
+libs do projeto trazem as próprias regras (`consumer-rules.pro`), então o
+caminho normal funciona — mas se algo sumir em release e não em debug, é aqui
+que se olha primeiro: acrescente a regra em `extraProguardRules`, nas mesmas
+props do plugin.
 
 ---
 

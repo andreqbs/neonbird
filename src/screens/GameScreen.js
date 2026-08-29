@@ -16,15 +16,23 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FIXED_DT, MAX_STEPS_PER_FRAME, PHASE, STAGE_LENGTH } from '../game/constants';
+import {
+  FIXED_DT,
+  ICE_GAP_BITE,
+  MAX_STEPS_PER_FRAME,
+  PHASE,
+  STAGE_LENGTH,
+} from '../game/constants';
 import { stageAt, stageNumber } from '../game/stages';
 import { computeLayout } from '../game/layout';
 import World from '../game/World';
 import { captureSession, restoreSession } from '../game/session';
 import Backdrop from '../game/render/Backdrop';
 import Bird from '../game/render/Bird';
+import GravityWarning from '../game/render/GravityWarning';
 import Ground, { GROUND_TILE } from '../game/render/Ground';
 import PillarPair from '../game/render/PillarPair';
 import ScoreDigits from '../game/render/ScoreDigits';
@@ -104,10 +112,21 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
       // Quanto ainda resta do escudo (1 = inteiro, 0 = acabou). E um valor
       // animado porque cai a cada frame enquanto ele se dissipa.
       shieldLevel: new Animated.Value(world.shieldLevel),
+      // Pisca do topo da tela enquanto a gravidade esta aumentada, e a seta do
+      // canto nos dois segundos que vem antes dela.
+      heavy: new Animated.Value(0),
+      heavyWarn: new Animated.Value(0),
       pillars: world.pillars.map((p) => ({
         x: new Animated.Value(p.x),
         top: new Animated.Value(p.gapCenter - p.gap / 2),
         bottom: new Animated.Value(p.gapCenter + p.gap / 2),
+        // Armadilha de gelo: quanto ja saiu de cada cano e o quanto ele pisca.
+        iceTop: new Animated.Value(0),
+        iceBottom: new Animated.Value(0),
+        warnTop: new Animated.Value(0),
+        warnBottom: new Animated.Value(0),
+        // Ultimo valor enviado de cada um dos quatro acima (ver `sync`).
+        last: { iceTop: 0, iceBottom: 0, warnTop: 0, warnBottom: 0 },
       })),
     };
   }
@@ -147,6 +166,8 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   // O placar nao passa mais pelo render desta tela: o loop fala direto com ele.
   const scoreHudRef = useRef(null);
   const burstTimerRef = useRef(null);
+  const lastHeavyRef = useRef(0);
+  const lastHeavyWarnRef = useRef(0);
   const onScoreRef = useRef(onScore);
   onScoreRef.current = onScore;
 
@@ -161,12 +182,42 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
     a.ground.setValue(-(world.groundOffset % GROUND_TILE));
     a.sky.setValue(-(world.skyOffset % layout.width));
     a.shieldLevel.setValue(world.shieldLevel);
+    // O pisca da gravidade e o gelo passam a maior parte do tempo parados em
+    // zero. Mandar so quando mudam evita ~20 mensagens por frame para o lado
+    // nativo — e e o lado nativo que precisa sobrar folga aqui.
+    const heavy = world.heavyPulse || 0;
+    if (heavy !== lastHeavyRef.current) {
+      a.heavy.setValue(heavy);
+      lastHeavyRef.current = heavy;
+    }
+    const warn = world.heavyWarn || 0;
+    if (warn !== lastHeavyWarnRef.current) {
+      a.heavyWarn.setValue(warn);
+      lastHeavyWarnRef.current = warn;
+    }
+
     for (let i = 0; i < world.pillars.length; i++) {
       const p = world.pillars[i];
       const t = a.pillars[i];
       t.x.setValue(p.x);
+      // A borda do CANO, sem o gelo: o bloco tem posicao propria no desenho.
       t.top.setValue(p.gapCenter - p.gap / 2);
       t.bottom.setValue(p.gapCenter + p.gap / 2);
+
+      const top = p.ice && p.ice.side === 'top';
+      const bottom = p.ice && p.ice.side === 'bottom';
+      const next = {
+        iceTop: top ? p.ice.out : 0,
+        iceBottom: bottom ? p.ice.out : 0,
+        warnTop: top ? p.ice.warn : 0,
+        warnBottom: bottom ? p.ice.warn : 0,
+      };
+      for (const key of ['iceTop', 'iceBottom', 'warnTop', 'warnBottom']) {
+        if (next[key] !== t.last[key]) {
+          t[key].setValue(next[key]);
+          t.last[key] = next[key];
+        }
+      }
     }
   }, [a, world, layout.width]);
 
@@ -478,6 +529,10 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   const panelTop = hudTop + 40 + SCORE_BLOCK + 16;
 
   const look = stageAt(stageIndex);
+  // Tamanho do bloco de gelo desta fase: muda com o vao, e o vao so muda na
+  // troca de fase — que e exatamente quando esta tela renderiza de novo. Zero
+  // em fase sem gelo, e ai o desenho nem monta os blocos.
+  const iceMax = world.traps.ice ? world.gap * ICE_GAP_BITE : 0;
   const nextLook = stageAt(stageIndex + 1);
   // Depois da ultima fase o cenario repete: stageAt trava no fim. A tela nao
   // deve prometer novidade que nao existe.
@@ -525,6 +580,11 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
             topEdge={t.top}
             bottomEdge={t.bottom}
             stage={look}
+            iceMax={iceMax}
+            iceTop={t.iceTop}
+            iceBottom={t.iceBottom}
+            warnTop={t.warnTop}
+            warnBottom={t.warnBottom}
           />
         ))}
         <Bird
@@ -539,6 +599,36 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
       </View>
 
       <Ground layout={layout} offset={a.ground} stage={look} />
+
+      {/* Gravidade aumentada: enquanto dura, o topo da tela pisca em vermelho.
+          A seta do canto (abaixo) e o que anuncia, dois segundos antes. */}
+      <Animated.View
+        style={{
+          pointerEvents: 'none',
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: layout.width,
+          height: Math.round(layout.height * 0.17),
+          opacity: a.heavy,
+        }}
+      >
+        <LinearGradient
+          colors={['rgba(255,59,87,0.8)', 'rgba(255,59,87,0.3)', 'rgba(255,59,87,0)']}
+          style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}
+        />
+      </Animated.View>
+
+      {/* Dois segundos antes do peso entrar, a seta avisa. Fica no canto, e nao
+          sobre um cano, porque a gravidade nao e de nenhum obstaculo. */}
+      <GravityWarning
+        opacity={a.heavyWarn}
+        style={{
+          position: 'absolute',
+          top: hudTop + 46,
+          right: insets.right + hudSide,
+        }}
+      />
 
       {/* Superficie de toque: fica abaixo do HUD na ordem de render. */}
       <Pressable style={StyleSheet.absoluteFill} onPressIn={handleTap} />
