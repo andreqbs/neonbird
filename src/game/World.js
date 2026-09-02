@@ -2,8 +2,8 @@ import Matter from 'matter-js';
 import {
   DRIFT_CHANCE,
   DRIFT_FRAMES,
-  DRIFT_MIN_AHEAD,
   DRIFT_MIN_STEP,
+  DRIFT_SAFE_SECONDS,
   FIXED_DT,
   HEAVY_FRAMES,
   HEAVY_INTERVAL,
@@ -78,8 +78,7 @@ export default class World {
       const top = Matter.Bodies.rectangle(0, 0, layout.pillarWidth, layout.playHeight, opts);
       const bottom = Matter.Bodies.rectangle(0, 0, layout.pillarWidth, layout.playHeight, opts);
       // `ice` e `drift` sao as armadilhas daquela coluna: null quando ela e
-      // limpa. `index` e a ordem dela na fase — e o que permite a regra dos
-      // dois obstaculos de antecedencia.
+      // limpa.
       this.pillars.push({
         top,
         bottom,
@@ -87,10 +86,10 @@ export default class World {
         gapCenter: 0,
         gap: layout.gap,
         scored: false,
-        index: 0,
         ice: null,
         drift: null,
         driftDone: false,
+        driftGlow: 0,
       });
       bodies.push(top, bottom);
     }
@@ -119,7 +118,6 @@ export default class World {
     this._hit = false;
     this.settled = false;
     this.stage = 0;
-    this.pillarSeq = 0;
     this.shieldHits = 0;
     this._lastAbsorbFrame = -ABSORB_COOLDOWN;
     this._clearShield();
@@ -205,8 +203,6 @@ export default class World {
     this.lastGapCenter = null;
     this.birdRotation = 0;
     this.heavyAt = 0;
-    // A contagem de obstaculos recomeca na fase nova, junto com o `x/10`.
-    this.pillarSeq = 0;
 
     Matter.Body.setPosition(this.bird, { x: L.birdX, y: L.playHeight / 2 });
     Matter.Body.setVelocity(this.bird, { x: 0, y: 0 });
@@ -411,11 +407,10 @@ export default class World {
    * obriga o jogador a olhar para o aviso em vez de decorar o caminho.
    */
   _rollTrap(p) {
-    // Toda coluna que nasce (ou e reciclada) entra na fila com um numero de
-    // ordem novo e sem armadilha nenhuma.
-    p.index = this.pillarSeq++;
+    // Toda coluna que nasce (ou e reciclada) entra na fila sem armadilha.
     p.drift = null;
     p.driftDone = false;
+    p.driftGlow = 0;
 
     if (!this.traps.ice || Math.random() > ICE_CHANCE) {
       p.ice = null;
@@ -460,40 +455,51 @@ export default class World {
    * centro, entao o cano de cima cresce exatamente o que o de baixo encolhe. O
    * jogador nao perde espaco; ele perde a certeza de onde a passagem vai estar.
    *
-   * A regra dos dois obstaculos e o que separa isso de uma sacanagem: uma
-   * coluna so se mexe enquanto `index - stageProgress >= DRIFT_MIN_AHEAD`.
-   * Passando no obstaculo 5, o primeiro que pode mudar e o 7. Se o jogador
-   * alcancar uma coluna que ainda esta deslizando, ela para onde estiver — o
-   * vao ja e valido em qualquer ponto do caminho.
+   * O movimento comeca no frame em que a coluna ENTRA na tela e termina antes
+   * de ela chegar perto: a partir de `DRIFT_SAFE_SECONDS` de viagem do passaro,
+   * ela para onde estiver — e o vao e valido em qualquer ponto do caminho, entao
+   * parar no meio nunca cria situacao impossivel. Sao os dois lados do mesmo
+   * acordo: da para VER a armadilha acontecer, e ainda sobra um segundo com a
+   * coluna parada para se posicionar.
+   *
+   * `glow` acompanha o movimento e some junto com ele. Serve para o olho achar
+   * a coluna que esta mexendo no meio de tudo o que ja se move na tela.
    */
   _updateDrift(p) {
     if (!this.traps.drift) return;
-    const ahead = p.index - this.stageProgress;
+    const L = this.layout;
+    const distancia = p.x - L.birdX;
+    const segura = this.speed * 60 * DRIFT_SAFE_SECONDS;
 
     if (p.drift) {
-      if (ahead < DRIFT_MIN_AHEAD) {
+      if (distancia <= segura) {
         p.drift = null;
+        p.driftGlow = 0;
         return;
       }
       const delta = p.drift.target - p.gapCenter;
       if (Math.abs(delta) <= p.drift.speed) {
         p.gapCenter = p.drift.target;
         p.drift = null;
+        p.driftGlow = 0;
       } else {
         p.gapCenter += Math.sign(delta) * p.drift.speed;
+        p.driftGlow = 0.45 + 0.35 * Math.abs(Math.sin(this.frame / 5));
       }
       return;
     }
 
-    // Janela unica: cada coluna tira a sorte uma vez so, no instante em que
-    // entra na distancia minima permitida.
-    if (p.driftDone || ahead > DRIFT_MIN_AHEAD) return;
+    // Janela unica: cada coluna tira a sorte uma vez so, no frame em que a
+    // borda dela cruza a beirada direita da tela.
+    if (p.driftDone) return;
+    if (p.x - L.pillarWidth / 2 > L.width) return;
     p.driftDone = true;
-    if (ahead < DRIFT_MIN_AHEAD || Math.random() >= DRIFT_CHANCE) return;
+    if (distancia <= segura || Math.random() >= DRIFT_CHANCE) return;
 
     const target = this._driftTarget(p);
     if (target === null) return;
     p.drift = { target, speed: Math.abs(target - p.gapCenter) / DRIFT_FRAMES };
+    p.driftGlow = 0.8; // acende ja no primeiro frame do movimento
   }
 
   /**

@@ -71,59 +71,59 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
     : REASON_LABEL[status.reason];
 
   return (
-    <Screen title="Configuracoes" onBack={onBack}>
+    <Screen title="Configurações" onBack={onBack}>
       <SectionTitle>Som</SectionTitle>
       <Card>
         <ToggleRow
-          label="Musica de fundo"
-          description="Trilha em loop no menu e durante a partida."
+          label="Música de fundo"
+          description="Trilha musical durante a partida"
           value={settings.music}
           onValueChange={(v) => setSetting('music', v)}
         />
         <ToggleRow
           label="Som do toque"
-          description="O bater de asas a cada toque na tela."
+          description="O bater de asas a cada toque na tela"
           value={settings.flapSound}
           onValueChange={(v) => setSetting('flapSound', v)}
         />
         <ToggleRow
           label="Efeitos do jogo"
-          description="Ponto marcado e colisao."
+          description="Ponto marcado e colisão"
           value={settings.effects}
           onValueChange={(v) => setSetting('effects', v)}
           last
         />
       </Card>
 
-      <SectionTitle>Conta</SectionTitle>
-      <Card>
-        <ActionRow
-          label="Google Play Jogos"
-          description={
-            status.available
-              ? player?.signedIn
-                ? 'Seus placares sobem para o ranking global automaticamente.'
-                : 'Conecte para aparecer no ranking global.'
-              : REASON_HELP[status.reason]
-          }
-          value={connecting ? 'Conectando...' : accountValue}
-          onPress={status.available && !player?.signedIn ? handleConnect : undefined}
-          disabled={!status.available || connecting}
-          last
-        />
-      </Card>
-      {status.available && !player?.signedIn ? (
-        <Text style={styles.note}>
-          O Play Jogos costuma entrar sozinho ao abrir o jogo. Este botao serve para quando o
-          login automatico foi recusado ou voce quer trocar de conta.
-        </Text>
-      ) : null}
+      {/*<SectionTitle>Conta</SectionTitle>*/}
+      {/*<Card>*/}
+      {/*  <ActionRow*/}
+      {/*    label="Google Play Jogos"*/}
+      {/*    description={*/}
+      {/*      status.available*/}
+      {/*        ? player?.signedIn*/}
+      {/*          ? 'Seus placares sobem para o ranking global automaticamente.'*/}
+      {/*          : 'Conecte para aparecer no ranking global.'*/}
+      {/*        : REASON_HELP[status.reason]*/}
+      {/*    }*/}
+      {/*    value={connecting ? 'Conectando...' : accountValue}*/}
+      {/*    onPress={status.available && !player?.signedIn ? handleConnect : undefined}*/}
+      {/*    disabled={!status.available || connecting}*/}
+      {/*    last*/}
+      {/*  />*/}
+      {/*</Card>*/}
+      {/*{status.available && !player?.signedIn ? (*/}
+      {/*  <Text style={styles.note}>*/}
+      {/*    O Play Jogos costuma entrar sozinho ao abrir o jogo. Este botao serve para quando o*/}
+      {/*    login automatico foi recusado ou voce quer trocar de conta.*/}
+      {/*  </Text>*/}
+      {/*) : null}*/}
 
       <SectionTitle>Dados</SectionTitle>
       <Card>
         <ActionRow
           label="Apagar recordes locais"
-          description="Limpa o historico de partidas guardado neste aparelho."
+          description="Limpa o histórico de partidas neste aparelho."
           onPress={handleClear}
           danger
           last
@@ -132,13 +132,6 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
 
       <View style={styles.about}>
         <Text style={styles.aboutText}>Major Flyer</Text>
-        <Text style={styles.aboutDim}>
-          Fisica: matter-js · {Platform.OS === 'ios' ? 'iOS' : Platform.OS === 'android' ? 'Android' : 'Web'}
-        </Text>
-        <Text style={styles.aboutDim}>
-          A tela acompanha a rotacao do aparelho. Se ela nao girar, confira se a rotacao
-          automatica esta ligada no sistema.
-        </Text>
       </View>
     </Screen>
   );

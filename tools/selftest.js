@@ -48,10 +48,11 @@ const { PHASE, SHIELD_FADE_FRAMES, STAGE_LENGTH } = require(path.join(
   BUILD,
   'src/game/constants.js'
 ));
-const { STAGES, stageAt, trapsAt } = require(path.join(BUILD, 'src/game/stages.js'));
+const { STAGES, STAGE_COUNT, stageAt, trapsAt } = require(path.join(BUILD, 'src/game/stages.js'));
 const {
-  DRIFT_MIN_AHEAD,
+  DRIFT_CHANCE,
   DRIFT_MIN_STEP,
+  DRIFT_SAFE_SECONDS,
   HEAVY_MULT,
   HEAVY_WARN_FRAMES,
   ICE_GAP_BITE,
@@ -398,7 +399,9 @@ section('Fases, velocidade e escudo');
   const world = new World(L);
   world.flap();
   let frames = 0;
-  while (world.phase !== PHASE.STAGE_CLEAR && world.phase !== PHASE.OVER && frames < 60 * 120) {
+  // ~125 frames por obstaculo na fase 1, entao 100 deles pedem uns 3,5 minutos
+  // de simulacao. Em Node isso roda em segundos.
+  while (world.phase !== PHASE.STAGE_CLEAR && world.phase !== PHASE.OVER && frames < 60 * 400) {
     botStep(world, L);
     frames++;
   }
@@ -647,30 +650,37 @@ section('Fases, velocidade e escudo');
   aviso.destroy();
 
   // --- o vao que se mexe (fase 4) ---
+  //
+  // A prova que faltava na primeira versao esta logo abaixo, no teste de
+  // partida inteira: nao basta a coluna se mexer, ela precisa se mexer ONDE O
+  // JOGADOR ESTA OLHANDO. A regra antiga contava obstaculos de antecedencia e
+  // o movimento acontecia todo fora da tela.
   const vao = new World(L);
   vao.stage = 3;
   vao.applyStage(); // fase 4
   vao.flap();
 
-  const alvoLonge = vao.pillars[0];
-  alvoLonge.index = vao.stageProgress + DRIFT_MIN_AHEAD; // na janela permitida
-  const centroAntes = alvoLonge.gapCenter;
-  const vaoAntes = vao.bottomEdgeOf(alvoLonge) - vao.topEdgeOf(alvoLonge);
+  const alvo = vao.pillars[0];
+  alvo.x = L.width; // acabou de entrar pela direita
+  alvo.driftDone = false;
+  const centroAntes = alvo.gapCenter;
+  const vaoAntes = vao.bottomEdgeOf(alvo) - vao.topEdgeOf(alvo);
 
   let tentativas = 0;
-  while (!alvoLonge.drift && tentativas < 200) {
-    alvoLonge.driftDone = false;
-    vao._updateDrift(alvoLonge);
+  while (!alvo.drift && tentativas < 200) {
+    alvo.driftDone = false;
+    vao._updateDrift(alvo);
     tentativas++;
   }
-  check('a coluna a 2 obstaculos pode se mexer', !!alvoLonge.drift);
+  check('a coluna comeca a deslizar ao entrar na tela', !!alvo.drift);
+  check('e acende enquanto se mexe', alvo.driftGlow > 0);
 
   const tamanhos = [];
   let passos = 0;
-  while (alvoLonge.drift && passos < 400) {
-    vao._updateDrift(alvoLonge);
-    vao._syncPillar(alvoLonge);
-    tamanhos.push(vao.bottomEdgeOf(alvoLonge) - vao.topEdgeOf(alvoLonge));
+  while (alvo.drift && passos < 400) {
+    vao._updateDrift(alvo);
+    vao._syncPillar(alvo);
+    tamanhos.push(vao.bottomEdgeOf(alvo) - vao.topEdgeOf(alvo));
     passos++;
   }
   check(
@@ -678,58 +688,122 @@ section('Fases, velocidade e escudo');
     tamanhos.every((t) => Math.abs(t - vaoAntes) < 0.01),
     `${vaoAntes.toFixed(0)}px em ${passos} frames`
   );
+  check('e o brilho apaga quando para', alvo.driftGlow === 0);
 
-  const faixa =
-    Math.abs(L.playHeight - 2 * L.marginY - vao.gap) || L.playHeight - 2 * L.marginY - vao.gap;
-  const andou = Math.abs(alvoLonge.gapCenter - centroAntes);
+  const faixa = L.playHeight - 2 * L.marginY - vao.gap;
+  const andou = Math.abs(alvo.gapCenter - centroAntes);
   check(
-    'e o centro anda o bastante para se notar',
+    'o centro anda o bastante para se notar',
     andou >= faixa * DRIFT_MIN_STEP - 0.5,
     `${andou.toFixed(0)}px de ${faixa.toFixed(0)}px de faixa`
   );
   check(
     'o vao nao sai da area de jogo',
-    vao.topEdgeOf(alvoLonge) > 0 && vao.bottomEdgeOf(alvoLonge) < L.playHeight,
-    `${vao.topEdgeOf(alvoLonge).toFixed(0)} a ${vao.bottomEdgeOf(alvoLonge).toFixed(0)}`
+    vao.topEdgeOf(alvo) > 0 && vao.bottomEdgeOf(alvo) < L.playHeight,
+    `${vao.topEdgeOf(alvo).toFixed(0)} a ${vao.bottomEdgeOf(alvo).toFixed(0)}`
   );
 
-  // a coluna logo a frente nunca se mexe
-  const alvoPerto = vao.pillars[1];
-  alvoPerto.index = vao.stageProgress + DRIFT_MIN_AHEAD - 1;
+  // coluna ja perto do passaro nao comeca a se mexer
+  const perto = vao.pillars[1];
+  perto.x = L.birdX + vao.speed * 60 * DRIFT_SAFE_SECONDS * 0.8;
   for (let i = 0; i < 300; i++) {
-    alvoPerto.driftDone = false;
-    vao._updateDrift(alvoPerto);
+    perto.driftDone = false;
+    vao._updateDrift(perto);
   }
   check(
-    `coluna a ${DRIFT_MIN_AHEAD - 1} obstaculo de distancia nunca se mexe`,
-    alvoPerto.drift === null
+    `coluna a menos de ${DRIFT_SAFE_SECONDS}s do passaro nao se mexe`,
+    perto.drift === null
   );
 
-  // e se o jogador alcancar uma coluna que ainda esta deslizando, ela para
-  const alvoAlcancado = vao.pillars[2];
-  alvoAlcancado.index = vao.stageProgress + DRIFT_MIN_AHEAD;
+  // e se o jogador alcancar uma que ainda desliza, ela para onde esta
+  const alcancada = vao.pillars[2];
+  alcancada.x = L.width;
   let t2 = 0;
-  while (!alvoAlcancado.drift && t2 < 200) {
-    alvoAlcancado.driftDone = false;
-    vao._updateDrift(alvoAlcancado);
+  while (!alcancada.drift && t2 < 200) {
+    alcancada.driftDone = false;
+    vao._updateDrift(alcancada);
     t2++;
   }
-  vao._updateDrift(alvoAlcancado);
-  const paradoEm = alvoAlcancado.gapCenter;
-  vao.score += 1; // o jogador passou mais um obstaculo
-  vao._updateDrift(alvoAlcancado);
+  vao._updateDrift(alcancada);
+  const paradoEm = alcancada.gapCenter;
+  alcancada.x = L.birdX + vao.speed * 10; // o passaro chegou perto
+  vao._updateDrift(alcancada);
   check(
     'coluna alcancada pelo jogador para onde esta',
-    alvoAlcancado.drift === null && alvoAlcancado.gapCenter === paradoEm
+    alcancada.drift === null && alcancada.gapCenter === paradoEm && alcancada.driftGlow === 0
   );
   vao.destroy();
+
+  // --- a prova de fogo: uma partida inteira na fase 4 ---
+  //
+  // Roda o bot de verdade e olha, frame a frame, onde as colunas estavam quando
+  // deslizaram. E o teste que teria pego o erro da primeira versao.
+  const emJogo = new World(L);
+  emJogo.reset();
+  emJogo.score = STAGE_LENGTH * 3; // fase 4 com o placar coerente
+  emJogo.stage = 3;
+  emJogo.applyStage();
+  emJogo.flap();
+
+  let framesDeslizando = 0;
+  let framesVisiveis = 0;
+  let colunasQueMexeram = 0;
+  let mexendoAntes = new Set();
+  for (let f = 0; f < 60 * 60 && emJogo.phase !== PHASE.OVER; f++) {
+    botStep(emJogo, L);
+    const mexendoAgora = new Set();
+    for (const p of emJogo.pillars) {
+      if (!p.drift) continue;
+      mexendoAgora.add(p);
+      framesDeslizando++;
+      if (p.x - L.pillarWidth / 2 < L.width) framesVisiveis++;
+      if (!mexendoAntes.has(p)) colunasQueMexeram++;
+    }
+    mexendoAntes = mexendoAgora;
+  }
+
+  check(
+    'numa partida de verdade, colunas se mexem',
+    colunasQueMexeram >= 3,
+    `${colunasQueMexeram} colunas em ${emJogo.stageProgress} obstaculos`
+  );
+  check(
+    'e o jogador ve TODO o movimento acontecer',
+    framesDeslizando > 0 && framesVisiveis === framesDeslizando,
+    `${framesVisiveis} de ${framesDeslizando} frames dentro da tela`
+  );
+  emJogo.destroy();
+
+  // frequencia: quase toda coluna se mexe
+  let mexeram = 0;
+  const amostras = 400;
+  for (let i = 0; i < amostras; i++) {
+    const w = new World(L);
+    w.stage = 3;
+    w.applyStage();
+    const p = w.pillars[0];
+    p.x = L.width;
+    p.driftDone = false;
+    w._updateDrift(p);
+    if (p.drift) mexeram++;
+    w.destroy();
+  }
+  const taxa = mexeram / amostras;
+  check(
+    `${Math.round(DRIFT_CHANCE * 100)}% das colunas se mexem, em media`,
+    Math.abs(taxa - DRIFT_CHANCE) < 0.08,
+    `${Math.round(taxa * 100)}% em ${amostras} sorteios`
+  );
 
   // fase sem drift nao mexe em nada
   const parado = new World(L);
   parado.stage = 1;
   parado.applyStage(); // fase 2: gelo, sem drift
   parado.flap();
-  for (const p of parado.pillars) p.index = parado.stageProgress + DRIFT_MIN_AHEAD;
+  for (const p of parado.pillars) {
+    p.x = L.width;
+    p.driftDone = false;
+  }
   for (let i = 0; i < 200; i++) for (const p of parado.pillars) parado._updateDrift(p);
   check('fase sem a armadilha nao mexe o vao', parado.pillars.every((p) => p.drift === null));
   parado.destroy();
@@ -744,6 +818,34 @@ section('Fases, velocidade e escudo');
   }
   check('fase 1 nunca fica pesada', ligou === false);
   clean.destroy();
+
+  // --- o fim do jogo ---
+  const fim = new World(L);
+  fim.score = STAGE_LENGTH * STAGE_COUNT - 1; // um obstaculo antes do fim
+  fim.syncStageToScore();
+  check(
+    'o ultimo obstaculo do jogo esta na fase 5',
+    fim.stage === STAGE_COUNT - 1,
+    `fase ${fim.stage + 1} de ${STAGE_COUNT}`
+  );
+  check(
+    'e fechar essa fase pede o placar cheio',
+    fim.stageTarget === STAGE_LENGTH * STAGE_COUNT,
+    `${fim.stageTarget} obstaculos`
+  );
+  check('depois dela nao ha visual novo', fim.hasNextLook === false);
+  fim.destroy();
+
+  // quem passa do fim continua jogando, no ritmo da ultima fase
+  const depois = new World(L);
+  depois.score = STAGE_LENGTH * STAGE_COUNT;
+  depois.syncStageToScore();
+  check('passou do fim, a fase 6 existe', depois.stage === STAGE_COUNT);
+  check(
+    'e corre no mesmo ritmo da 5',
+    Math.abs(depois.speed - L.speed * STAGES[STAGE_COUNT - 1].speed) < 1e-9
+  );
+  depois.destroy();
 
   // rotacao no meio de uma fase avancada
   const Lx = computeLayout(844, 390);

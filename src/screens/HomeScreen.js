@@ -14,7 +14,7 @@ import { SKY_GRADIENT, theme } from '../ui/theme';
 // dois nunca mudam.
 const ITEMS = [
   { id: 'leaderboard', title: 'Ranking', subtitle: 'Compare seus voos' },
-  { id: 'settings', title: 'Configuracoes', subtitle: 'Som e conta' },
+  { id: 'settings', title: 'Configurações', subtitle: 'Som e conta' },
 ];
 
 export default function HomeScreen({ onNavigate, onPlay, best }) {
@@ -70,7 +70,7 @@ export default function HomeScreen({ onNavigate, onPlay, best }) {
           />
           <Text style={styles.title}>MAJOR FLYER</Text>
           <Text style={styles.subtitle}>
-            Toque para bater as asas. Solte e a gravidade cobra o preco.
+            Toque para bater as asas. Solte e a gravidade cobra o preço.
           </Text>
           <View style={styles.bestPill}>
             <Text style={styles.bestLabel}>RECORDE</Text>
@@ -80,7 +80,7 @@ export default function HomeScreen({ onNavigate, onPlay, best }) {
           {/* Cada partida iniciada apaga um passaro. Zerou, o video premiado
               devolve os cinco. */}
           <View style={[styles.livesPill, !livesLoaded && styles.livesPillWaiting]}>
-            <Text style={styles.bestLabel}>PARTIDAS</Text>
+            <Text style={styles.bestLabel}>VIDAS</Text>
             <LifeBirds lives={shown} size={20} gap={7} />
           </View>
         </View>

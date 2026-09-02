@@ -197,7 +197,8 @@ lá, e não numa tela de abertura.
 
 ## Fases e anúncios
 
-A cada **`STAGE_LENGTH` obstáculos** a fase fecha: o mundo congela, aparece o
+Uma partida completa tem **500 obstáculos** — 5 fases de 100. A cada
+**`STAGE_LENGTH` obstáculos** a fase fecha: o mundo congela, aparece o
 painel de fim de fase e a partida continua na fase seguinte — cenário novo,
 obstáculos novos e **+10% de velocidade** sobre a velocidade inicial.
 
@@ -220,6 +221,18 @@ Esse é o único número a mudar para sair do modo de teste.
 
 Cada fase corre **15% mais** que a velocidade base (multiplicador absoluto, não
 composto: a fase 5 é exatamente 60% mais rápida que a 1).
+
+### Zerar o jogo
+
+Fechar a **fase 5** troca o painel de fim de fase por um de conclusão: cinco
+estrelas, "Você zerou o Major Flyer", o total de obstáculos e o recorde. Dali o
+jogador escolhe **Continuar voando** (o jogo segue no ritmo da fase 5, com o
+placar correndo) ou volta ao **Menu**.
+
+O parabéns aparece **uma vez só**: a condição é ter fechado exatamente a última
+fase da tabela (`stageIndex + 1 === STAGE_COUNT`). Da fase 6 em diante volta o
+painel de sempre — comemoração que se repete a cada 100 obstáculos não é
+comemoração, é ruído.
 
 ### As armadilhas
 
@@ -263,21 +276,31 @@ tamanho do vão**: o cano de cima cresce exatamente o que o de baixo encolhe. O
 jogador não perde espaço — perde a certeza de onde a passagem vai estar, e não
 dá mais para decorar a altura.
 
-A regra que separa isso de uma sacanagem: **uma coluna só se mexe enquanto
-estiver a dois obstáculos ou mais de distância**. Passando no obstáculo 5, o
-primeiro que pode mudar é o 7; no 9, o 11. Se o jogador alcançar uma coluna que
-ainda está deslizando, ela **para onde estiver** — o vão é válido em qualquer
-ponto do caminho, então parar no meio não cria situação impossível.
+**O movimento acontece na tela, à vista.** A coluna começa a deslizar no frame
+em que **entra pela direita** e para quando chega a **1 segundo de viagem** do
+pássaro (`DRIFT_SAFE_SECONDS`). São os dois lados do mesmo acordo: dá para ver a
+armadilha acontecer, e ainda sobra um segundo inteiro com a coluna parada para
+se posicionar. Se o jogador alcançar uma que ainda desliza, ela **para onde
+estiver** — o vão é válido em qualquer ponto do caminho.
 
-Metade das colunas se mexe, em média, e o deslocamento nunca é menor que 28% da
-faixa útil: movimento pequeno demais ninguém nota, e a armadilha viraria só um
-sorteio diferente.
+Enquanto desliza, o cano **acende** na cor clara dele mesmo. Não é o vermelho
+das outras armadilhas de propósito: aqui não há perigo novo, o vão continua do
+mesmo tamanho. O brilho só serve para o olho achar a coluna certa numa tela em
+que tudo já se move.
 
-> Com o espaçamento atual, a coluna a dois obstáculos de distância ainda está
-> **fora da tela** — o jogador não vê o movimento acontecendo, ele vê a coluna
-> entrar já no lugar novo. É o que a regra dos dois obstáculos pede. Se quiser
-> que ele veja a coluna deslizando, baixe `DRIFT_MIN_AHEAD` para 1 — mas aí ela
-> se mexe com o jogador já se posicionando para entrar nela.
+O movimento leva ~0,6 s, cerca de 80% das colunas se mexem, e o deslocamento
+nunca é menor que 28% da faixa útil — movimento pequeno demais ninguém nota, e a
+armadilha viraria só um sorteio de altura diferente.
+
+> **Por que distância, e não contagem de obstáculos.** A primeira versão dizia
+> "só mexe em coluna que esteja a dois obstáculos de distância", e a armadilha
+> ficou invisível. O motivo é geométrico: quando o pássaro cruza uma coluna, a
+> seguinte já está a *dois* espaçamentos, e cabe pouco mais de **uma** coluna na
+> tela à frente dele. Contar obstáculos nunca ia colocar o movimento no quadro.
+>
+> Agora `npm test` roda uma partida inteira na fase 4 e conta, frame a frame,
+> onde as colunas estavam quando deslizaram: **3052 de 3052 frames dentro da
+> tela**. Na versão anterior, esse mesmo teste dava 0 de 408.
 
 Os tempos do gelo são contados em **segundos de distância**, não em pixels:
 assim o aviso dura o mesmo tanto em qualquer fase — quanto mais rápida a coluna
@@ -294,14 +317,11 @@ lista — não existe `if` de fase espalhado pelo código.
 
 ### Os anúncios
 
-Uma regra do AdMob molda a tela: **vídeo premiado exige que o jogador escolha
-assistir e receba algo em troca** — obrigar a ver para continuar é violação de
-política, e o formato certo para pausa obrigatória é o **intersticial**.
+O jogo mostra **um único formato: o vídeo premiado**, e sempre por escolha do
+jogador. É o que a política do AdMob pede — *vídeo premiado exige que a pessoa
+escolha assistir e receba algo em troca* — e é também o formato de maior eCPM.
 
-Daí a divisão: **premiado onde há prêmio, intersticial na virada de fase**.
-
-O painel de fim de fase tem duas saídas, e **cada fase mostra um anúncio, nunca
-dois**:
+O painel de fim de fase tem duas saídas:
 
 - **Assistir e ganhar escudo** — vídeo premiado; a recompensa é um escudo (anel
   azul em volta do pássaro) que perdoa a batida seguinte. Ele **não some no
@@ -309,20 +329,22 @@ dois**:
   *enquanto ainda houver anel na tela toda colisão continua sendo perdoada*, seja
   a outra coluna do mesmo par, a coluna seguinte ou o chão. O tempo está em
   `SHIELD_FADE_FRAMES` ([constants.js](src/game/constants.js)).
-- **Continuar sem prêmio** — entra o **intersticial** e a fase vira. É a pausa
-  natural do jogo (fase fechada, jogador parado, painel na tela), que é
-  exatamente onde a política do AdMob quer esse formato — e nunca por cima de um
-  toque dado esperando outra coisa.
+- **Continuar sem prêmio** — vai **direto para a fase seguinte**, sem anúncio
+  nenhum. Mostrar propaganda para quem acabou de dizer "não quero" é a maneira
+  mais rápida de perder o jogador — ainda mais quando ele nem escolheu ver.
 
-Quem assiste ao premiado **não** leva o intersticial em seguida: dois anúncios
-seguidos é o caminho curto para a desinstalação, e o premiado paga mais. Para
-cobrar os dois, é um `await showInterstitial()` antes do `advanceStage` em
-`watchAd` ([GameScreen.js](src/screens/GameScreen.js)).
+O outro uso do premiado é a recarga das **5 partidas** (seção acima), na Home e
+no painel de fim de jogo.
 
-Os dois formatos começam a **carregar quando a fase fecha**, não no clique:
-anúncio que só carrega na hora faz o jogador apertar o botão e não ver nada
-acontecer. Se mesmo assim não estiver pronto, a fase avança sem anúncio — o jogo
-nunca fica esperando.
+O vídeo começa a **carregar quando a fase fecha**, não no clique: anúncio que só
+carrega na hora faz o jogador apertar o botão e não ver nada acontecer. Se mesmo
+assim não estiver pronto, a fase avança sem escudo — o jogo nunca fica esperando.
+
+> **E o intersticial?** A unidade está cadastrada nas duas plataformas e
+> `showInterstitial()` está implementado em [ads.js](src/services/ads.js), mas
+> **nada no jogo o chama**. Se um dia fizer sentido (uma pausa obrigatória a cada
+> N partidas, por exemplo), é uma linha em [useAds.js](src/hooks/useAds.js):
+> `run('interstitial', ads.showInterstitial)`.
 
 ### As 5 partidas
 

@@ -16,10 +16,11 @@ export const PHASE = {
 /**
  * Quantos obstaculos passam ate fechar uma fase.
  *
- * TESTE: 10, para dar para ver a troca de fase e o anuncio em poucos segundos.
- * PRODUCAO: volte para 50 — e o unico numero que precisa mudar.
+ * E o unico numero que separa uma partida de teste de uma partida de verdade:
+ * baixe para 10 quando quiser ver as cinco fases (e os dois anuncios) em poucos
+ * minutos, e devolva para 100 antes de gerar a build.
  */
-export const STAGE_LENGTH = 10;
+export const STAGE_LENGTH = 100;
 
 /**
  * Quanto tempo o escudo leva para se dissipar depois da primeira batida, em
@@ -72,13 +73,18 @@ export const HEAVY_WARN_FRAMES = 120;
  * cresce exatamente o que o de baixo encolhe. O jogador nao ganha nem perde
  * espaco — ele so nao pode mais decorar a altura da passagem.
  *
- * `DRIFT_MIN_AHEAD` e a regra de justica: uma coluna so se mexe enquanto
- * estiver a dois obstaculos ou mais de distancia. Passando no obstaculo 5, o
- * primeiro que pode mudar e o 7. Com o espacamento atual isso acontece fora da
- * tela — se quiser que o jogador VEJA a coluna deslizando, baixe para 1, mas ai
- * ela se mexe com ele ja se posicionando para entrar.
+ * A antecedencia e medida em DISTANCIA, e nao em quantidade de obstaculos.
+ * Contar obstaculos nao funcionou: quando o passaro cruza uma coluna, a
+ * seguinte ja esta a dois espacamentos, e cabe pouco mais de uma coluna na tela
+ * a frente dele — o movimento acontecia inteiro fora do quadro e a armadilha
+ * parecia sorteio de altura.
+ *
+ * Agora a coluna comeca a deslizar no frame em que ENTRA pela direita, e para
+ * quando chega a DRIFT_SAFE_SECONDS de viagem do passaro. Assim o jogador ve o
+ * movimento acontecer e ainda tem um segundo inteiro com a coluna parada para
+ * se posicionar.
  */
-export const DRIFT_MIN_AHEAD = 2; // obstaculos de antecedencia
-export const DRIFT_CHANCE = 0.5; // metade das colunas, em media
-export const DRIFT_FRAMES = 70; // ~1,2 s deslizando ate o lugar novo
+export const DRIFT_SAFE_SECONDS = 1; // silencio obrigatorio antes da coluna chegar
+export const DRIFT_CHANCE = 0.8; // quase toda coluna se mexe
+export const DRIFT_FRAMES = 36; // ~0,6 s deslizando, para caber na janela visivel
 export const DRIFT_MIN_STEP = 0.28; // fatia minima da faixa util, para se notar

@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   },
   back: { minWidth: 86, flexDirection: 'row', alignItems: 'center' },
   backIcon: { color: theme.pillar, fontSize: 30, lineHeight: 32, marginRight: 2, marginTop: -4 },
-  backLabel: { color: theme.pillar, fontSize: 15, fontWeight: '700' },
+  backLabel: { color: theme.pillar, fontSize: 15, fontWeight: '700', marginLeft: 2 },
   title: {
     flex: 1,
     textAlign: 'center',

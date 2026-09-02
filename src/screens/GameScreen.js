@@ -26,7 +26,7 @@ import {
   PHASE,
   STAGE_LENGTH,
 } from '../game/constants';
-import { stageAt, stageNumber } from '../game/stages';
+import { STAGE_COUNT, stageAt, stageNumber } from '../game/stages';
 import { computeLayout } from '../game/layout';
 import World from '../game/World';
 import { captureSession, restoreSession } from '../game/session';
@@ -55,7 +55,7 @@ const PROGRESS_FONT = 10; // tamanho do contador de obstaculos da fase
 const SCORE_BLOCK = 74; // altura ocupada pelo placar (fonte 56 + folga)
 
 // Chute inicial da altura de cada painel, so para o primeiro frame.
-const PANEL_ESTIMATE = { hint: 112, pause: 128, over: 300, stage: 250 };
+const PANEL_ESTIMATE = { hint: 112, pause: 128, over: 300, stage: 250, win: 380 };
 
 export default function GameScreen({ onExit, best, onScore }) {
   // O jogo sempre ocupa a tela inteira (desenha ate a borda e o HUD respeita os
@@ -125,8 +125,10 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
         iceBottom: new Animated.Value(0),
         warnTop: new Animated.Value(0),
         warnBottom: new Animated.Value(0),
-        // Ultimo valor enviado de cada um dos quatro acima (ver `sync`).
-        last: { iceTop: 0, iceBottom: 0, warnTop: 0, warnBottom: 0 },
+        // Brilho de quando o par esta deslizando na vertical.
+        driftGlow: new Animated.Value(0),
+        // Ultimo valor enviado de cada um dos cinco acima (ver `sync`).
+        last: { iceTop: 0, iceBottom: 0, warnTop: 0, warnBottom: 0, driftGlow: 0 },
       })),
     };
   }
@@ -139,7 +141,7 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
   const [hintKind, setHintKind] = useState(resumedRef.current ? 'resumed' : 'start');
   const [stageIndex, setStageIndex] = useState(world.stage);
   const [shield, setShield] = useState(world.shield);
-  const { adState, adSeconds, showRewarded, showRewardedOrGrant, showInterstitial } = useAds();
+  const { adState, adSeconds, showRewarded, showRewardedOrGrant } = useAds();
   // O hook so serve para redesenhar o painel de fim de jogo quando as vidas
   // mudam; quem decide alguma coisa le livesNow(), que nunca esta atrasado.
   const { lives } = useLives();
@@ -204,15 +206,16 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
       t.top.setValue(p.gapCenter - p.gap / 2);
       t.bottom.setValue(p.gapCenter + p.gap / 2);
 
-      const top = p.ice && p.ice.side === 'top';
-      const bottom = p.ice && p.ice.side === 'bottom';
+      const top = p.ice?.side === 'top';
+      const bottom = p.ice?.side === 'bottom';
       const next = {
         iceTop: top ? p.ice.out : 0,
         iceBottom: bottom ? p.ice.out : 0,
         warnTop: top ? p.ice.warn : 0,
         warnBottom: bottom ? p.ice.warn : 0,
+        driftGlow: p.driftGlow || 0,
       };
-      for (const key of ['iceTop', 'iceBottom', 'warnTop', 'warnBottom']) {
+      for (const key of ['iceTop', 'iceBottom', 'warnTop', 'warnBottom', 'driftGlow']) {
         if (next[key] !== t.last[key]) {
           t[key].setValue(next[key]);
           t.last[key] = next[key];
@@ -358,12 +361,11 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
         setPhase(world.phase);
         syncCarry();
         if (world.phase === PHASE.STAGE_CLEAR) {
-          // Fase fechada: o mundo ja congelou sozinho (World.isIdle). Os dois
-          // anuncios da troca comecam a carregar agora, porque so um deles vai
-          // ser usado e nao da para saber qual ate o jogador escolher.
+          // Fase fechada: o mundo ja congelou sozinho (World.isIdle). O video do
+          // escudo comeca a carregar agora, senao o jogador aperta o botao e
+          // fica olhando para nada.
           hideHintNow();
           ads.preloadRewarded();
-          ads.preloadInterstitial();
         }
         if (world.phase === PHASE.OVER) {
           overAtRef.current = Date.now();
@@ -464,28 +466,16 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
    * Botao "assistir": video PREMIADO, com o escudo como recompensa.
    *
    * Escudo e premio, nao pedagio: assistido, pulado ou indisponivel, a fase
-   * avanca do mesmo jeito — so o escudo depende do video. Quem passa por aqui
-   * nao ve o intersticial da troca de fase: um anuncio por fase basta, e dois
-   * seguidos e o caminho curto para a desinstalacao. (Para cobrar os dois,
-   * bastaria um `await showInterstitial()` antes do `advanceStage`.)
+   * avanca do mesmo jeito — so o escudo depende do video.
+   *
+   * O caminho de recusa ("continuar sem premio") nao mostra anuncio nenhum: vai
+   * direto para a fase seguinte. Anuncio no jogador que acabou de dizer "nao
+   * quero" e a maneira mais rapida de perde-lo — e ele nem escolheu ver.
    */
   const watchAd = useCallback(async () => {
     const { rewarded } = await showRewarded();
     advanceStage(rewarded);
   }, [advanceStage, showRewarded]);
-
-  /**
-   * Botao "continuar sem premio": aqui entra o INTERSTICIAL da troca de fase.
-   *
-   * E a pausa natural do jogo — fase fechada, jogador parado, painel na tela —
-   * que e exatamente onde a politica do AdMob quer esse formato, e nunca por
-   * cima de um toque dado esperando outra coisa. Anuncio que nao carregou nao
-   * segura ninguem: `showInterstitial` responde na hora e a fase avanca.
-   */
-  const skipAd = useCallback(async () => {
-    await showInterstitial();
-    advanceStage(false);
-  }, [advanceStage, showInterstitial]);
 
   /**
    * Fim das cinco partidas: um video premiado devolve as cinco. Sem SDK, sem
@@ -541,6 +531,10 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
     ? `A seguir: ${nextLook.name} · +${Math.round((nextLook.speed - 1) * 100)}% de velocidade`
     : `A seguir: fase ${stageNumber(stageIndex) + 1} · velocidade no maximo`;
   const rewardOffered = ads.canShow('rewarded');
+  // Zerou: acabou de fechar a ULTIMA fase da tabela. Da fase seguinte em diante
+  // o jogo continua no ritmo da quinta, e o painel volta a ser o de sempre —
+  // parabens que se repete a cada 100 obstaculos nao e parabens, e ruido.
+  const zerou = stageIndex + 1 === STAGE_COUNT;
 
   // Duas situacoes, so. O aviso de abertura e da fase 1; o de tela girada
   // aparece em qualquer fase porque sem ele ninguem descobre que o jogo esta
@@ -585,6 +579,7 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
             iceBottom={t.iceBottom}
             warnTop={t.warnTop}
             warnBottom={t.warnBottom}
+            driftGlow={t.driftGlow}
           />
         ))}
         <Bird
@@ -701,14 +696,33 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
           layout={layout}
           insets={insets}
           portraitTop={panelTop}
-          height={panelHeights.stage}
-          onMeasure={(h) => measurePanel('stage', h)}
+          height={zerou ? panelHeights.win : panelHeights.stage}
+          onMeasure={(h) => measurePanel(zerou ? 'win' : 'stage', h)}
         >
           <View style={styles.panel}>
-            <Text style={styles.panelTitle}>
-              {`Fase ${stageNumber(stageIndex)} concluida`}
-            </Text>
-            <Text style={styles.panelText}>{nextLine}</Text>
+            {zerou ? (
+              <>
+                {/* uma estrela por fase vencida */}
+                <Text style={styles.winStars}>{'★'.repeat(STAGE_COUNT)}</Text>
+                <Text style={styles.winTitle}>Voce zerou o Major Flyer!</Text>
+                <Text style={styles.panelText}>
+                  {`${STAGE_COUNT} fases, ${STAGE_LENGTH * STAGE_COUNT} obstaculos, gelo, gravidade dobrada e o vao fugindo do lugar. Nada disso te derrubou. Parabens.`}
+                </Text>
+
+                <View style={styles.statsRow}>
+                  <Stat label="Obstaculos" value={world.score} highlight />
+                  <View style={styles.divider} />
+                  <Stat label="Recorde" value={Math.max(best, world.score)} />
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.panelTitle}>
+                  {`Fase ${stageNumber(stageIndex)} concluida`}
+                </Text>
+                <Text style={styles.panelText}>{nextLine}</Text>
+              </>
+            )}
 
             <View style={styles.stageButtons}>
               {rewardOffered && (
@@ -719,16 +733,21 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
                 />
               )}
               <Button
-                title="Continuar sem premio"
+                title={zerou ? 'Continuar voando' : 'Continuar sem prêmio'}
                 variant={rewardOffered ? 'ghost' : 'primary'}
-                onPress={skipAd}
+                onPress={() => advanceStage(false)}
                 style={styles.stageButton}
               />
+              {zerou && (
+                <Button title="Menu" variant="ghost" onPress={onExit} style={styles.stageButton} />
+              )}
             </View>
             <Text style={styles.tapHint}>
-              {rewardOffered
-                ? 'O escudo perdoa uma batida. Sem ele, entra um anuncio curto.'
-                : 'Anuncios entram quando o AdMob for configurado.'}
+              {zerou
+                ? 'Daqui para frente o jogo segue no ritmo da fase 5. O placar continua.'
+                : rewardOffered
+                  ? 'O vídeo é opcional: o escudo perdoa uma batida.'
+                  : 'Anuncios entram quando o AdMob for configurado.'}
             </Text>
           </View>
         </Overlay>
@@ -746,32 +765,25 @@ function GameArea({ width, height, onExit, best, onScore, carry }) {
             <Text style={styles.panelTitle}>{isNewBest ? 'Novo recorde!' : 'Voo encerrado'}</Text>
 
             <View style={styles.statsRow}>
-              {/* Tambem direto do mundo: o resultado final e a ultima coisa
-                  que pode aparecer com um ponto a menos. */}
               <Stat label="Pontos" value={world.score} highlight />
               <View style={styles.divider} />
               <Stat label="Recorde" value={Math.max(best, world.score)} />
             </View>
 
-            {/* Antes de escolher entre jogar de novo e o video, o jogador
-                precisa ver quantas partidas ainda lhe restam. */}
             <View style={styles.livesRow}>
-              <Text style={styles.livesLabel}>PARTIDAS</Text>
+              <Text style={styles.livesLabel}>VIDAS</Text>
               <LifeBirds lives={lives} size={19} gap={7} />
             </View>
 
             {lives > 0 ? (
-              <>
                 <View style={styles.row}>
                   <Button title="Jogar de novo" onPress={restart} />
                   <Button title="Menu" variant="ghost" onPress={onExit} style={{ marginLeft: 12 }} />
                 </View>
-                <Text style={styles.tapHint}>ou toque na tela</Text>
-              </>
             ) : (
               <>
                 <Text style={styles.outOfLives}>
-                  Suas 5 partidas acabaram. Assista a um video e ganhe outras 5.
+                  Suas 5 vidas acabaram.
                 </Text>
                 <View style={styles.stageButtons}>
                   <Button
@@ -844,7 +856,7 @@ const ScoreHud = forwardRef(function ScoreHud({ world, stageLabel, scoreTop, sta
         <View style={styles.stageProgressRow}>
           <ScoreDigits
             ref={progressRef}
-            places={2}
+            places={String(STAGE_LENGTH).length}
             value={Math.min(world.stageProgress, STAGE_LENGTH)}
             fontSize={PROGRESS_FONT}
             style={styles.stageProgress}
@@ -961,6 +973,25 @@ const styles = StyleSheet.create({
     minWidth: 300,
   },
   panelTitle: { color: theme.text, fontSize: 22, fontWeight: '800', marginBottom: 16 },
+  winStars: {
+    color: theme.bird,
+    fontSize: 20,
+    letterSpacing: 6,
+    marginBottom: 6,
+    textShadowColor: 'rgba(255,213,74,0.55)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+  winTitle: {
+    color: theme.bird,
+    fontSize: 24,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 12,
+    textShadowColor: 'rgba(255,213,74,0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 16,
+  },
   panelText: {
     color: theme.textDim,
     fontSize: 13,

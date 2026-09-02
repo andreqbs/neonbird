@@ -167,12 +167,38 @@ export default function PillarPair({
   iceBottom,
   warnTop,
   warnBottom,
+  driftGlow,
 }) {
   const w = layout.pillarWidth;
   const h = layout.playHeight;
   const look = (typeof stage === 'object' && stage ? stage : stageAt(stage || 0)).pillar;
   const radius = w * look.bodyRadius;
   const hasIce = iceMax > 0 && iceTop && iceBottom;
+
+  /**
+   * Brilho de quando a coluna esta deslizando (fase do vao que se mexe).
+   *
+   * Usa a cor CLARA do proprio cano, e nao o vermelho das outras armadilhas: o
+   * vermelho quer dizer "perigo chegando", e aqui nao ha perigo novo — o vao
+   * continua do mesmo tamanho, so mudou de lugar. O que o brilho faz e chamar o
+   * olho para a coluna certa no meio de uma tela em que tudo ja se move.
+   */
+  const glow = (side) =>
+    driftGlow ? (
+      <Animated.View
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: w,
+          height: h,
+          borderRadius: radius,
+          backgroundColor: look.cap[0],
+          opacity: driftGlow,
+        }}
+        key={side}
+      />
+    ) : null;
 
   return (
     <Animated.View
@@ -197,6 +223,7 @@ export default function PillarPair({
         }}
       >
         <Column width={w} height={h} capAtBottom look={look} />
+        {glow('top')}
         {/* aviso: o cano inteiro pisca em vermelho antes de soltar o gelo */}
         {warnTop ? (
           <Animated.View
@@ -225,6 +252,7 @@ export default function PillarPair({
         }}
       >
         <Column width={w} height={h} capAtBottom={false} look={look} />
+        {glow('bottom')}
         {warnBottom ? (
           <Animated.View
             style={{

@@ -116,7 +116,7 @@ function GlobalTab({ status, rows, player, loading, onRefresh, onOpenSettings })
         <Text style={styles.noticeBody}>{copy.body}</Text>
         {onOpenSettings ? (
           <Button
-            title="Ver em Configuracoes"
+            title="Ver em Configurações"
             variant="ghost"
             compact
             onPress={onOpenSettings}
@@ -144,7 +144,7 @@ function GlobalTab({ status, rows, player, loading, onRefresh, onOpenSettings })
           Conecte sua conta do Google Play Jogos para ver o placar e aparecer nele.
         </Text>
         <Button
-          title="Ir para Configuracoes"
+          title="Ir para Configurações"
           compact
           onPress={onOpenSettings}
           style={{ marginTop: 16, alignSelf: 'flex-start' }}
