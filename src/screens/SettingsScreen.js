@@ -1,51 +1,38 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import Screen, { Card, SectionTitle } from '../ui/Screen';
-import { ActionRow, ToggleRow } from '../ui/Row';
+import { ActionRow, InputRow, ToggleRow } from '../ui/Row';
 import { theme } from '../ui/theme';
 import { useSettings } from '../state/SettingsContext';
+import usePlayer from '../hooks/usePlayer';
+import { NAME_MAX } from '../services/identity';
 import { clearRuns } from '../services/scores';
-import { UNAVAILABLE_REASON, availability, getPlayer, signIn } from '../services/playGames';
-
-const REASON_LABEL = {
-  [UNAVAILABLE_REASON.PLATFORM]: 'Indisponivel (so Android)',
-  [UNAVAILABLE_REASON.NO_NATIVE_MODULE]: 'Indisponivel nesta build',
-  [UNAVAILABLE_REASON.NO_LEADERBOARD_ID]: 'Placar nao cadastrado',
-};
-
-const REASON_HELP = {
-  [UNAVAILABLE_REASON.PLATFORM]:
-    'O Google Play Jogos e um servico Android. Seus recordes continuam salvos no aparelho.',
-  [UNAVAILABLE_REASON.NO_NATIVE_MODULE]:
-    'A conta do Play Jogos exige codigo nativo, que o Expo Go nao carrega. Gere uma ' +
-    'build com EAS Build para habilitar (veja o README).',
-  [UNAVAILABLE_REASON.NO_LEADERBOARD_ID]:
-    'Falta colar o ID do placar criado no Google Play Console em src/services/playGames.js.',
-};
 
 export default function SettingsScreen({ onBack, onScoresCleared }) {
   const { settings, setSetting } = useSettings();
-  const [player, setPlayer] = useState(null);
-  const [connecting, setConnecting] = useState(false);
+  const { player, rename } = usePlayer();
+  const [enviado, setEnviado] = useState(false);
 
-  const status = availability();
 
-  useEffect(() => {
-    if (!status.available) return;
-    getPlayer().then(setPlayer).catch(() => {});
-  }, [status.available]);
-
-  const handleConnect = useCallback(async () => {
-    setConnecting(true);
-    const result = await signIn();
-    setPlayer(result);
-    setConnecting(false);
-    if (!result.signedIn) {
-      Alert.alert('Nao foi possivel conectar', 'Tente de novo mais tarde ou confira sua conta do Google Play Jogos.');
+  /**
+   * Passar o codigo adiante. O `Share` do sistema resolve os dois casos de uma
+   * vez — mandar direto no WhatsApp do amigo ou so copiar — e nao custa
+   * biblioteca nova nenhuma ao app.
+   */
+  const compartilharCodigo = useCallback(async () => {
+    if (!player) return;
+    try {
+      await Share.share({
+        message:
+          'Me chama para o seu grupo no Major Flyer! Meu codigo de jogador e:\n\n' + player.id,
+      });
+      setEnviado(true);
+      setTimeout(() => setEnviado(false), 2000);
+    } catch (e) {
+      // o jogador fechou a folha de compartilhamento: nao ha o que fazer
     }
-  }, []);
-
+  }, [player]);
   const handleClear = useCallback(() => {
     Alert.alert(
       'Apagar recordes locais?',
@@ -63,12 +50,6 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
       ]
     );
   }, [onScoresCleared]);
-
-  const accountValue = status.available
-    ? player?.signedIn
-      ? player.playerName || 'Conectado'
-      : 'Nao conectado'
-    : REASON_LABEL[status.reason];
 
   return (
     <Screen title="Configurações" onBack={onBack}>
@@ -95,29 +76,36 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
         />
       </Card>
 
-      {/*<SectionTitle>Conta</SectionTitle>*/}
-      {/*<Card>*/}
-      {/*  <ActionRow*/}
-      {/*    label="Google Play Jogos"*/}
-      {/*    description={*/}
-      {/*      status.available*/}
-      {/*        ? player?.signedIn*/}
-      {/*          ? 'Seus placares sobem para o ranking global automaticamente.'*/}
-      {/*          : 'Conecte para aparecer no ranking global.'*/}
-      {/*        : REASON_HELP[status.reason]*/}
-      {/*    }*/}
-      {/*    value={connecting ? 'Conectando...' : accountValue}*/}
-      {/*    onPress={status.available && !player?.signedIn ? handleConnect : undefined}*/}
-      {/*    disabled={!status.available || connecting}*/}
-      {/*    last*/}
-      {/*  />*/}
-      {/*</Card>*/}
-      {/*{status.available && !player?.signedIn ? (*/}
-      {/*  <Text style={styles.note}>*/}
-      {/*    O Play Jogos costuma entrar sozinho ao abrir o jogo. Este botao serve para quando o*/}
-      {/*    login automatico foi recusado ou voce quer trocar de conta.*/}
-      {/*  </Text>*/}
-      {/*) : null}*/}
+      <SectionTitle>Jogador</SectionTitle>
+      <Card>
+        <InputRow
+          label="Seu nome"
+          description="É assim que você aparece no ranking e no grupo."
+          value={player?.name ?? ''}
+          maxLength={NAME_MAX}
+          placeholder="Seu apelido"
+          onSubmit={rename}
+        />
+        <View style={styles.codeRow}>
+          <View style={styles.codeTexts}>
+            <Text style={styles.codeLabel}>Seu código de jogador</Text>
+            <Text style={styles.codeHint}>
+              Mande para quem vai te chamar para um grupo. Só o líder consegue adicionar alguém, e
+              ele precisa deste código.
+            </Text>
+            <Text style={styles.code} selectable numberOfLines={2}>
+              {player?.id ?? '...'}
+            </Text>
+          </View>
+          <Pressable
+            onPress={compartilharCodigo}
+            disabled={!player}
+            style={({ pressed }) => [styles.codeButton, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.codeButtonLabel}>{enviado ? 'Enviado' : 'Compartilhar'}</Text>
+          </Pressable>
+        </View>
+      </Card>
 
       <SectionTitle>Dados</SectionTitle>
       <Card>
@@ -145,6 +133,27 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginHorizontal: 6,
   },
+  codeRow: { paddingHorizontal: 18, paddingVertical: 15, gap: 12 },
+  codeTexts: { gap: 4 },
+  codeLabel: { color: theme.text, fontSize: 15, fontWeight: '700' },
+  codeHint: { color: theme.textDim, fontSize: 12, lineHeight: 17 },
+  code: {
+    marginTop: 6,
+    color: theme.pillar,
+    fontSize: 13,
+    letterSpacing: 0.5,
+  },
+  codeButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(46,230,197,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(46,230,197,0.45)',
+  },
+  codeButtonLabel: { color: theme.pillar, fontSize: 14, fontWeight: '800' },
+
   about: { marginTop: 32, alignItems: 'center', gap: 6, paddingHorizontal: 12 },
   aboutText: { color: theme.text, fontSize: 14, fontWeight: '800', letterSpacing: 1 },
   aboutDim: { color: theme.textDim, fontSize: 11, textAlign: 'center', lineHeight: 16 },

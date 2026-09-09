@@ -1,0 +1,58 @@
+# Major Flyer — servidor do ranking, pronto para a VPS.
+#
+#   cp .env.example .env   (e troque a senha)
+#   docker compose up -d --build
+#
+# Sobem duas coisas: a API e o Postgres. O banco NAO abre porta para fora — so
+# a API fala com ele, pela rede interna do compose. Se voce precisar entrar no
+# banco de fora, faca um tunel SSH em vez de publicar a 5432.
+
+name: majorflyer
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-majorflyer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no arquivo .env}
+      POSTGRES_DB: ${POSTGRES_DB:-majorflyer}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # A API so sobe depois que isto responde. Na primeira vez o Postgres
+      # demora alguns segundos criando o cluster.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-majorflyer} -d ${POSTGRES_DB:-majorflyer}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-majorflyer}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-majorflyer}?sslmode=disable
+      PORT: "8080"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      MAX_RUN_POINTS: ${MAX_RUN_POINTS:-2000}
+      MIN_RUN_GAP_SECONDS: ${MIN_RUN_GAP_SECONDS:-5}
+      RATE_PER_MINUTE: ${RATE_PER_MINUTE:-120}
+      RATE_BURST: ${RATE_BURST:-40}
+    ports:
+      # Com um proxy na frente (nginx, Caddy, Traefik) troque por
+      # "127.0.0.1:8080:8080": ai a API so responde para o proxy, e o HTTPS
+      # fica com ele.
+      - "${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/majorflyer-server", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  db-data:

@@ -1,0 +1,69 @@
+# Major Flyer — versão para o Dokploy (tipo "Docker Compose").
+#
+# Use este arquivo se preferir subir a API e o banco JUNTOS, num serviço só do
+# Dokploy. Se você criou o Postgres pelo painel (Database -> Postgres) e a API
+# como Application, não precisa deste arquivo — veja o README.
+#
+# No Dokploy: Create Service -> Compose -> aponte para o repositório e para
+#   server/docker-compose.dokploy.yml
+# Depois, na aba Domains, adicione o domínio apontando para o serviço `api`, na
+# porta 8080. O Traefik do Dokploy cuida do HTTPS.
+#
+# Duas diferenças em relação ao docker-compose.yml comum:
+#
+#  1. NENHUMA porta é publicada. Quem chega de fora é o Traefik, pela rede
+#     interna — abrir a 8080 na máquina seria uma porta sem certificado
+#     respondendo à internet.
+#  2. Os containers entram na `dokploy-network`, que é onde o Traefik enxerga.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-majorflyer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD nas variáveis do Dokploy}
+      POSTGRES_DB: ${POSTGRES_DB:-majorflyer}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-majorflyer} -d ${POSTGRES_DB:-majorflyer}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - dokploy-network
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-majorflyer}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-majorflyer}?sslmode=disable
+      PORT: "8080"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      # O Traefik do Dokploy fica na frente, então o IP de quem pediu vem no
+      # X-Forwarded-For. Sem isto, o limite por IP contaria todo mundo como se
+      # fosse um jogador só.
+      TRUST_PROXY: "true"
+      MAX_RUN_POINTS: ${MAX_RUN_POINTS:-2000}
+      MIN_RUN_GAP_SECONDS: ${MIN_RUN_GAP_SECONDS:-5}
+      RATE_PER_MINUTE: ${RATE_PER_MINUTE:-120}
+      RATE_BURST: ${RATE_BURST:-40}
+    healthcheck:
+      test: ["CMD", "/majorflyer-server", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - dokploy-network
+
+volumes:
+  db-data:
+
+networks:
+  dokploy-network:
+    external: true

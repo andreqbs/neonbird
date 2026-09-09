@@ -1,0 +1,44 @@
+# Os testes, com um Postgres descartavel.
+#
+#   docker compose -f docker-compose.test.yml run --rm test
+#
+# Este banco vive em memoria (tmpfs) e morre junto com o comando — ele existe
+# so para os testes. E de proposito que ele NAO e o do docker-compose.yml: os
+# testes limpam as tabelas antes de cada caso, e apontar isso para o banco de
+# verdade apagaria a rodada de todo mundo.
+
+name: majorflyer-test
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: teste
+      POSTGRES_PASSWORD: teste
+      POSTGRES_DB: teste
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teste -d teste"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  test:
+    image: golang:1.23-alpine
+    working_dir: /src
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TEST_DATABASE_URL: postgres://teste:teste@db:5432/teste?sslmode=disable
+      GOFLAGS: -count=1
+    volumes:
+      - .:/src
+      - go-build:/root/.cache/go-build
+      - go-mod:/go/pkg/mod
+    command: go test ./... -v
+
+volumes:
+  go-build:
+  go-mod:

@@ -9,6 +9,8 @@ import HomeScreen from './src/screens/HomeScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import useScores from './src/hooks/useScores';
+import usePlayer from './src/hooks/usePlayer';
+import cloud from './src/services/cloud';
 import { spendLife } from './src/services/lives';
 import audio from './src/audio/AudioManager';
 import ads from './src/services/ads';
@@ -29,6 +31,9 @@ function Root() {
   const { settings, loaded } = useSettings();
   const [screen, setScreen] = useState('home');
   const { best, refresh, submit } = useScores();
+  // Cria o jogador (codigo + apelido) ja na abertura: sem isso, o primeiro
+  // placar da instalacao nao teria a quem pertencer no ranking.
+  usePlayer();
 
   // A tela acompanha o aparelho: nada de travar orientacao. O layout inteiro do
   // jogo e derivado do tamanho, entao girar so recalcula as medidas.
@@ -66,7 +71,13 @@ function Root() {
   }, []);
 
   const handleScore = useCallback(
-    (score, meta) => submit(score, meta),
+    (score, meta) => {
+      // Sobe para a rodada da semana sem segurar a tela: quando nao ha rede (ou
+      // servidor configurado), `submitRun` guarda a partida e tenta de novo
+      // depois. O historico local, que e o que aparece na hora, e o `submit`.
+      cloud.submitRun(score);
+      return submit(score, meta);
+    },
     [submit]
   );
 

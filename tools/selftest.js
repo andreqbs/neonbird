@@ -24,6 +24,9 @@ const MODULES = [
   'src/game/World.js',
   'src/game/session.js',
   'src/services/lives.js',
+  'src/services/season.js',
+  'src/services/identity.js',
+  'src/services/cloud.js',
 ];
 
 function build() {
@@ -81,6 +84,16 @@ require.cache[storagePath] = {
   loaded: true,
   exports: { __esModule: true, default: memoryStorage },
 };
+const season = require(path.join(BUILD, 'src/game/../services/season.js'));
+const identity = require(path.join(BUILD, 'src/services/identity.js'));
+
+// O `cloud.js` le o endereco do servidor uma vez, quando e carregado. Definir a
+// variavel ANTES do require e o que permite testar o caminho ligado sem servidor
+// nenhum no ar — o `fetch` daqui a pouco vira um dublê.
+const FAKE_API = 'http://servidor-de-teste';
+process.env.EXPO_PUBLIC_API_URL = FAKE_API;
+const cloud = require(path.join(BUILD, 'src/services/cloud.js'));
+
 const LIVES_KEY = '@major-flyer/lives';
 const {
   MAX_LIVES,
@@ -947,10 +960,201 @@ async function livesSection() {
   check('disco atrasado nao devolve a vida ja gasta', livesNow() === MAX_LIVES - 1, `${livesNow()}`);
 }
 
+// -------------------------------------------------------- 6. rodadas semanais
+
+/**
+ * As rodadas abrem domingo 20h e fecham domingo 18h. E conta de calendario com
+ * fuso fixo: o tipo de coisa que funciona o ano inteiro e quebra numa virada de
+ * mes, entao aqui a semana e varrida hora a hora.
+ */
+function seasonSection() {
+  section('Rodadas semanais');
+
+  const em = (iso) => season.seasonAt(new Date(iso));
+
+  // 2026-09-06 e um domingo. 20h em Brasilia (-3) = 23h UTC.
+  check('abre domingo as 20h', em('2026-09-06T23:00:00Z').id === '2026-09-06', em('2026-09-06T23:00:00Z').id);
+  check(
+    'um minuto antes ainda e a rodada anterior',
+    em('2026-09-06T22:59:00Z').id === '2026-08-30',
+    em('2026-09-06T22:59:00Z').id
+  );
+  check('no meio da semana continua a mesma', em('2026-09-09T15:00:00Z').id === '2026-09-06');
+  check(
+    'domingo 17h59 ainda vale ponto',
+    em('2026-09-13T20:59:00Z').state === 'running' && em('2026-09-13T20:59:00Z').id === '2026-09-06'
+  );
+  check(
+    'domingo 18h01 ja e apuracao',
+    em('2026-09-13T21:01:00Z').state === 'counting' && em('2026-09-13T21:01:00Z').id === '2026-09-06'
+  );
+  check('domingo 20h01 comeca a rodada nova', em('2026-09-13T23:01:00Z').id === '2026-09-13');
+
+  const uma = em('2026-09-09T15:00:00Z');
+  const dias = (uma.nextOpensAt - uma.startsAt) / 86400000;
+  check('cada rodada dura uma semana cheia', Math.abs(dias - 7) < 1e-9, `${dias} dias`);
+  const janela = (uma.nextOpensAt - uma.endsAt) / 3600000;
+  check('sobram 2h de apuracao no fim', Math.abs(janela - 2) < 1e-9, `${janela}h`);
+
+  // Varredura: oito semanas, de hora em hora. Nenhum buraco, nenhuma sobra.
+  let buracos = 0;
+  let saltos = 0;
+  let anterior = null;
+  for (let h = 0; h < 24 * 7 * 8; h++) {
+    const quando = new Date(Date.UTC(2026, 8, 1, 0, 0, 0) + h * 3600000);
+    const s = season.seasonAt(quando);
+    const dentro = quando >= s.startsAt && quando < s.nextOpensAt;
+    if (!dentro) buracos++;
+    if (anterior && s.id !== anterior.id) {
+      const passo = (s.startsAt - anterior.startsAt) / 86400000;
+      if (Math.abs(passo - 7) > 1e-9) saltos++;
+    }
+    anterior = s;
+  }
+  check('todo instante cai dentro de uma rodada', buracos === 0, `${buracos} fora`);
+  check('e uma rodada comeca 7 dias depois da outra', saltos === 0, `${saltos} saltos`);
+
+  check('o rotulo sai legivel', season.seasonLabel(uma) === '6 a 13 de setembro', season.seasonLabel(uma));
+  check('o tempo que falta sai curto', season.formatRemaining(3 * 3600000 + 25 * 60000) === '3h 25min');
+}
+
+// --------------------------------------------------------- 7. identidade
+
+function identitySection() {
+  section('Codigo do jogador');
+
+  const uuid = identity.newUuid();
+  check(
+    'o codigo tem cara de UUID v4',
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid),
+    uuid
+  );
+  const muitos = new Set(Array.from({ length: 500 }, () => identity.newUuid()));
+  check('e nao repete', muitos.size === 500, `${muitos.size} de 500`);
+
+  check('nome ganha um corte de espacos', identity.sanitizeName('  Andre  ') === 'Andre');
+  check('nome colapsa espacos do meio', identity.sanitizeName('Voo   Livre') === 'Voo Livre');
+  check('nome curto demais e recusado', identity.sanitizeName('a') === null);
+  check('nome so de espacos e recusado', identity.sanitizeName('    ') === null);
+  check(
+    `nome longo e cortado em ${identity.NAME_MAX}`,
+    identity.sanitizeName('a'.repeat(60)).length === identity.NAME_MAX
+  );
+}
+
+// ------------------------------------------------ 8. a conversa com o servidor
+
+/**
+ * O lado do jogo na conversa com o servidor do ranking (`server/`, em Go).
+ *
+ * O servidor tem os testes dele, contra um Postgres de verdade. O que se
+ * confere AQUI e o combinado entre os dois: quais cabecalhos vao, o que o jogo
+ * faz quando a rede cai no meio de um placar, e o que ele NAO refaz quando o
+ * servidor disse um "nao" definitivo. Um `fetch` de mentira basta — nenhuma
+ * dessas respostas precisa de servidor no ar.
+ */
+async function cloudSection() {
+  section('Ranking online: o combinado com o servidor');
+
+  const pedidos = [];
+  let respostas = [];
+
+  const fetchOriginal = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    pedidos.push({ url, ...options });
+    const r = respostas.shift() || { status: 200, body: {} };
+    if (r.falha) {
+      throw Object.assign(new Error('sem rede'), { name: r.falha });
+    }
+    return {
+      ok: r.status < 400,
+      status: r.status,
+      text: async () => JSON.stringify(r.body ?? {}),
+    };
+  };
+
+  const limpar = async () => {
+    pedidos.length = 0;
+    respostas = [];
+    disk.delete('@major-flyer/pending-runs');
+  };
+
+  try {
+    check('com endereco configurado, o ranking liga', cloud.isConfigured() === true);
+
+    identity.resetPlayerState();
+    disk.clear();
+    const jogador = await identity.initPlayer();
+
+    // ---- o placar comum
+    await limpar();
+    respostas = [{ status: 200, body: { points: 140, total: 140, best: 140 } }];
+    const enviado = await cloud.submitRun(140);
+    const pedido = pedidos[0] || {};
+    check('o placar sobe', enviado.ok === true);
+    check('...pelo caminho certo', pedido.url === `${FAKE_API}/v1/runs`, pedido.url);
+    check('...com o codigo do jogador no cabecalho', pedido.headers?.['X-Player-Id'] === jogador.id);
+    check('...e com o segredo, que nunca aparece na tela', pedido.headers?.['X-Player-Secret'] === jogador.secret);
+    check('...levando so os pontos', pedido.body === JSON.stringify({ points: 140 }));
+
+    // ---- a regra do servidor chega inteira na tela
+    await limpar();
+    respostas = [{ status: 409, body: { error: 'a rodada está em apuração' } }];
+    const recusado = await cloud.submitRun(10);
+    check('o "nao" do servidor chega escrito', recusado.error === 'a rodada está em apuração');
+    check(
+      '...e um placar recusado por regra nao volta para a fila',
+      !disk.has('@major-flyer/pending-runs') || JSON.parse(disk.get('@major-flyer/pending-runs')).length === 0
+    );
+
+    // ---- sem rede: guarda e manda depois
+    await limpar();
+    respostas = [{ falha: 'TypeError' }];
+    const perdido = await cloud.submitRun(77);
+    check('sem rede o placar nao se perde', perdido.ok === false && disk.has('@major-flyer/pending-runs'));
+    check(
+      '...ele fica guardado com os pontos certos',
+      JSON.parse(disk.get('@major-flyer/pending-runs'))[0]?.points === 77
+    );
+
+    pedidos.length = 0;
+    respostas = [{ status: 200, body: { total: 77 } }];
+    const subiram = await cloud.flushPending();
+    check('e sobe na primeira conexao que der', subiram === 1);
+    check('...uma vez so', pedidos.length === 1);
+    check('...esvaziando a fila', JSON.parse(disk.get('@major-flyer/pending-runs')).length === 0);
+
+    // ---- servidor novo (ou banco restaurado): se registra e tenta de novo
+    await limpar();
+    respostas = [
+      { status: 401, body: { error: 'jogador desconhecido neste servidor' } },
+      { status: 200, body: { player: { id: jogador.id, name: jogador.name } } },
+      { status: 200, body: { total: 12 } },
+    ];
+    const depoisDoRegistro = await cloud.submitRun(12);
+    check('servidor que nao conhece o aparelho: ele se apresenta e insiste', depoisDoRegistro.ok === true);
+    check('...e a apresentacao foi mesmo em /v1/players', pedidos[1]?.url === `${FAKE_API}/v1/players`, pedidos[1]?.url);
+
+    // ---- o ranking e publico: nao precisa de identificacao
+    await limpar();
+    respostas = [{ status: 200, body: { rows: [] } }];
+    await cloud.topPlayers(20);
+    check('o ranking sai sem cabecalho de jogador', pedidos[0]?.headers?.['X-Player-Id'] === undefined);
+    check('...e pede o tamanho que a tela quer', pedidos[0]?.url === `${FAKE_API}/v1/rankings/players?limit=20`, pedidos[0]?.url);
+  } finally {
+    global.fetch = fetchOriginal;
+    identity.resetPlayerState();
+  }
+}
+
+seasonSection();
+identitySection();
+
 livesSection()
+  .then(cloudSection)
   .catch((e) => {
     failures++;
-    console.log(`  FALHOU  secao de vidas quebrou  (${e.message})`);
+    console.log(`  FALHOU  uma secao assincrona quebrou  (${e.message})`);
   })
   .then(() => {
     console.log(

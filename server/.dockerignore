@@ -1,0 +1,6 @@
+# O build so precisa do codigo Go e do schema.
+.env
+*.md
+docker-compose*.yml
+Dockerfile
+.dockerignore

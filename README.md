@@ -54,6 +54,12 @@ Testes do núcleo do jogo (rodam no Node, sem emulador):
 npm test
 ```
 
+Testes do servidor do ranking (sobem um Postgres descartável e o derrubam):
+
+```bash
+cd server && docker compose -f docker-compose.test.yml run --rm test
+```
+
 ---
 
 ## Telas
@@ -61,9 +67,107 @@ npm test
 | Tela | O que tem |
 |------|-----------|
 | **Início** | Jogar, Ranking, Configurações, o recorde do aparelho e as 5 partidas |
-| **Ranking** | Aba *Global* (Google Play Jogos) e aba *Seus voos* (histórico local) |
+| **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (histórico local) |
 | **Configurações** | Música de fundo, som do toque, efeitos, conta do Play Jogos, apagar recordes |
 | **Jogo** | Partida, placar ao vivo, pausa e fim de jogo |
+
+---
+
+## Grupos, rodadas e ranking
+
+O jogo tem uma parte online: **rodadas semanais**, ranking **individual** e
+ranking **por grupo**, com a pontuação do grupo sendo a soma do que seus
+jogadores fizerem na rodada.
+
+### Sem cadastro: o aparelho é a conta
+
+Ninguém cria login. Na primeira abertura o app inventa dois UUIDs
+([identity.js](src/services/identity.js)):
+
+- **o código** — público. É o que o jogador copia em *Configurações* e manda
+  para quem vai chamá-lo para um grupo;
+- **o segredo** — nunca aparece na tela e só viaja nas chamadas ao servidor. É
+  ele que impede alguém de, sabendo o código dos outros, mandar pontos no nome
+  deles.
+
+O apelido é editável e vale para o ranking e para o grupo. Trocar de aparelho
+hoje significa um código novo — é o preço de não pedir cadastro para jogar.
+
+### A rodada da semana
+
+Abre **domingo às 20h** e fecha **domingo seguinte às 18h**. As duas horas que
+sobram são a **janela de apuração**: ninguém mais pontua e os totais podem ser
+conferidos antes da rodada nova. A conta está em
+[season.js](src/services/season.js) e é a mesma no servidor — o id da rodada é a
+data do domingo em que ela abriu, então os dois lados chegam ao mesmo texto sem
+precisar combinar nada. `npm test` varre oito semanas hora a hora conferindo que
+todo instante cai dentro de exatamente uma rodada.
+
+### Os grupos
+
+- Quem cria vira **líder**, e aparece com **👑** na lista.
+- **Só o líder chama** gente nova, e chama pelo código do jogador.
+- Até **8 jogadores** por grupo, **um grupo por jogador por rodada**.
+- Se o líder sai, a coroa passa para o membro mais antigo; se não sobrar
+  ninguém, o grupo se desfaz.
+- O grupo tem espaço para **escudo** (`crest`): hoje é a inicial do nome num
+  selo, e o campo já existe no banco para quando as artes prontas entrarem.
+
+Essas regras moram **no servidor**, não na tela
+([schema.sql](server/schema.sql), [store.go](server/store.go)): regra que vive só
+no cliente é regra que dá para burlar com um app modificado.
+
+### A arquitetura, e por que ela é essa
+
+**Um servidor próprio, em [`server/`](server/): Go + Postgres, num `docker
+compose up -d`.** Ele é deste repositório e roda na sua VPS — sem serviço de
+terceiro no meio, sem mensalidade e sem cota.
+
+- **Go** porque o que vai para a VPS é um binário estático de ~12 MB, sem runtime
+  para instalar, que sobe em milissegundos e ocupa poucos MB de RAM. A imagem
+  final é `distroless`: não tem shell, nem gerenciador de pacotes, nem
+  compilador — menos coisa para dar errado num servidor exposto.
+- **Postgres** porque tudo que este ranking faz é juntar e somar por rodada
+  (`sum(points) … group by`), e porque as regras que não podem falhar viram
+  índice, não `if`: é o `one_group_per_season` que garante um grupo por jogador
+  por rodada mesmo com dois convites no mesmo instante.
+- **REST simples, falado por `fetch`.** Sem SDK e sem código nativo: cada
+  dependência nativa deste projeto já custou uma briga (a do AdMob custou uma
+  versão de Kotlin), e o ranking não ia trazer outra. De quebra funciona na web
+  e em qualquer build, inclusive Expo Go.
+
+A identificação vai em dois cabeçalhos (`X-Player-Id`, `X-Player-Secret`), sem
+token e sem sessão: o aparelho é a conta, o par já está na memória do jogo, e não
+há *refresh* nem relógio para dar errado no meio de uma partida. O segredo é
+guardado como hash — um vazamento do banco não entrega o direito de pontuar no
+nome de ninguém.
+
+Partidas jogadas **sem rede** ficam guardadas e sobem sozinhas na próxima
+conexão ([cloud.js](src/services/cloud.js)) — pontos feitos no metrô não deveriam
+sumir por causa do metrô.
+
+### Ligando (uns 10 minutos)
+
+**Na VPS**, pelo [Dokploy](https://dokploy.com): um serviço *Postgres* e uma
+*Application* construída do [server/Dockerfile](server/Dockerfile) — Docker,
+Traefik e Let's Encrypt já são dele, não há nada para instalar. O passo a passo,
+com os campos de cada tela, está em [server/README.md](server/README.md).
+
+**No jogo**: escreva o endereço do servidor em `DEFAULT_API_URL`, no topo de
+[cloud.js](src/services/cloud.js), e gere um build novo — o endereço viaja
+dentro dele.
+
+Para desenvolver na sua máquina (ou numa VPS sem Dokploy), o
+[docker-compose.yml](server/docker-compose.yml) sobe os dois containers direto:
+`cp .env.example .env`, trocar a senha, `docker compose up -d --build`.
+
+**Enquanto isso não é feito**, o comportamento é o mesmo dos anúncios sem AdMob:
+o ranking online aparece como desligado, com o motivo na tela, e o jogo segue
+inteiro — recorde e histórico continuam no aparelho.
+
+> Isto substitui o ranking global do Google Play Jogos, que dependia de um
+> módulo nativo em Kotlin que nunca foi escrito. A ponte antiga continua em
+> [playGames.js](src/services/playGames.js), agora sem ninguém chamando.
 
 ---
 
@@ -529,15 +633,27 @@ src/
   services/
     scores.js                historico local de partidas
     lives.js                 as 5 partidas, gravadas no disco
-    playGames.js             ponte opcional com o Google Play Jogos
+    identity.js              codigo publico + segredo do jogador, e o apelido
+    season.js                a rodada da semana (domingo 20h -> domingo 18h)
+    cloud.js                 grupos e ranking; sem chaves, responde "offline"
+    playGames.js             ponte antiga com o Play Jogos (sem uso hoje)
     ads.js                   AdMob (premiado/intersticial), desligavel e opcional
     adsSdk.js                carrega o SDK nativo (.web.js devolve null)
   state/SettingsContext.js   preferencias persistidas
   hooks/
     useScores.js             recorde + envio de placar
     useLives.js              gasta e repoe vidas, sempre lendo o disco antes
-    useAds.js                premiado e intersticial vistos pela tela
+    useAds.js                o video premiado visto pela tela
+    usePlayer.js             o jogador deste aparelho, para as telas
   ui/                        tema, botao, passaros de vida, cobertura do anuncio
+server/                      o servidor do ranking (Go + Postgres, docker)
+  main.go                    configuracao, subida e encerramento limpo
+  api.go                     as rotas HTTP
+  store.go                   as regras e as consultas
+  season.go                  a rodada da semana, igual a do app
+  schema.sql                 tabelas e indices (rodam sozinhos na subida)
+  docker-compose.yml         API + Postgres, para rodar fora do Dokploy
+  docker-compose.dokploy.yml o mesmo, no formato do Dokploy (sem portas abertas)
 tools/
   generate-audio.js          sintetiza assets/audio
   generate-icons.js          desenha icone, splash e favicon
