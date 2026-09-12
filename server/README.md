@@ -92,13 +92,21 @@ falar com ele — só a API, pela rede interna.
 | --- | --- |
 | Provider | GitHub (ou Git, com a URL do repositório) |
 | Repositório / branch | este projeto, `main` |
+| Build Path | `/` (a raiz — deixe como veio) |
 | Build Type | **Dockerfile** |
 | Docker File | `server/Dockerfile` |
-| Docker Context Path | `server` |
+| Docker Context Path | `server` (ou vazio) |
 
-O **context path** é o detalhe que faz ou quebra este passo: o `Dockerfile`
-copia `go.mod` e `go.sum` de dentro de `server/`. Se o contexto ficar na raiz do
-repositório, o build falha logo no começo dizendo que não achou o `go.mod`.
+O build funciona com o contexto em `server/` **ou** na raiz do repositório: o
+`Dockerfile` procura o `go.mod` nos dois lugares, e o `.dockerignore` da raiz do
+repositório faz só a pasta `server/` ser enviada. Mesmo assim, prefira `server` —
+é o caminho mais curto e o mesmo que os testes usam.
+
+> **Uma armadilha do Dokploy:** o *Build Path* entra no caminho do Dockerfile,
+> mas **não** entra no contexto do build. *Build Path* `server` com *Docker
+> Context Path* `.` acha o Dockerfile e ainda assim constrói a partir da raiz. Foi
+> assim que o primeiro deploy falhou com `"/go.sum": not found`, antes de o
+> `Dockerfile` aceitar os dois contextos.
 
 ## 4. As variáveis
 
@@ -522,7 +530,7 @@ ligado se esse proxy existir.
 
 | Sintoma | Quase sempre é |
 | --- | --- |
-| Build falha em `COPY go.mod go.sum` | *Docker Context Path* não é `server` (passo 3) |
+| Build falha com `"/go.sum": not found` | o deploy ainda usa o `Dockerfile` antigo com o contexto na raiz: publique o commit com o `Dockerfile` novo, ou ponha *Docker Context Path* = `server` (passo 3) |
 | `falta DATABASE_URL` nos logs | a variável não foi salva, ou o deploy foi antes de salvar |
 | `banco não respondeu` | o Postgres ainda subindo, ou host/senha errados na `DATABASE_URL` |
 | `/health` não responde pelo domínio | DNS ainda propagando, ou o domínio não foi criado na aba *Domains* com a porta 8080 |

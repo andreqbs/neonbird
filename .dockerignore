@@ -1,0 +1,11 @@
+# Vale quando o build do servidor usa a RAIZ do repositorio como contexto
+# (Dokploy com o contexto na raiz). So a pasta server/ interessa: sem esta lista
+# iriam junto node_modules, assets, a pasta .git e qualquer .env esquecido.
+#
+# Builds com o contexto dentro de server/ (docker compose, testes) usam o
+# server/.dockerignore, e nao este.
+*
+!server
+server/.env
+server/.env.*
+!server/.env.example
