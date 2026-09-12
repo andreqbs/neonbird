@@ -24,12 +24,25 @@ import loadSdk from './adsSdk';
  * codigo NATIVO — vao para o AndroidManifest e para o Info.plist. As unidades
  * moram aqui, em AD_UNITS.
  *
- * O banner nao e usado pelo jogo: fica vazio de proposito, e `unitId` responde
- * "nao ha" para ele em qualquer plataforma.
- *
  * Anuncio e codigo nativo: nao roda no Expo Go nem na web. Depois de mexer no
  * app.json, `npx expo prebuild --clean` e uma build de verdade (`eas build` ou
  * `npx expo run:android`).
+ *
+ * ----------------------------------------------------------------------------
+ * PREMIO SO COM A CONFIRMACAO DO GOOGLE (SSV):
+ *
+ * O video premiado leva o CODIGO DO JOGADOR (`serverSideVerificationOptions`).
+ * Quando o video termina, o Google avisa o servidor do jogo em nome desse
+ * codigo, com assinatura — e so entao o premio existe (ver server/ssv.go e
+ * economy.claimAd). O "assisti" do aparelho, sozinho, nao vale nada.
+ *
+ * O SDK aplica essas opcoes no momento em que o anuncio CARREGA, e nao quando
+ * ele aparece. Por isso nenhum video premiado e carregado antes de o jogador
+ * existir (setRewardUser): video sem codigo seria um video que nao paga.
+ *
+ * Para funcionar em producao, a verificacao precisa estar ligada nas duas
+ * unidades premiadas no painel do AdMob, apontando para o servidor — o passo a
+ * passo esta em server/README.md.
  *
  * ----------------------------------------------------------------------------
  * NOTA DE POLITICA (importante para a conta nao ser suspensa):
@@ -37,10 +50,6 @@ import loadSdk from './adsSdk';
  * Anuncio PREMIADO (rewarded) exige que o jogador ESCOLHA assistir e receba
  * algo em troca. Obrigar a ver um video premiado para continuar e violacao —
  * o formato certo para uma pausa obrigatoria e o INTERSTICIAL.
- *
- * Por isso a tela de fim de fase oferece as duas saidas: assistir (e ganhar o
- * escudo) ou seguir direto. Se um dia quiser a pausa obrigatoria, chame
- * `showInterstitial()` no lugar — o contrato ja esta pronto.
  */
 
 // ---------------------------------------------------------------- configuracao
@@ -86,20 +95,20 @@ export const AD_UNITS = {
  * debug mostram o anuncio de teste do Google, e a build de release mostra o de
  * verdade, sem ninguem precisar lembrar de trocar nada.
  *
- * Para conferir o anuncio real antes de publicar, troque para `false` numa
- * build sua e NAO clique no anuncio (assistir ate o fim pode; clicar, nao).
+ * Anuncio de teste nao gera o aviso do Google ao servidor: para testar os
+ * premios em desenvolvimento, use um servidor com ADS_DEV_AUTOVERIFY=true.
  */
 export const USE_TEST_UNITS = typeof __DEV__ === 'undefined' ? true : __DEV__;
 
 /**
  * Onde nao ha anuncio possivel — na web, no Expo Go, num formato que a conta
  * ainda nao tem — o jogo mostra uma pausa curta no lugar do video. E o que
- * permite testar o fluxo inteiro (fim de fase e recarga de vidas) no navegador.
+ * permite testar o fluxo inteiro no navegador.
  *
  * So em DESENVOLVIMENTO, e por um motivo serio: essa pausa e uma propaganda de
  * mentira. Mostra-la a quem baixou o jogo seria enganar o jogador com uma tela
  * de anuncio que nao e anuncio nenhum. Na build de producao, formato que nao
- * existe simplesmente nao aparece — a fase troca direto.
+ * existe simplesmente nao aparece.
  */
 export const SIMULATE_WHEN_UNAVAILABLE = typeof __DEV__ === 'undefined' ? true : __DEV__;
 export const SIMULATED_DURATION = 3000; // ms da propaganda de mentira
@@ -123,8 +132,7 @@ function unitId(kind) {
   // Sem unidade real cadastrada, aquela plataforma ainda nao existe no AdMob —
   // e o app nativo dela tambem nao tem o App ID no manifesto. Devolver a
   // unidade de TESTE aqui faria o app inicializar o SDK sem App ID, que e um
-  // crash nativo na abertura. Melhor responder "nao ha anuncio" e cair na
-  // simulacao, que e exatamente o caso do iOS hoje.
+  // crash nativo na abertura. Melhor responder "nao ha anuncio".
   if (!real) return '';
 
   return USE_TEST_UNITS ? TEST_UNITS[key][kind] : real;
@@ -144,6 +152,7 @@ export function canShow(kind = 'rewarded') {
 }
 
 let initialized = false;
+let rewardUserId = null;
 let rewardedAd = null;
 let rewardedReady = false;
 let interstitialAd = null;
@@ -164,16 +173,28 @@ export async function initialize() {
 }
 
 /**
+ * O jogador a quem os proximos videos premiados vao pagar. Chamado assim que a
+ * identidade do aparelho carrega (usePlayer). Troca o video ja carregado, se
+ * houver: ele foi pedido sem codigo, e nao pagaria ninguem.
+ */
+export function setRewardUser(playerId) {
+  if (!playerId || playerId === rewardUserId) return;
+  rewardUserId = playerId;
+  if (initialized) preloadRewarded();
+}
+
+/**
  * Deixa o proximo video premiado carregando em segundo plano. Anuncio que so
  * comeca a carregar na hora do clique faz o jogador esperar olhando para nada.
  */
 export function preloadRewarded() {
-  if (!availability('rewarded').available) return;
+  if (!availability('rewarded').available || !rewardUserId) return;
   try {
     const { RewardedAd, RewardedAdEventType } = Sdk;
     rewardedReady = false;
     rewardedAd = RewardedAd.createForAdRequest(unitId('rewarded'), {
       requestNonPersonalizedAdsOnly: true,
+      serverSideVerificationOptions: { userId: rewardUserId },
     });
     rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
       rewardedReady = true;
@@ -187,8 +208,9 @@ export function preloadRewarded() {
 /**
  * Mostra o video premiado.
  *
- * Sempre resolve — nunca rejeita e nunca fica pendurado: quem chama so precisa
- * saber se pode liberar a recompensa.
+ * Sempre resolve — nunca rejeita e nunca fica pendurado. `rewarded` aqui diz so
+ * que o video chegou ao fim no aparelho; o premio de verdade depende da
+ * confirmacao no servidor (economy.claimAd).
  *
  * @returns {Promise<{ shown: boolean, rewarded: boolean, simulated: boolean, reason: string|null }>}
  */
@@ -203,7 +225,7 @@ export async function showRewarded() {
       const { RewardedAdEventType, AdEventType } = Sdk;
       const ad = rewardedAd;
       if (!ad || !rewardedReady) {
-        preloadRewarded(); // fica pronto para a proxima fase
+        preloadRewarded(); // fica pronto para a proxima vez
         resolve({ shown: false, rewarded: false, simulated: false, reason: 'not-loaded' });
         return;
       }
@@ -257,11 +279,8 @@ export function preloadInterstitial() {
 }
 
 /**
- * Intersticial — a pausa entre fases. Mesmo contrato do premiado, sem
- * recompensa: sempre resolve, nunca fica pendurado.
- *
- * Anuncio que nao carregou nao segura o jogo: responde 'not-loaded' na hora e
- * ja pede o proximo. A troca de fase acontece do mesmo jeito.
+ * Intersticial — hoje sem uso no jogo, mantido pronto. Mesmo contrato do
+ * premiado, sem recompensa: sempre resolve, nunca fica pendurado.
  */
 export async function showInterstitial() {
   const { available, reason } = availability('interstitial');
@@ -272,7 +291,7 @@ export async function showInterstitial() {
       const { AdEventType } = Sdk;
       const ad = interstitialAd;
       if (!ad || !interstitialReady) {
-        preloadInterstitial(); // fica pronto para a proxima fase
+        preloadInterstitial();
         resolve({ shown: false, simulated: false, reason: 'not-loaded' });
         return;
       }
@@ -305,6 +324,7 @@ export async function showInterstitial() {
 
 export default {
   initialize,
+  setRewardUser,
   availability,
   canShow,
   preloadRewarded,

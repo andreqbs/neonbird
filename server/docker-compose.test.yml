@@ -1,11 +1,17 @@
 # Os testes, com um Postgres descartavel.
 #
-#   docker compose -f docker-compose.test.yml run --rm test
+#   docker compose -f docker-compose.test.yml run --rm --build test
 #
 # Este banco vive em memoria (tmpfs) e morre junto com o comando — ele existe
 # so para os testes. E de proposito que ele NAO e o do docker-compose.yml: os
 # testes limpam as tabelas antes de cada caso, e apontar isso para o banco de
-# verdade apagaria a rodada de todo mundo.
+# verdade apagaria as moedas e a rodada de todo mundo.
+#
+# O codigo entra no container pelo BUILD (a etapa de compilacao do Dockerfile),
+# e nao por pasta montada. Montar pasta do Windows no Docker Desktop ja travou a
+# criacao do container sem mensagem nenhuma; o build nao depende disso, e de
+# quebra ja prova que a imagem compila. O `--build` do comando acima e o que faz
+# a imagem acompanhar o codigo novo.
 
 name: majorflyer-test
 
@@ -25,20 +31,12 @@ services:
       retries: 20
 
   test:
-    image: golang:1.23-alpine
-    working_dir: /src
+    build:
+      context: .
+      target: build
     depends_on:
       db:
         condition: service_healthy
     environment:
       TEST_DATABASE_URL: postgres://teste:teste@db:5432/teste?sslmode=disable
-      GOFLAGS: -count=1
-    volumes:
-      - .:/src
-      - go-build:/root/.cache/go-build
-      - go-mod:/go/pkg/mod
-    command: go test ./... -v
-
-volumes:
-  go-build:
-  go-mod:
+    command: sh -c "go vet ./... && go test ./... -count=1 -v"

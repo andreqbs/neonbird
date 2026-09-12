@@ -13,20 +13,25 @@ import (
 	"time"
 )
 
-// Servidor do ranking do Major Flyer.
+// Servidor do Major Flyer: conta, economia, grupos e ranking.
 //
-// Um binario, um Postgres, nada mais. Sobe com `docker compose up -d`, cabe na
-// VPS mais simples e nao depende de servico de terceiro — se a internet do
-// jogador cair, ou se este servidor sumir, o jogo continua inteiro no aparelho:
-// recorde e historico sao locais. O online e o extra.
+// Um binario, um Postgres, nada mais. Sobe com `docker compose up -d` e cabe na
+// VPS mais simples. Sem ele (ou sem internet) o jogo ainda abre, no modo treino:
+// da para voar, mas moeda, vida, loja e ranking so existem aqui.
 
 type Config struct {
-	Port          string
-	DatabaseURL   string
-	Origins       []string
-	TrustProxy    bool
-	MaxRunPoints  int
-	MinRunGap     time.Duration
+	Port        string
+	DatabaseURL string
+	Origins     []string
+	TrustProxy  bool
+
+	MaxRunPoints       int
+	MinSecondsPerPoint float64
+	MaxRunDuration     time.Duration
+
+	AdsDevAutoVerify bool
+	AdmobKeysURL     string
+
 	RatePerMinute int
 	RateBurst     int
 }
@@ -40,6 +45,14 @@ func env(chave, padrao string) string {
 
 func envInt(chave string, padrao int) int {
 	n, err := strconv.Atoi(env(chave, ""))
+	if err != nil {
+		return padrao
+	}
+	return n
+}
+
+func envFloat(chave string, padrao float64) float64 {
+	n, err := strconv.ParseFloat(env(chave, ""), 64)
 	if err != nil {
 		return padrao
 	}
@@ -65,9 +78,20 @@ func loadConfig() Config {
 		// para discutir o voo de ninguem.
 		MaxRunPoints: envInt("MAX_RUN_POINTS", 2000),
 
-		// Intervalo minimo entre duas partidas do MESMO jogador. Uma partida de
-		// verdade leva bem mais que isso; o valor so impede o envio em rajada.
-		MinRunGap: time.Duration(envInt("MIN_RUN_GAP_SECONDS", 5)) * time.Second,
+		// Piso de tempo por ponto. O obstaculo mais rapido do jogo (fase 5) leva
+		// ~1,15 s para chegar ao passaro; 0,6 s deixa folga de sobra e ainda
+		// barra o placar feito em cinco segundos.
+		MinSecondsPerPoint: envFloat("MIN_SECONDS_PER_POINT", 0.6),
+
+		// Partida aberta ha mais tempo que isso nao fecha mais.
+		MaxRunDuration: time.Duration(envInt("MAX_RUN_MINUTES", 180)) * time.Minute,
+
+		// SO para servidor de desenvolvimento: aceita o premio do anuncio sem o
+		// aviso do Google. Anuncio de teste e anuncio simulado nao geram aviso,
+		// entao sem isto nao da para testar o fluxo no `expo start`. Ligado em
+		// producao, qualquer um ganha premio sem assistir nada.
+		AdsDevAutoVerify: env("ADS_DEV_AUTOVERIFY", "false") == "true",
+		AdmobKeysURL:     env("ADMOB_KEYS_URL", DefaultAdmobKeysURL),
 
 		RatePerMinute: envInt("RATE_PER_MINUTE", 120),
 		RateBurst:     envInt("RATE_BURST", 40),
@@ -113,7 +137,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	api := &API{store: store, cfg: cfg, log: log}
+	if cfg.AdsDevAutoVerify {
+		log.Warn("ADS_DEV_AUTOVERIFY ligado: premios de anuncio saem SEM o aviso do Google. " +
+			"Isto e so para desenvolvimento — nunca deixe ligado no servidor do app publicado.")
+	}
+
+	api := &API{store: store, cfg: cfg, log: log, ssv: NewSSVVerifier(cfg.AdmobKeysURL)}
 	limite := newLimiter(cfg.RatePerMinute, cfg.RateBurst)
 
 	handler := recoverPanic(log,
@@ -142,8 +171,8 @@ func main() {
 	<-ctx.Done()
 
 	// Ctrl+C / `docker stop`: para de aceitar pedido novo e deixa o que ja esta
-	// em andamento terminar. Sem isso, um deploy no meio de um envio de placar
-	// perde o placar.
+	// em andamento terminar. Sem isso, um deploy no meio do fechamento de uma
+	// partida perde as moedas dela.
 	log.Info("encerrando...")
 	fim, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

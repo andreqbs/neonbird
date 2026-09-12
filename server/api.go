@@ -8,17 +8,18 @@ import (
 	"strconv"
 )
 
-// A API do ranking.
+// A API do jogo: conta, economia, grupos e ranking.
 //
 // Tudo aqui responde JSON e nunca devolve erro cru: ou vem o dado, ou vem
-// `{"error": "texto em portugues"}` que a tela mostra sem traduzir. Quem chama
-// e um jogo no meio de uma partida — ele nao tem o que fazer com um stack
-// trace, e o jogo precisa seguir mesmo quando o servidor nao responde.
+// `{"error": "texto em portugues", "code": "..."}`, que a tela mostra sem
+// traduzir. Quem chama e um jogo no meio de uma partida — ele nao tem o que
+// fazer com um stack trace.
 
 type API struct {
 	store *Store
 	cfg   Config
 	log   *slog.Logger
+	ssv   *SSVVerifier
 }
 
 func (a *API) Routes() http.Handler {
@@ -27,7 +28,19 @@ func (a *API) Routes() http.Handler {
 	mux.HandleFunc("GET /health", a.health)
 
 	mux.HandleFunc("POST /v1/players", a.registerPlayer)
-	mux.HandleFunc("POST /v1/runs", a.submitRun)
+
+	// Economia (api_economy.go). Nao existe mais rota que aceite um placar
+	// solto: ponto e moeda so entram fechando uma partida aberta no servidor.
+	mux.HandleFunc("GET /v1/catalog", a.catalog)
+	mux.HandleFunc("GET /v1/me/wallet", a.wallet)
+	mux.HandleFunc("POST /v1/me/bird", a.equipBird)
+	mux.HandleFunc("POST /v1/shop/buy", a.buy)
+	mux.HandleFunc("POST /v1/runs/start", a.startRun)
+	mux.HandleFunc("POST /v1/runs/{id}/finish", a.finishRun)
+	mux.HandleFunc("POST /v1/runs/{id}/continue", a.continueRun)
+	mux.HandleFunc("POST /v1/runs/{id}/shield", a.useShield)
+	mux.HandleFunc("POST /v1/ads/claim", a.claimAd)
+	mux.HandleFunc("GET /v1/ads/ssv", a.admobSSV)
 
 	mux.HandleFunc("GET /v1/groups/me", a.myGroup)
 	mux.HandleFunc("POST /v1/groups", a.createGroup)
@@ -51,13 +64,18 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 // fail traduz o erro para o jogador.
 //
-// Regra de negocio sobe com o texto dela ("o grupo já tem 8 jogadores"). O
-// resto vira 500 com uma frase generica: mensagem de banco na tela nao ajuda
-// ninguem e conta demais sobre o servidor. O detalhe fica no log.
+// Regra de negocio sobe com o texto dela ("o grupo já tem 8 jogadores") e, se
+// tiver, com o codigo que o app usa para decidir. O resto vira 500 com uma
+// frase generica: mensagem de banco na tela nao ajuda ninguem e conta demais
+// sobre o servidor. O detalhe fica no log.
 func (a *API) fail(w http.ResponseWriter, r *http.Request, err error) {
 	var regra *ruleError
 	if errors.As(err, &regra) {
-		writeJSON(w, regra.Status, map[string]string{"error": regra.Message})
+		body := map[string]string{"error": regra.Message}
+		if regra.Code != "" {
+			body["code"] = regra.Code
+		}
+		writeJSON(w, regra.Status, body)
 		return
 	}
 	a.log.Error("falha ao atender", "path", r.URL.Path, "erro", err)
@@ -149,39 +167,6 @@ func (a *API) registerPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"player": p, "season": CurrentSeason()})
-}
-
-func (a *API) submitRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
-	if !ok {
-		return
-	}
-
-	var body struct {
-		Points int `json:"points"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-
-	// Teto de pontos por partida: o jogo tem 5 fases de 100 obstaculos, entao
-	// qualquer numero muito acima disso e cliente modificado, nao voo bom.
-	if body.Points <= 0 || body.Points > a.cfg.MaxRunPoints {
-		badRequest(w, "placar fora do esperado")
-		return
-	}
-
-	res, err := a.store.SubmitRun(r.Context(), p.ID, body.Points, CurrentSeason(), a.cfg.MinRunGap)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"points": res.Points,
-		"total":  res.Total,
-		"best":   res.Best,
-		"season": CurrentSeason(),
-	})
 }
 
 func (a *API) myGroup(w http.ResponseWriter, r *http.Request) {

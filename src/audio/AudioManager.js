@@ -5,6 +5,7 @@ const SOURCES = {
   flap: require('../../assets/audio/flap.wav'),
   score: require('../../assets/audio/score.wav'),
   hit: require('../../assets/audio/hit.wav'),
+  coin: require('../../assets/audio/coin.wav'),
   music: require('../../assets/audio/music.wav'),
 };
 
@@ -32,6 +33,7 @@ class AudioManager {
     this.flapIndex = 0;
     this.scorePlayer = null;
     this.hitPlayer = null;
+    this.coinPlayer = null;
     this.music = null;
     this.musicWanted = false;
     this.musicPlaying = false;
@@ -65,6 +67,9 @@ class AudioManager {
       this.hitPlayer = createAudioPlayer(SOURCES.hit);
       this.hitPlayer.volume = FX_VOLUME;
 
+      this.coinPlayer = createAudioPlayer(SOURCES.coin);
+      this.coinPlayer.volume = FX_VOLUME;
+
       this.music = createAudioPlayer(SOURCES.music);
       this.music.loop = true;
       this.music.volume = MUSIC_VOLUME;
@@ -72,6 +77,7 @@ class AudioManager {
       this.flapVoices = [];
       this.scorePlayer = null;
       this.hitPlayer = null;
+      this.coinPlayer = null;
       this.music = null;
     }
 
@@ -112,6 +118,11 @@ class AudioManager {
   playHit() {
     if (!this.settings.effects) return;
     this._restart(this.hitPlayer);
+  }
+
+  playCoin() {
+    if (!this.settings.effects) return;
+    this._restart(this.coinPlayer);
   }
 
   _restart(player) {

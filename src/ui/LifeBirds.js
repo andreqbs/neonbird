@@ -1,8 +1,10 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { MAX_LIVES } from '../services/lives';
 import { theme } from './theme';
+
+/** Tamanho do tanque quando a carteira ainda nao chegou do servidor. */
+const MAX_LIVES = 5;
 
 /**
  * As vidas do jogador, desenhadas como uma fileira de passaros.

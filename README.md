@@ -57,7 +57,7 @@ npm test
 Testes do servidor do ranking (sobem um Postgres descartável e o derrubam):
 
 ```bash
-cd server && docker compose -f docker-compose.test.yml run --rm test
+cd server && docker compose -f docker-compose.test.yml run --rm --build test
 ```
 
 ---
@@ -66,10 +66,11 @@ cd server && docker compose -f docker-compose.test.yml run --rm test
 
 | Tela | O que tem |
 |------|-----------|
-| **Início** | Jogar, Ranking, Configurações, o recorde do aparelho e as 5 partidas |
+| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações; recorde, moedas e as 5 vidas |
+| **Loja** | 5 pássaros novos, escudos e novas chances — em moedas ou assistindo a um vídeo |
 | **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (histórico local) |
-| **Configurações** | Música de fundo, som do toque, efeitos, conta do Play Jogos, apagar recordes |
-| **Jogo** | Partida, placar ao vivo, pausa e fim de jogo |
+| **Configurações** | Música de fundo, som do toque, efeitos, nome e código do jogador, apagar recordes |
+| **Jogo** | Partida, placar e moedas ao vivo, escudo guardado, nova chance, pausa e fim de jogo |
 
 ---
 
@@ -142,9 +143,9 @@ há *refresh* nem relógio para dar errado no meio de uma partida. O segredo é
 guardado como hash — um vazamento do banco não entrega o direito de pontuar no
 nome de ninguém.
 
-Partidas jogadas **sem rede** ficam guardadas e sobem sozinhas na próxima
-conexão ([cloud.js](src/services/cloud.js)) — pontos feitos no metrô não deveriam
-sumir por causa do metrô.
+Ponto só entra no ranking **fechando uma partida aberta no servidor** — a mesma
+que desconta a vida e confere as moedas (seção seguinte). Não existe mais rota
+que aceite um placar solto mandado pelo app.
 
 ### Ligando (uns 10 minutos)
 
@@ -161,13 +162,86 @@ Para desenvolver na sua máquina (ou numa VPS sem Dokploy), o
 [docker-compose.yml](server/docker-compose.yml) sobe os dois containers direto:
 `cp .env.example .env`, trocar a senha, `docker compose up -d --build`.
 
-**Enquanto isso não é feito**, o comportamento é o mesmo dos anúncios sem AdMob:
-o ranking online aparece como desligado, com o motivo na tela, e o jogo segue
-inteiro — recorde e histórico continuam no aparelho.
+**Enquanto isso não é feito** (ou quando o jogador está sem internet), o jogo
+abre no **modo treino**: dá para voar, mas sem moedas, vidas, loja nem ranking —
+tudo isso só existe no servidor. Recorde e histórico continuam no aparelho.
 
 > Isto substitui o ranking global do Google Play Jogos, que dependia de um
 > módulo nativo em Kotlin que nunca foi escrito. A ponte antiga continua em
 > [playGames.js](src/services/playGames.js), agora sem ninguém chamando.
+
+---
+
+## Moedas, loja e pássaros
+
+Cada fase tem **moedas** no vão dos obstáculos — uma a cada três, em média, às
+vezes fora do centro para pedir desvio. Fechar uma fase rende mais **10**. As
+moedas compram, na **Loja**:
+
+| Item | O que é | Como se consegue |
+|---|---|---|
+| **5 pássaros** | Geada, Brasa, Toxina, Fantasma e Cometa — só visual por enquanto | moedas (150 a 1.200, preços de teste) |
+| **Escudo** | o anel que perdoa as batidas enquanto se dissipa | moedas ou vídeo premiado |
+| **Nova chance** | ao cair, continuar do mesmo ponto — uma por partida | moedas ou vídeo premiado |
+
+Escudo e nova chance comprados **ficam guardados** e são usados na hora certa: o
+escudo, num botão antes do primeiro toque de cada fase (e no painel de fim de
+fase); a nova chance, no painel que aparece quando o pássaro cai — com a
+guardada, pagando em moedas ou assistindo a um vídeo ali mesmo.
+
+### O servidor é a única fonte da verdade
+
+**Nada disso é gravado no aparelho.** Moedas, vidas, escudos, novas chances e
+pássaros moram no servidor ([server/](server/)); o app só mostra a última
+resposta dele e não faz conta de saldo nem para adiantar o número na tela
+([economy.js](src/services/economy.js)). Fechou o app, esqueceu — na próxima
+abertura pergunta de novo.
+
+Como uma partida vira moedas:
+
+1. **Jogar** abre a partida no servidor. Ele desconta a vida e sorteia a
+   **semente** que decide onde cada moeda aparece ([coins.js](src/game/coins.js)).
+2. O jogo guarda o **número do obstáculo** de cada moeda pega — não só a
+   contagem.
+3. Ao fechar, o servidor refaz a conta com a semente e só credita moeda que
+   existia naquele obstáculo, uma vez, até onde o jogador chegou; e recusa placar
+   feito mais rápido do que o jogo permite. É a mesma função em Go e em JS, com
+   os mesmos números de referência nos testes dos dois lados.
+
+Prêmio de vídeo só sai com o **aviso assinado do Google** ao servidor (SSV do
+AdMob): o anúncio carrega com o código do jogador, e o app troca o vídeo
+confirmado pelo prêmio ([useAds.js](src/hooks/useAds.js)). Um app modificado não
+consegue dizer "assisti" sozinho.
+
+> **O limite honesto:** a física roda no celular. O servidor garante que ninguém
+> ganha o que não existia — moeda fora da semente, placar impossível, prêmio sem
+> vídeo, compra sem saldo —, mas não assiste ao voo. Um app adulterado que voe
+> sozinho de forma plausível ainda passa. Cada mudança de saldo fica num
+> livro-razão no banco para quando for preciso investigar
+> ([server/README.md](server/README.md#de-onde-vieram-as-moedas-de-alguém)).
+
+### Sem internet: modo treino
+
+Sem servidor, a Home troca *Jogar* por **Treinar**: o voo é o mesmo, mas sem
+moedas, vidas, escudo, nova chance, loja ou ranking — e a tela diz isso. Recorde
+e *Seus voos* continuam funcionando, porque moram no aparelho e não são moeda de
+troca.
+
+### Os pássaros e as habilidades
+
+O **desenho** de cada pássaro está em [birds.js](src/game/birds.js) (cores e
+acessório: cristais, chamas, antena e máscara, visor, rastro) e é feito por
+[BirdFigure.js](src/game/render/BirdFigure.js) — o mesmo na loja e no voo, só com
+Views. **Nome, preço e habilidade vêm do servidor** ([catalog.go](server/catalog.go)):
+mudar preço é redeploy do servidor, sem build nova do app.
+
+As **habilidades** ainda não existem, mas a vaga está pronta: cada pássaro novo
+chega do servidor com `ability: {id, status: "soon"}` (o de sempre, sem
+habilidade, com `null`), a loja mostra *"em breve"*, e o mundo do jogo já chama os
+ganchos da habilidade do pássaro escolhido — início de partida e de fase, cada
+frame, moeda pega, batida, nova chance ([abilities.js](src/game/abilities.js)).
+Se uma habilidade mexer em moeda ou pontuação, a regra também precisa entrar no
+servidor, senão a conferência recusa o que ela rendeu.
 
 ---
 
@@ -254,48 +328,15 @@ Histórico das 25 melhores partidas do aparelho, com data e orientação, salvo 
 `AsyncStorage`. É a fonte do recorde mostrado no menu. Não precisa de conta nem
 de internet.
 
-### Aba "Global" — precisa de uma build própria
+### Abas "Individual" e "Grupo" — o servidor
 
-Ranking com outros jogadores da Play Store é **Google Play Games Services**, que
-é código nativo Android. Ele **não existe e não pode existir no Expo Go**: seria
-preciso que o Expo Go fosse o *seu* jogo, registrado no *seu* Play Console, com a
-*sua* assinatura.
+Ranking da rodada da semana, com os pontos das partidas fechadas no servidor. Ver
+[Grupos, rodadas e ranking](#grupos-rodadas-e-ranking).
 
-Por isso o app trata o módulo nativo como **opcional**
-([playGames.js](src/services/playGames.js) usa `requireOptionalNativeModule`).
-Sem ele, tudo funciona com o ranking local e a interface diz exatamente o que
-falta — nada de tela quebrada nem de nomes inventados.
-
-Para ligar de verdade:
-
-1. No **Google Play Console**, registre o jogo em *Play Games Services*, crie as
-   credenciais OAuth com o SHA-1 da sua chave de assinatura e crie um
-   **leaderboard**. Guarde o ID (`CgkI…`).
-2. Crie o módulo nativo:
-   ```bash
-   npx create-expo-module --local major-flyer-play-games
-   ```
-3. No Kotlin do módulo, use `com.google.android.gms:play-services-games-v2` e
-   exponha os métodos do **contrato** documentado no topo de
-   [playGames.js](src/services/playGames.js) (`signInAsync`, `getPlayerAsync`,
-   `submitScoreAsync`, `loadTopScoresAsync`, `showLeaderboardAsync`). Registre o
-   módulo com o nome `MajorFlyerPlayGames`.
-4. Cole o ID do leaderboard em `LEADERBOARD_ID`, no mesmo arquivo.
-5. Gere a build — a partir daqui não roda mais no Expo Go:
-   ```bash
-   npx expo prebuild
-   ```
-   ```bash
-   eas build -p android --profile preview
-   ```
-
-Nada mais no app precisa mudar: as telas de Ranking e Configurações já leem o
-estado real e trocam de conteúdo sozinhas.
-
-**Sobre "associar à Play Store":** com o Play Games v2 o login é **automático**
-quando o jogo abre, então não existe login obrigatório. O botão em Configurações
-serve para quem recusou o automático ou quer trocar de conta — por isso ele está
-lá, e não numa tela de abertura.
+> A primeira ideia de ranking global era o **Google Play Games Services**, que
+> dependia de um módulo nativo em Kotlin nunca escrito. O servidor próprio o
+> substituiu; a ponte antiga continua em [playGames.js](src/services/playGames.js),
+> sem ninguém chamando.
 
 ---
 
@@ -425,72 +466,65 @@ O jogo mostra **um único formato: o vídeo premiado**, e sempre por escolha do
 jogador. É o que a política do AdMob pede — *vídeo premiado exige que a pessoa
 escolha assistir e receba algo em troca* — e é também o formato de maior eCPM.
 
-O painel de fim de fase tem duas saídas:
+Onde ele aparece, e o que rende:
 
-- **Assistir e ganhar escudo** — vídeo premiado; a recompensa é um escudo (anel
-  azul em volta do pássaro) que perdoa a batida seguinte. Ele **não some no
-  impacto**: começa a se dissipar, pisca e leva ~1,5 s para apagar — e
-  *enquanto ainda houver anel na tela toda colisão continua sendo perdoada*, seja
-  a outra coluna do mesmo par, a coluna seguinte ou o chão. O tempo está em
-  `SHIELD_FADE_FRAMES` ([constants.js](src/game/constants.js)).
-- **Continuar sem prêmio** — vai **direto para a fase seguinte**, sem anúncio
-  nenhum. Mostrar propaganda para quem acabou de dizer "não quero" é a maneira
-  mais rápida de perder o jogador — ainda mais quando ele nem escolheu ver.
+| Onde | Prêmio |
+|---|---|
+| Painel de fim de fase | um **escudo**, usado na hora |
+| Painel de queda | a **nova chance**, usada na hora |
+| Home ou fim de jogo, sem vidas | as **5 vidas** de volta |
+| Loja | um escudo ou uma nova chance **guardados** |
 
-O outro uso do premiado é a recarga das **5 partidas** (seção acima), na Home e
-no painel de fim de jogo.
+O escudo (anel azul em volta do pássaro) **não some no impacto**: começa a se
+dissipar, pisca e leva ~1,5 s para apagar — e *enquanto ainda houver anel na tela
+toda colisão continua sendo perdoada*, seja a outra coluna do mesmo par, a
+seguinte ou o chão. O tempo está em `SHIELD_FADE_FRAMES`
+([constants.js](src/game/constants.js)).
 
-O vídeo começa a **carregar quando a fase fecha**, não no clique: anúncio que só
-carrega na hora faz o jogador apertar o botão e não ver nada acontecer. Se mesmo
-assim não estiver pronto, a fase avança sem escudo — o jogo nunca fica esperando.
+Recusar é sempre de graça: **Continuar sem escudo** vai direto para a fase
+seguinte e **Encerrar voo** fecha a partida, sem anúncio nenhum. Propaganda para
+quem acabou de dizer "não quero" é a maneira mais rápida de perder o jogador.
+
+**O prêmio só existe quando o servidor confirma.** O vídeo carrega com o código
+do jogador; quando termina, o Google avisa o servidor, e o app troca o vídeo
+confirmado pelo prêmio — tentando por alguns segundos enquanto o aviso não chega
+(a tela mostra *"Confirmando o prêmio..."*). Por isso a verificação do lado do
+servidor precisa estar ligada nas unidades premiadas do AdMob
+([server/README.md](server/README.md#7-a-verificação-dos-anúncios)).
+
+O vídeo começa a **carregar antes do clique** (quando a fase fecha e quando o
+pássaro cai): anúncio que só carrega na hora faz o jogador apertar o botão e não
+ver nada acontecer.
 
 > **E o intersticial?** A unidade está cadastrada nas duas plataformas e
 > `showInterstitial()` está implementado em [ads.js](src/services/ads.js), mas
-> **nada no jogo o chama**. Se um dia fizer sentido (uma pausa obrigatória a cada
-> N partidas, por exemplo), é uma linha em [useAds.js](src/hooks/useAds.js):
-> `run('interstitial', ads.showInterstitial)`.
+> **nada no jogo o chama**.
 
-### As 5 partidas
+### As 5 vidas
 
-O jogador começa com **5 partidas**. Cada partida iniciada — pelo *Jogar* da
-Home ou pelo *Jogar de novo* do fim de jogo — apaga um dos cinco pássaros que
-ficam logo abaixo do recorde. O pássaro gasto **não some da fileira**: fica
-transparente, senão o jogador não teria como saber quantas ele tinha.
+O jogador tem **5 vidas**, e cada partida custa uma — descontada **pelo
+servidor** no instante em que ela abre. Os cinco pássaros abaixo do recorde
+mostram quantas restam; a vida gasta **não some da fileira**, fica transparente.
 
-Zerou, o botão principal vira **Assistir e ganhar 5 vidas** (vídeo premiado),
-tanto na Home quanto no painel de fim de jogo.
+Zerou, o botão principal vira **Assistir e ganhar 5 vidas**, na Home e no painel
+de fim de jogo.
 
 O que vale saber:
 
-- **O número vive na memória** ([lives.js](src/services/lives.js)), e o disco
-  (`@major-flyer/lives`) só guarda entre uma sessão e outra — sem isso, fechar e
-  abrir o app seria a maneira mais fácil de jogar para sempre.
+- **Nenhum número de vida mora no aparelho.** A Home busca a carteira no
+  servidor toda vez que aparece, e a partida só começa com a resposta dele na mão.
+  Fechar e abrir o app, ou mexer em arquivo, não devolve vida nenhuma.
+- **Nova chance não gasta vida**: ela continua a mesma partida. Girar o aparelho
+  também não — nem no meio do voo, nem no painel da nova chance.
+- **Sem vídeo não há recarga.** Antes, quando o anúncio não carregava, as vidas
+  saíam assim mesmo; com o prêmio exigindo a confirmação do Google, isso viraria
+  vida infinita para quem bloqueia anúncio. Sem internet, sobra o modo treino.
+- O número de vidas e os preços estão em [catalog.go](server/catalog.go).
 
-  A ordem importa: gastar e recarregar valem **na hora**, e a gravação vai
-  atrás numa fila. Quando era o contrário — cada mudança esperando uma ida e
-  volta ao AsyncStorage para só então voltar à tela por props —, dava para
-  assistir ao vídeo, ganhar as cinco vidas, começar outra partida e o painel
-  ainda marcar cinco. No Android, com a thread de JS ocupada pelo jogo, esse
-  atraso passava de segundos.
-- Pela mesma razão, **as vidas não viajam por props**: cada tela lê o serviço
-  direto (`livesNow()` para decidir, `useLives()` para redesenhar). Um número
-  que atravessa três componentes chega tarde justamente quando importa.
-- **Girar o aparelho não cobra outra vida**: a remontagem da tela não passa por
-  nenhum dos dois caminhos de entrada de uma partida.
-- Sem SDK, sem IDs ou na web não existe vídeo nenhum — e nesse caso a recarga
-  sai assim mesmo. Anúncio não pode ser a única porta de saída de uma tela.
-- `MAX_LIVES` está em [lives.js](src/services/lives.js), e `npm test` cobre a
-  regra: não passa de zero por baixo nem de cinco por cima, e valor corrompido
-  no disco não tranca ninguém.
-
-`showInterstitial()` já está implementado em
-[`src/services/ads.js`](src/services/ads.js) para quando/se a pausa obrigatória
-for o caminho.
-
-**O jogo nunca depende do anúncio.** Sem SDK, sem IDs ou sem rede, as funções
-respondem "não deu" na hora e a fase avança. Enquanto não houver AdMob
-configurado, o botão roda uma *propaganda simulada* de 3 s — só para dar para
-testar o fluxo inteiro (desligue em `SIMULATE_WHEN_UNAVAILABLE`).
+**O jogo nunca trava esperando anúncio.** Sem SDK, sem IDs ou sem rede, as
+funções respondem "não deu" na hora. Em desenvolvimento, sem AdMob, o botão roda
+uma *propaganda simulada* de 3 s — e o prêmio dela só sai num servidor com
+`ADS_DEV_AUTOVERIFY=true`, porque o Google não confirma vídeo que não existiu.
 
 ### AdMob: o que já está ligado
 
@@ -528,9 +562,12 @@ anúncio nenhum: útil para testar o fluxo no navegador, indefensável para quem
 baixou o jogo. Em produção, formato que não existe simplesmente não aparece — a
 fase troca direto.
 
-**Nada mais falta no AdMob**: as duas plataformas têm App ID, premiado e
-intersticial. O que falta para o iPhone é a build — `eas build --platform ios`,
-já que iOS não compila no Windows.
+**Falta um passo no AdMob: a verificação do lado do servidor** nas duas unidades
+premiadas, apontando para `https://<seu-servidor>/v1/ads/ssv`. Sem ela, quem
+assiste a um vídeo não recebe o prêmio — o passo a passo está em
+[server/README.md](server/README.md#7-a-verificação-dos-anúncios). Para o iPhone
+falta também a build — `eas build --platform ios`, já que iOS não compila no
+Windows.
 
 Depois de mexer no App ID ou nos plugins do `app.json`, o projeto nativo precisa
 ser refeito — é lá que o App ID vira `<meta-data>` no manifesto:
@@ -622,34 +659,43 @@ src/
     constants.js             passo fixo de 60 Hz e estados do jogo
     layout.js                todas as medidas derivadas do tamanho da tela
     stages.js                tabela das 5 fases: cores, formas e velocidade
-    World.js                 motor de fisica (matter-js): gravidade e colisoes
+    World.js                 motor de fisica (matter-js): gravidade, colisoes e moedas
+    coins.js                 onde ficam as moedas (a mesma conta do servidor)
+    birds.js                 o visual de cada passaro
+    abilities.js             a vaga das habilidades dos passaros
     session.js               o que sobrevive a uma rotacao no meio da partida
-    render/                  ceu, passaro, colunas, chao e placar (so Views)
+    render/                  ceu, passaro, moeda, colunas, chao e placar (so Views)
   screens/
-    HomeScreen.js            Jogar / Ranking / Configuracoes
-    GameScreen.js            game loop, HUD, pausa e fim de jogo
-    LeaderboardScreen.js     abas Global e Seus voos
-    SettingsScreen.js        som, conta e dados
+    HomeScreen.js            Jogar ou Treinar / Loja / Ranking / Configuracoes
+    GameScreen.js            game loop, HUD, escudo, nova chance e fim de jogo
+    ShopScreen.js            passaros, escudos e novas chances
+    LeaderboardScreen.js     abas Individual, Grupo e Seus voos
+    SettingsScreen.js        som, jogador e dados
   services/
     scores.js                historico local de partidas
-    lives.js                 as 5 partidas, gravadas no disco
     identity.js              codigo publico + segredo do jogador, e o apelido
     season.js                a rodada da semana (domingo 20h -> domingo 18h)
-    cloud.js                 grupos e ranking; sem chaves, responde "offline"
+    cloud.js                 transporte, grupos e ranking; sem endereco, "offline"
+    economy.js               moedas, vidas, itens e partidas: so memoria, o servidor manda
     playGames.js             ponte antiga com o Play Jogos (sem uso hoje)
-    ads.js                   AdMob (premiado/intersticial), desligavel e opcional
+    ads.js                   AdMob (premiado com o codigo do jogador), opcional
     adsSdk.js                carrega o SDK nativo (.web.js devolve null)
   state/SettingsContext.js   preferencias persistidas
   hooks/
-    useScores.js             recorde + envio de placar
-    useLives.js              gasta e repoe vidas, sempre lendo o disco antes
-    useAds.js                o video premiado visto pela tela
+    useScores.js             recorde + historico local
+    useEconomy.js            a carteira, para as telas redesenharem
+    useAds.js                o video premiado e o premio confirmado no servidor
     usePlayer.js             o jogador deste aparelho, para as telas
-  ui/                        tema, botao, passaros de vida, cobertura do anuncio
-server/                      o servidor do ranking (Go + Postgres, docker)
+  ui/                        tema, botao, passaros de vida e da loja, cobertura do anuncio
+server/                      o servidor do jogo (Go + Postgres, docker)
   main.go                    configuracao, subida e encerramento limpo
-  api.go                     as rotas HTTP
-  store.go                   as regras e as consultas
+  api.go                     rotas de conta, grupos e ranking
+  api_economy.go             rotas de partida, loja e anuncios
+  store.go                   regras e consultas de conta, grupos e ranking
+  economy.go                 carteira, partidas, loja e premios (com livro-razao)
+  catalog.go                 passaros, precos e regras da economia
+  coins.go                   a conta das moedas, igual a do app
+  ssv.go                     a verificacao do anuncio premiado pelo Google
   season.go                  a rodada da semana, igual a do app
   schema.sql                 tabelas e indices (rodam sozinhos na subida)
   docker-compose.yml         API + Postgres, para rodar fora do Dokploy
@@ -657,7 +703,7 @@ server/                      o servidor do ranking (Go + Postgres, docker)
 tools/
   generate-audio.js          sintetiza assets/audio
   generate-icons.js          desenha icone, splash e favicon
-  selftest.js                testes de fisica, proporcao e rotacao
+  selftest.js                fisica, proporcao, rotacao, moedas e a conversa com o servidor
 ```
 
 ### Física
@@ -732,7 +778,8 @@ nativas.
 | Botão **Pausar** | Congela a simulação |
 | App vai pro fundo | Pausa sozinho e silencia |
 | Girar o aparelho | Adapta a tela, mantendo o placar |
-| Tela de fim de jogo | Toque (após 0,65 s) reinicia |
+| Cair | Oferta de nova chance (quando há como pagar), depois o resultado |
+| Tela de resultado | Toque (após 0,65 s) começa outra partida — se houver vida |
 
 A dificuldade agora vem das **fases** (seção abaixo), e não mais de uma rampa
 ligada ao placar.
@@ -741,9 +788,13 @@ ligada ao placar.
 
 ## Próximos passos possíveis
 
-- Módulo nativo do Play Jogos (roteiro acima) e conquistas.
+- Conquistas.
 - `STAGE_LENGTH` de 10 para 50 quando a troca de fase estiver aprovada.
 - Fases 6+ (é só mais um item em `src/game/stages.js`).
 - Vibração no impacto (`expo-haptics`).
-- Skins do pássaro liberadas por pontuação.
+- Habilidades dos pássaros — o lugar já existe em [abilities.js](src/game/abilities.js).
+- Recuperar a conta ao trocar de aparelho (login Google/Apple): hoje moedas e
+  pássaros ficam presos ao código do aparelho.
+- Revisar a política de privacidade em `privacidade/` — ela ainda descreve um
+  jogo sem servidor.
 - Build instalável: `npx expo prebuild` + `eas build -p android --profile preview`.

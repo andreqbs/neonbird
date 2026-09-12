@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import ads from '../services/ads';
 import cloud from '../services/cloud';
 import {
   initPlayer,
@@ -14,9 +15,9 @@ import {
  *
  * A identidade em si mora em `services/identity.js`, fora do React — quem so
  * precisa do codigo na hora de chamar o servidor usa `playerNow()`. Este hook
- * existe para a tela acompanhar o apelido e, de quebra, avisar o servidor de
- * que o jogador existe (e barato: uma chamada por abertura, e sem configuracao
- * ela nem sai do lugar).
+ * existe para a tela acompanhar o apelido e, na abertura, fazer as duas coisas
+ * que dependem do jogador existir: avisar o servidor e entregar o codigo aos
+ * videos premiados (e por ele que o Google confirma o premio ao servidor).
  */
 export default function usePlayer() {
   const [state, setState] = useState(() => ({ player: playerNow(), loaded: playerLoaded() }));
@@ -24,9 +25,9 @@ export default function usePlayer() {
   useEffect(() => {
     const off = subscribePlayer((player, loaded) => setState({ player, loaded }));
     initPlayer()
-      .then(() => {
+      .then((player) => {
+        if (player) ads.setRewardUser(player.id);
         cloud.syncPlayer();
-        cloud.flushPending(); // partidas que ficaram para tras sem rede
       })
       .catch(() => {});
     setState({ player: playerNow(), loaded: playerLoaded() });

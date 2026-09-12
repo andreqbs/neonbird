@@ -36,6 +36,7 @@ const (
 // sobe inteira ate a tela.
 type ruleError struct {
 	Status  int
+	Code    string
 	Message string
 }
 
@@ -43,6 +44,13 @@ func (e *ruleError) Error() string { return e.Message }
 
 func rule(status int, format string, a ...any) error {
 	return &ruleError{Status: status, Message: fmt.Sprintf(format, a...)}
+}
+
+// ruleCode e o mesmo "nao pode" com um codigo fixo, para o app decidir o que
+// fazer sem precisar interpretar o texto — "no_lives" abre o video das vidas,
+// "not_enough_coins" apaga o botao de comprar.
+func ruleCode(status int, code, format string, a ...any) error {
+	return &ruleError{Status: status, Code: code, Message: fmt.Sprintf(format, a...)}
 }
 
 // ------------------------------------------------------------------ modelos
@@ -92,12 +100,6 @@ type Standing struct {
 	Total   int `json:"total"`
 	Best    int `json:"best"`
 	Players int `json:"players"`
-}
-
-type RunResult struct {
-	Points int `json:"points"`
-	Total  int `json:"total"`
-	Best   int `json:"best"`
 }
 
 // --------------------------------------------------------------- utilidades
@@ -232,44 +234,6 @@ func (s *Store) Authenticate(ctx context.Context, id, secret string) (Player, er
 		return Player{}, rule(401, "código e segredo não combinam")
 	}
 	return Player{ID: id, Name: nome}, nil
-}
-
-// ------------------------------------------------------------------ partidas
-
-// SubmitRun grava um placar na rodada.
-//
-// O intervalo minimo entre partidas vai DENTRO do insert: um `where not exists`
-// no mesmo comando nao deixa janela entre conferir e gravar, entao dez pedidos
-// no mesmo instante continuam virando uma partida so.
-func (s *Store) SubmitRun(ctx context.Context, playerID string, points int, season Season, minGap time.Duration) (RunResult, error) {
-	if !season.Open {
-		return RunResult{}, rule(409, "a rodada está em apuração; a próxima abre domingo às 20h")
-	}
-
-	var id int64
-	err := s.pool.QueryRow(ctx, `
-		insert into runs (player_id, season_id, points)
-		select $1, $2, $3
-		 where not exists (
-		       select 1 from runs
-		        where player_id = $1
-		          and created_at > now() - make_interval(secs => $4))
-		returning id`,
-		playerID, season.ID, points, minGap.Seconds()).Scan(&id)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return RunResult{}, rule(429, "partidas demais em pouco tempo")
-	}
-	if err != nil {
-		return RunResult{}, err
-	}
-
-	out := RunResult{Points: points}
-	err = s.pool.QueryRow(ctx, `
-		select coalesce(sum(points), 0)::int, coalesce(max(points), 0)::int
-		  from runs where player_id = $1 and season_id = $2`,
-		playerID, season.ID).Scan(&out.Total, &out.Best)
-	return out, err
 }
 
 // -------------------------------------------------------------------- grupos

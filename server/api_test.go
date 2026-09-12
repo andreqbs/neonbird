@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -17,18 +18,22 @@ import (
 // Testes de ponta a ponta: HTTP de verdade contra um Postgres de verdade.
 //
 // Sem `TEST_DATABASE_URL` eles se pulam sozinhos, entao `go test ./...` continua
-// funcionando em qualquer maquina. Com o compose de pe:
+// funcionando em qualquer maquina. Com Docker:
 //
-//	docker compose --profile test run --rm test
+//	docker compose -f docker-compose.test.yml run --rm --build test
 //
 // Banco de mentira nao serviria aqui: metade das regras deste servidor (um
-// grupo por rodada, o intervalo entre partidas) mora em indice e em SQL, e e
-// justamente essa metade que precisa ser conferida.
+// grupo por rodada, a carteira travada durante a compra) mora em indice e em
+// SQL, e e justamente essa metade que precisa ser conferida.
 
 type ambiente struct {
 	srv   *httptest.Server
 	store *Store
 	cfg   Config
+
+	// Fazem o papel da chave do Google nos avisos de anuncio (ssv_test.go).
+	chave *ecdsa.PrivateKey
+	keyID int64
 }
 
 func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
@@ -39,7 +44,10 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 		t.Skip("sem TEST_DATABASE_URL: teste com banco pulado")
 	}
 
-	cfg := Config{MaxRunPoints: 2000, MinRunGap: 0}
+	// O relogio nao conta nos testes (MinSecondsPerPoint 0): partida aberta e
+	// fechada no mesmo milissegundo precisa valer. O teste do placar rapido
+	// demais liga o piso de proposito.
+	cfg := Config{MaxRunPoints: 2000, MinSecondsPerPoint: 0, MaxRunDuration: time.Hour}
 	if ajusta != nil {
 		ajusta(&cfg)
 	}
@@ -52,29 +60,38 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 	if err := store.Migrate(ctx); err != nil {
 		t.Fatalf("migrar: %v", err)
 	}
-	// Cada teste comeca com o banco limpo: ranking herdado de outro teste da
+	// Cada teste comeca com o banco limpo: saldo herdado de outro teste da
 	// falso positivo dos bons (passa por acaso).
-	if _, err := store.pool.Exec(ctx,
-		`truncate runs, group_members, groups, players restart identity cascade`); err != nil {
+	if _, err := store.pool.Exec(ctx, `
+		truncate ad_views, ledger, game_sessions, owned_birds, wallets,
+		         runs, group_members, groups, players
+		restart identity cascade`); err != nil {
 		t.Fatalf("limpar: %v", err)
 	}
 
-	api := &API{store: store, cfg: cfg, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	chave := novaChave(t)
+	const keyID = 424242
+	api := &API{
+		store: store,
+		cfg:   cfg,
+		log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ssv:   &SSVVerifier{keys: chavesFixas{keyID: &chave.PublicKey}},
+	}
 	srv := httptest.NewServer(api.Routes())
 	t.Cleanup(func() {
 		srv.Close()
 		store.Close()
 	})
-	return &ambiente{srv: srv, store: store, cfg: cfg}
+	return &ambiente{srv: srv, store: store, cfg: cfg, chave: chave, keyID: keyID}
 }
 
 // A rodada fecha domingo as 18h e so reabre as 20h. Nessas duas horas o
-// servidor recusa pontos de proposito — e os testes que pontuam nao teriam o
-// que provar.
+// servidor nao poe pontos no ranking de proposito — e os testes de ranking nao
+// teriam o que provar.
 func exigeRodadaAberta(t *testing.T) {
 	t.Helper()
 	if !CurrentSeason().Open {
-		t.Skip("rodada em apuracao (domingo 18h-20h): nada pontua agora")
+		t.Skip("rodada em apuracao (domingo 18h-20h): nada entra no ranking agora")
 	}
 }
 
@@ -128,10 +145,12 @@ func (a *ambiente) registra(t *testing.T, nome string) jogador {
 	return j
 }
 
+// pontua joga uma partida do jeito que o app joga: abre no servidor (gasta uma
+// vida) e fecha com o placar.
 func (a *ambiente) pontua(t *testing.T, quem jogador, pontos int) {
 	t.Helper()
-	st, body := a.chama(t, &quem, "POST", "/v1/runs", map[string]any{"points": pontos})
-	if st != 200 {
+	id, _ := a.abrePartida(t, quem)
+	if st, body := a.fechaPartida(t, quem, id, pontos, nil); st != http.StatusOK {
 		t.Fatalf("%s pontuar %d: status %d (%v)", quem.nome, pontos, st, body)
 	}
 }
@@ -195,43 +214,45 @@ func TestPontosSomamNaRodada(t *testing.T) {
 	}
 }
 
-func TestPlacarAbsurdoERecusado(t *testing.T) {
+func TestPlacarSoltoNaoEntraMais(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
 
-	for _, pontos := range []int{0, -5, 999999} {
-		st, body := a.chama(t, &ana, "POST", "/v1/runs", map[string]any{"points": pontos})
-		if st != 400 {
-			t.Errorf("placar %d: status %d (%v), esperava 400", pontos, st, body)
-		}
+	// A rota antiga aceitava qualquer numero mandado pelo app. Ela nao existe
+	// mais: ponto so entra fechando uma partida aberta no servidor.
+	st, _ := a.chama(t, &ana, "POST", "/v1/runs", map[string]any{"points": 100})
+	if st != http.StatusNotFound && st != http.StatusMethodNotAllowed {
+		t.Errorf("rota de placar solto: status %d, esperava que nao existisse", st)
 	}
 }
 
-func TestPartidasEmRajadaSaoRecusadas(t *testing.T) {
-	exigeRodadaAberta(t)
-	a := novoAmbiente(t, func(c *Config) { c.MinRunGap = 30 * time.Second })
-
+func TestPlacarAcimaDoTetoERecusado(t *testing.T) {
+	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
-	a.pontua(t, ana, 10)
 
-	st, body := a.chama(t, &ana, "POST", "/v1/runs", map[string]any{"points": 10})
-	if st != 429 {
-		t.Fatalf("segunda partida seguida: status %d (%v), esperava 429", st, body)
+	id, _ := a.abrePartida(t, ana)
+	st, body := a.fechaPartida(t, ana, id, 999999, nil)
+	if st != http.StatusUnprocessableEntity {
+		t.Errorf("placar de 999999: status %d (%v), esperava 422", st, body)
 	}
 }
 
 // ---------------------------------------------------------------- identidade
 
-func TestSegredoErradoNaoPontuaNoNomeDosOutros(t *testing.T) {
+func TestSegredoErradoNaoJogaNoNomeDosOutros(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
 
 	// O codigo e publico — o jogador manda para os amigos. Sem o segredo, ele
-	// nao serve para nada.
+	// nao serve para nada: nem para abrir partida, nem para gastar moeda.
 	impostor := jogador{id: ana.id, secret: newUUID(), nome: "Ana"}
-	st, body := a.chama(t, &impostor, "POST", "/v1/runs", map[string]any{"points": 100})
+	st, body := a.chama(t, &impostor, "POST", "/v1/runs/start", nil)
 	if st != 401 {
-		t.Errorf("pontuar com segredo errado: status %d (%v), esperava 401", st, body)
+		t.Errorf("abrir partida com segredo errado: status %d (%v), esperava 401", st, body)
+	}
+	st, body = a.chama(t, &impostor, "POST", "/v1/shop/buy", map[string]any{"item": "shield"})
+	if st != 401 {
+		t.Errorf("comprar com segredo errado: status %d (%v), esperava 401", st, body)
 	}
 
 	// Nem para tomar o apelido.
@@ -412,7 +433,7 @@ func TestCoroaPassaQuandoOLiderSai(t *testing.T) {
 	if st, _ := a.chama(t, &bia, "DELETE", "/v1/groups/me", nil); st != 200 {
 		t.Fatal("Bia nao conseguiu sair")
 	}
-	st, body = a.chama(t, nil, "GET", "/v1/rankings/groups", nil)
+	_, body = a.chama(t, nil, "GET", "/v1/rankings/groups", nil)
 	linhas, _ := body["rows"].([]any)
 	if len(linhas) != 1 {
 		t.Errorf("esperava so o grupo novo da Ana no ranking, vieram %d", len(linhas))

@@ -8,10 +8,10 @@ import GameScreen from './src/screens/GameScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import ShopScreen from './src/screens/ShopScreen';
 import useScores from './src/hooks/useScores';
 import usePlayer from './src/hooks/usePlayer';
-import cloud from './src/services/cloud';
-import { spendLife } from './src/services/lives';
+import economy from './src/services/economy';
 import audio from './src/audio/AudioManager';
 import ads from './src/services/ads';
 import { SettingsProvider, useSettings } from './src/state/SettingsContext';
@@ -30,9 +30,11 @@ export default function App() {
 function Root() {
   const { settings, loaded } = useSettings();
   const [screen, setScreen] = useState('home');
+  // A partida que a tela de jogo abre: a do servidor (`run`) ou um treino.
+  const [game, setGame] = useState(null);
   const { best, refresh, submit } = useScores();
-  // Cria o jogador (codigo + apelido) ja na abertura: sem isso, o primeiro
-  // placar da instalacao nao teria a quem pertencer no ranking.
+  // Cria o jogador (codigo + apelido) ja na abertura: sem ele nao ha partida no
+  // servidor, nem video premiado que pague a alguem.
   usePlayer();
 
   // A tela acompanha o aparelho: nada de travar orientacao. O layout inteiro do
@@ -41,8 +43,8 @@ function Root() {
     ScreenOrientation.unlockAsync().catch(() => {});
   }, []);
 
-  // Liga o AdMob e ja deixa o primeiro video premiado carregando. Sem SDK ou
-  // sem IDs cadastrados isso nao faz nada — e o jogo segue igual.
+  // Liga o AdMob. O primeiro video premiado so carrega quando o jogador existe
+  // (ver ads.setRewardUser). Sem SDK ou sem IDs isso nao faz nada.
   useEffect(() => {
     ads.initialize().catch(() => {});
   }, []);
@@ -70,28 +72,28 @@ function Root() {
     return () => sub.remove();
   }, []);
 
-  const handleScore = useCallback(
-    (score, meta) => {
-      // Sobe para a rodada da semana sem segurar a tela: quando nao ha rede (ou
-      // servidor configurado), `submitRun` guarda a partida e tenta de novo
-      // depois. O historico local, que e o que aparece na hora, e o `submit`.
-      cloud.submitRun(score);
-      return submit(score, meta);
-    },
-    [submit]
-  );
+  // Recorde e historico continuam no aparelho: nao sao moeda de troca. Moedas e
+  // ranking entram pelo fechamento da partida no servidor (GameScreen).
+  const handleScore = useCallback((score, meta) => submit(score, meta), [submit]);
 
   const goHome = useCallback(() => setScreen('home'), []);
 
   /**
-   * Comecar uma partida custa uma vida.
-   *
-   * O desconto fica aqui e na tela do jogo (o "jogar de novo"), que sao os dois
-   * unicos jeitos de uma partida comecar. Girar o aparelho no meio do voo
-   * remonta a tela, mas nao passa por nenhum dos dois — e nao cobra de novo.
+   * Comecar uma partida e pedir ao servidor: e ele que desconta a vida e sorteia
+   * as moedas. Devolve a resposta para a Home mostrar o motivo quando nao deu.
    */
-  const startGame = useCallback(() => {
-    spendLife();
+  const startGame = useCallback(async () => {
+    const r = await economy.startRun();
+    if (r.ok) {
+      setGame({ key: r.run.id, run: r.run, training: false });
+      setScreen('game');
+    }
+    return r;
+  }, []);
+
+  /** Sem servidor: voa igual, sem moedas, vidas, loja nem ranking. */
+  const startTraining = useCallback(() => {
+    setGame({ key: `treino-${Date.now()}`, run: null, training: true });
     setScreen('game');
   }, []);
 
@@ -99,14 +101,22 @@ function Root() {
     <View style={styles.root}>
       <StatusBar style="light" hidden={screen === 'game'} />
 
-      {/* Vidas nao viajam por props: cada tela le o servico direto. Numero que
-          atravessa tres componentes chega tarde justamente quando importa — no
-          Android, com o jogo ocupando a thread de JS. */}
-      {screen === 'home' && <HomeScreen onNavigate={setScreen} onPlay={startGame} best={best} />}
-
-      {screen === 'game' && (
-        <GameScreen onExit={goHome} best={best} onScore={handleScore} />
+      {screen === 'home' && (
+        <HomeScreen onNavigate={setScreen} onPlay={startGame} onTrain={startTraining} best={best} />
       )}
+
+      {screen === 'game' && game && (
+        <GameScreen
+          key={game.key}
+          initialRun={game.run}
+          training={game.training}
+          onExit={goHome}
+          best={best}
+          onScore={handleScore}
+        />
+      )}
+
+      {screen === 'shop' && <ShopScreen onBack={goHome} />}
 
       {screen === 'leaderboard' && (
         <LeaderboardScreen onBack={goHome} onOpenSettings={() => setScreen('settings')} />

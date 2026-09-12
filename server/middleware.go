@@ -183,7 +183,11 @@ func clientIP(r *http.Request, trustProxy bool) string {
 
 func rateLimit(l *limiter, trustProxy bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" { // o monitor do Docker bate aqui o tempo todo
+		// /health: o monitor do Docker bate aqui o tempo todo. /v1/ads/ssv: quem
+		// chama e o Google, de poucos IPs, em nome de TODOS os jogadores — contar
+		// por IP ali derrubaria premio de gente honesta. Ali a protecao e a
+		// assinatura.
+		if r.URL.Path == "/health" || r.URL.Path == "/v1/ads/ssv" {
 			next.ServeHTTP(w, r)
 			return
 		}

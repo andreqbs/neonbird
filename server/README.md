@@ -1,25 +1,26 @@
-# Servidor do ranking — Major Flyer
+# Servidor do Major Flyer
 
-Grupos, rodadas semanais e ranking (individual e por grupo) do
-[Major Flyer](../README.md). **Go + Postgres**, feito para caber na VPS mais
-simples: o binário tem ~12 MB, não precisa de runtime instalado e a imagem final
-não tem shell nem gerenciador de pacotes.
+Conta, **economia** (moedas, vidas, escudos, novas chances e pássaros), grupos,
+rodadas semanais e ranking do [Major Flyer](../README.md). **Go + Postgres**,
+feito para caber na VPS mais simples: o binário tem ~12 MB, não precisa de
+runtime instalado e a imagem final não tem shell nem gerenciador de pacotes.
 
 O deploy é pelo **Dokploy**, que já está na VPS — ele é quem tem o Docker, o
 Traefik e o Let's Encrypt. Não há nada para instalar no servidor.
 
-O jogo **não depende** deste servidor para funcionar: sem ele (ou sem internet),
-recorde e histórico continuam no aparelho e a tela de ranking diz que o online
-está desligado. O servidor é o extra.
+**Tudo o que o jogador ganha ou compra existe só aqui.** O aplicativo não guarda
+moeda, vida, escudo, nova chance nem pássaro no aparelho: ele mostra o que este
+servidor respondeu por último. Sem servidor (ou sem internet), o jogo abre no
+**modo treino** — dá para voar, sem moedas, vidas, loja nem ranking.
 
 ---
 
 ## O caminho inteiro, na ordem
 
-São duas metades: **subir o servidor** e **contar ao aplicativo onde ele está**.
-Só as duas juntas ligam o ranking — servidor no ar com o app sem o endereço
-continua mostrando "ranking online desligado", e é esse o engano mais fácil de
-cometer aqui.
+São três metades: **subir o servidor**, **ligar a verificação dos anúncios** e
+**contar ao aplicativo onde o servidor está**. Pular a do meio é o engano mais
+caro aqui: o jogo funciona, mas quem assiste a um vídeo premiado nunca recebe o
+prêmio.
 
 **No Dokploy**
 
@@ -30,12 +31,16 @@ cometer aqui.
 5. [Domínio e HTTPS](#5-domínio-e-https)
 6. [Deploy e conferência](#6-deploy)
 
+**No AdMob**
+
+7. [Ligar a verificação no servidor nas duas unidades premiadas](#7-a-verificação-dos-anúncios)
+
 **No aplicativo**
 
-7. [Escrever o endereço em `cloud.js`](#7-o-endereço-no-aplicativo)
-8. [Testar com `npx expo start`](#8-testar-antes-de-gerar-o-build) antes de gastar um build
-9. [Gerar o build da loja](#9-o-build-que-vai-para-a-loja)
-10. [Conferir que os dois se falam](#10-conferindo-que-estão-conversando)
+8. [Escrever o endereço em `cloud.js`](#8-o-endereço-no-aplicativo)
+9. [Testar com `npx expo start`](#9-testar-antes-de-gerar-o-build) antes de gastar um build
+10. [Gerar o build da loja](#10-o-build-que-vai-para-a-loja)
+11. [Conferir que os dois se falam](#11-conferindo-que-estão-conversando)
 
 ---
 
@@ -105,12 +110,14 @@ PORT=8080
 TRUST_PROXY=true
 ALLOWED_ORIGINS=*
 MAX_RUN_POINTS=2000
-MIN_RUN_GAP_SECONDS=5
+MIN_SECONDS_PER_POINT=0.6
+MAX_RUN_MINUTES=180
+ADS_DEV_AUTOVERIFY=false
 RATE_PER_MINUTE=120
 RATE_BURST=40
 ```
 
-Duas que não são opcionais:
+Três que não são opcionais:
 
 - **`DATABASE_URL`** é a string interna que você copiou no passo 2. Se ela não
   vier com `?sslmode=disable`, acrescente: o Postgres do Dokploy não fala TLS na
@@ -119,6 +126,10 @@ Duas que não são opcionais:
   o servidor acreditar no `X-Forwarded-For` para saber de quem é cada pedido.
   Sem isso, todo mundo vira "o IP do Traefik" e um jogador sozinho estoura o
   limite de pedidos de todos os outros.
+- **`ADS_DEV_AUTOVERIFY=false`**, sempre, neste servidor. Ligada, ela entrega o
+  prêmio do anúncio sem a confirmação do Google — qualquer um ganharia vidas,
+  escudos e novas chances sem assistir nada. Ela existe só para o servidor de
+  desenvolvimento ([Rodando fora do Dokploy](#rodando-fora-do-dokploy)).
 
 O resto tem padrão razoável; a lista comentada está em
 [`.env.example`](.env.example) e a tabela em [Configuração](#configuração).
@@ -151,29 +162,68 @@ Quando terminar:
 ```bash
 curl https://ranking.seudominio.com/health
 # {"ok":true,"season":{"id":"2026-09-06",...,"open":true}}
+
+curl https://ranking.seudominio.com/v1/catalog
+# {"birds":[{"id":"classic","name":"Major","price":0,...}, ...], "items":{...}, "rules":{...}}
 ```
 
-Esse JSON é o exame completo: se ele responde `"ok":true`, a API subiu, achou o
-banco, criou as tabelas ([schema.sql](schema.sql) roda sozinho na subida) e já
-sabe qual é a rodada da semana.
-
-Nos logs da aplicação, a linha da subida é:
-
-```
-{"level":"INFO","msg":"no ar","porta":"8080","rodada":"2026-09-06","aberta":true}
-```
+O `/health` é o exame completo: se ele responde `"ok":true`, a API subiu, achou
+o banco, criou as tabelas ([schema.sql](schema.sql) roda sozinho na subida) e já
+sabe qual é a rodada da semana. O `/v1/catalog` mostra os pássaros e os preços
+que o app vai exibir na loja.
 
 Se quiser deploy automático a cada `git push`, ligue o webhook na aba
 **Deployments** — o serviço reconstrói sozinho e o banco não é tocado.
 
 ---
 
-# Parte 2 — ligando o aplicativo
+# Parte 2 — a verificação dos anúncios
+
+## 7. A verificação dos anúncios
+
+Vidas, escudos e novas chances que se ganham assistindo a um vídeo premiado só
+são entregues quando o **Google** avisa este servidor de que o vídeo terminou. O
+aplicativo sozinho não consegue liberar prêmio nenhum — é isso que impede um app
+modificado de dizer "assisti" sem ter assistido.
+
+Para o aviso chegar, ligue a verificação nas **duas** unidades premiadas, no
+[painel do AdMob](https://apps.admob.com):
+
+1. **Apps** → *Major Flyer (Android)* → **Blocos de anúncios** → o premiado
+   `ca-app-pub-6744388004633498/7044011331`.
+2. **Configurações avançadas** → **Verificação do lado do servidor**.
+3. URL de callback:
+
+   ```
+   https://ranking.seudominio.com/v1/ads/ssv
+   ```
+
+4. **Verificar URL**, depois **Salvar**.
+5. Repita no app **iOS**, unidade `ca-app-pub-6744388004633498/7720010204`.
+
+O servidor confere a assinatura de cada aviso com as chaves públicas do Google
+([ssv.go](ssv.go)), grava a transação uma única vez (o Google repete o aviso
+quando não recebe resposta) e o app troca cada vídeo confirmado por um prêmio em
+até 30 minutos.
+
+Sem este passo, o sintoma é exato: o jogador assiste ao vídeo inteiro, a tela
+fica em *"Confirmando o prêmio..."* por alguns segundos e termina em *"O anúncio
+ainda não foi confirmado"*.
+
+> **Anúncio de teste não gera aviso.** O `npx expo start` e as builds de debug
+> usam as unidades de teste do Google (ou a propaganda simulada, na web), e
+> nenhuma delas chama este servidor. Para testar prêmios em desenvolvimento, use
+> um servidor de desenvolvimento com `ADS_DEV_AUTOVERIFY=true` — nunca o do
+> Dokploy.
+
+---
+
+# Parte 3 — ligando o aplicativo
 
 O jogo não descobre o servidor sozinho. O endereço entra no código e viaja
 dentro do build — trocar isso depois exige **build novo**.
 
-## 7. O endereço no aplicativo
+## 8. O endereço no aplicativo
 
 No topo de [`src/services/cloud.js`](../src/services/cloud.js):
 
@@ -187,12 +237,12 @@ vale para o app da loja, e é ela que você deve editar.
 > **Sobre o `EXPO_PUBLIC_API_URL`:** ele existe e ganha da constante, mas serve
 > para a sua máquina, não para a loja. O `.env` está no `.gitignore`, e o EAS
 > não manda para a nuvem arquivo que o git ignora — num `eas build` ele
-> simplesmente não chega, e o app sai sem endereço. Se quiser mesmo usar
-> variável no build da loja, ela tem que ser declarada no `eas.json`
+> simplesmente não chega, e o app sai sem endereço (só modo treino). Se quiser
+> mesmo usar variável no build da loja, ela tem que ser declarada no `eas.json`
 > (`build.production.env`) ou no painel do EAS. Editar a constante é mais
 > simples e não tem essa pegadinha.
 
-## 8. Testar antes de gerar o build
+## 9. Testar antes de gerar o build
 
 Build de loja demora; um teste na sua rede não. Com o servidor no ar:
 
@@ -200,42 +250,39 @@ Build de loja demora; um teste na sua rede não. Com o servidor no ar:
 npm start          # ou: npx expo start
 ```
 
-Abra no Expo Go, vá em **Ranking**. A aba *Individual* deve carregar (mesmo
-vazia, "ninguém pontuou ainda" já prova que houve resposta), e *Grupo* deve
-oferecer criar um. Jogue uma partida e ela tem que aparecer no ranking.
+Abra no Expo Go. A Home tem que mostrar **moedas** e **vidas** (se aparecer
+*"SEM CONEXÃO · MODO TREINO"*, o endereço não chegou). Jogue uma partida: as
+moedas aparecem no vão dos obstáculos, e ao fim o painel mostra quantas o
+servidor creditou. Abra a **Loja**: os cinco pássaros e os dois itens têm que
+estar lá, com os preços do catálogo.
 
-Como o Dokploy já entrega HTTPS desde o primeiro deploy, o mesmo endereço serve
-para o teste e para a loja — não há a etapa de "testar em `http://` e trocar
-depois".
+Os prêmios de anúncio **não** vão funcionar contra o servidor do Dokploy nesse
+teste — veja a nota do passo 7.
 
-## 9. O build que vai para a loja
+## 10. O build que vai para a loja
 
 ```bash
 npm run aab      # eas build --platform android --profile production
 ```
 
-Confirme antes de gastar o build: a linha do passo 7 está salva e **commitada**
+Confirme antes de gastar o build: a linha do passo 8 está salva e **commitada**
 (o EAS envia o que está no git).
 
-## 10. Conferindo que estão conversando
+## 11. Conferindo que estão conversando
 
-Deixe os logs da aplicação abertos no Dokploy e abra o jogo no celular. Na
-abertura o app se apresenta:
+Deixe os logs da aplicação abertos no Dokploy e abra o jogo no celular:
 
-```
-{"level":"INFO","msg":"pedido","metodo":"POST","path":"/v1/players","status":200,...}
-```
+| Quando | O que aparece no log |
+| --- | --- |
+| Abrir o app | `POST /v1/players`, `GET /v1/catalog`, `GET /v1/me/wallet` |
+| Tocar em Jogar | `POST /v1/runs/start` |
+| Cair e continuar | `POST /v1/runs/{id}/continue` |
+| Fim da partida | `POST /v1/runs/{id}/finish` |
+| Comprar na loja | `POST /v1/shop/buy` |
+| Assistir a um vídeo premiado | `GET /v1/ads/ssv` (o Google) e `POST /v1/ads/claim` (o app) |
 
-Ao terminar uma partida, `POST /v1/runs`. Ao abrir a tela de ranking,
-`GET /v1/rankings/players` e `GET /v1/rankings/groups`. Se **nada** aparece no
-log quando você mexe no app, o problema é do lado do aplicativo (endereço vazio
-ou build antigo), não do servidor.
-
-Para conferir o outro lado — que os pontos chegaram mesmo ao banco:
-
-```bash
-curl https://ranking.seudominio.com/v1/rankings/players
-```
+Se **nada** aparece no log quando você mexe no app, o problema é do lado do
+aplicativo (endereço vazio ou build antigo), não do servidor.
 
 ### O teste que vale a pena fazer uma vez
 
@@ -246,9 +293,7 @@ Dois celulares (ou um celular e o navegador com `npm run web`):
 2. No primeiro: **Ranking** → aba *Grupo* → criar grupo. Você fica com a 👑.
 3. Ainda no primeiro, cole o código do segundo em *Chamar alguém*.
 4. Jogue uma partida em cada. O total do grupo tem que ser a **soma** das duas,
-   e os dois nomes aparecem na lista.
-
-Isso exercita tudo que o servidor faz. Se funcionar, está ligado de verdade.
+   e as moedas de cada um aparecem na Home de cada aparelho.
 
 ---
 
@@ -260,11 +305,27 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 `X-Player-Secret` — o par que o aplicativo criou na primeira abertura
 ([identity.js](../src/services/identity.js)).
 
+**Conta e economia**
+
 | Rota | O que faz |
 | --- | --- |
 | `GET /health` | Diz se o banco responde e qual é a rodada. É o exame do Docker. |
 | `POST /v1/players` | Cadastra o aparelho ou troca o apelido. Corpo: `{id, secret, name}`. |
-| `POST /v1/runs` | Manda um placar. Corpo: `{points}`. |
+| `GET /v1/catalog` | Pássaros, preços e regras. Público. |
+| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances e pássaros do jogador. |
+| `POST /v1/runs/start` | Abre uma partida: desconta uma vida e devolve a semente das moedas. |
+| `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals}` — os números dos obstáculos das moedas pegas. |
+| `POST /v1/runs/{id}/continue` | Nova chance. Corpo: `{method}` — `stock` (guardada) ou `coins`. |
+| `POST /v1/runs/{id}/shield` | Usa um escudo guardado na partida. |
+| `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `shield` ou `continue`. |
+| `POST /v1/me/bird` | Escolhe o pássaro das próximas partidas. Corpo: `{birdId}`. |
+| `POST /v1/ads/claim` | Troca um vídeo confirmado pelo prêmio. Corpo: `{kind}` — `lives`, `shield` ou `continue`. Sem confirmação ainda, responde **202**. |
+| `GET /v1/ads/ssv` | O aviso do Google (passo 7). Não é chamado pelo app. |
+
+**Grupos e ranking**
+
+| Rota | O que faz |
+| --- | --- |
 | `GET /v1/groups/me` | O grupo do jogador nesta rodada (ou `null`). |
 | `POST /v1/groups` | Cria um grupo, com quem criou já de coroa. Corpo: `{name}`. |
 | `POST /v1/groups/members` | Só o líder. Corpo: `{playerId}` — o código público do convidado. |
@@ -273,22 +334,75 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | `GET /v1/rankings/groups` | Ranking dos grupos da rodada. |
 | `GET /v1/me/standing` | A posição do jogador, para quem ficou fora da lista. |
 
-Erro nunca volta cru: vem `{"error": "texto em português"}`, com o texto já
-escrito para o jogador ler na tela — *"o grupo já tem 8 jogadores"*, *"só o líder
-pode chamar gente nova"*.
+Erro nunca volta cru: vem `{"error": "texto em português", "code": "..."}`. O
+texto vai direto para a tela (*"moedas insuficientes"*, *"a nova chance desta
+partida já foi usada"*); o código é o que o app usa para decidir o que fazer
+(`no_lives` abre o vídeo das vidas, por exemplo).
 
 ## As regras que o servidor garante
 
+**Partidas e moedas**
+
+- Abrir partida **custa uma vida**, e só é possível com vida. Um jogador tem
+  **uma partida aberta por vez**: abrir outra encerra a anterior sem render nada
+  — senão daria para abrir dez e fechar só a melhor.
+- A posição de cada moeda sai de uma **semente sorteada aqui** na abertura. Ao
+  fechar, o app manda os números dos obstáculos das moedas que pegou, e o
+  servidor refaz a conta para cada um ([coins.go](coins.go)): só vale moeda que
+  existia naquele obstáculo, uma vez, e até o ponto aonde o jogador chegou. A
+  mesma conta está em [`src/game/coins.js`](../src/game/coins.js), e os dois
+  lados têm testes com os mesmos números de referência.
+- **Uma moeda a cada 3 obstáculos**, em média, e **+10 por fase fechada**.
+- O placar precisa **caber no tempo**: cada ponto exige pelo menos
+  `MIN_SECONDS_PER_POINT` desde a abertura, medidos no relógio do banco — o
+  obstáculo mais rápido do jogo leva ~1,15 s para chegar ao pássaro. Placar
+  impossível fecha a partida como **recusada**: sem moedas e sem ranking.
+- Só partida **fechada** entra no ranking. Não existe mais rota que aceite um
+  placar solto.
+
+**Itens e loja**
+
+- **Nova chance**: uma por partida, paga com uma guardada ou com moedas.
+- **Escudo**: gasta um guardado, dentro de uma partida aberta.
+- Pássaro, escudo e nova chance se compram **só com moedas**, e pássaro não se
+  compra duas vezes. Só dá para usar pássaro comprado.
+- Prêmio de anúncio **só com o aviso assinado do Google**, e **um prêmio por
+  vídeo**.
+- Toda mudança de saldo acontece com a carteira **travada** na transação (dois
+  toques no mesmo instante não gastam a mesma moeda duas vezes) e deixa uma
+  linha no **livro-razão** (`ledger`), que nunca é apagado.
+
+**Grupos e rodadas**
+
 - A rodada abre **domingo às 20h** e fecha **domingo às 18h** (fuso −3, sem
-  horário de verão). As duas horas que sobram são a apuração: ninguém pontua.
+  horário de verão). Nas duas horas de apuração a partida ainda rende moedas,
+  mas não mexe no ranking.
 - **8 jogadores** por grupo; **um grupo por jogador por rodada** — isso é um
   índice único, não um `if`, então dois convites simultâneos não furam.
 - **Só o líder** chama gente nova. Se o líder sai, a coroa passa para o membro
   mais antigo; se não sobra ninguém, o grupo se desfaz.
-- Placar tem teto por partida (`MAX_RUN_POINTS`) e intervalo mínimo entre
-  partidas do mesmo jogador (`MIN_RUN_GAP_SECONDS`), e há limite de pedidos por
-  IP. Isso não torna o jogo impossível de trapacear — o cliente é um app na mão
-  do jogador —, mas tira do caminho o script que manda um milhão de pontos.
+
+### O limite honesto
+
+A física do jogo roda no celular, e o servidor não assiste ao voo. O que ele
+garante é que ninguém ganha **o que não existia** (moeda fora da semente, placar
+mais rápido que o jogo, prêmio sem vídeo, compra sem saldo). Um app adulterado
+que voe sozinho **de forma plausível** ainda passa — isso nenhum jogo com a
+física no aparelho consegue impedir. O livro-razão existe para quando for
+preciso investigar alguém.
+
+## Pássaros e habilidades
+
+O catálogo mora em [catalog.go](catalog.go): nome, frase, preço e a vaga da
+habilidade de cada um. Mudar um preço é editar esse arquivo e fazer redeploy —
+**não** precisa de build novo do app, que lê o catálogo a cada abertura.
+
+As habilidades ainda não existem: cada pássaro novo nasce com
+`ability: {id, status: "soon"}` (o de sempre vem com `null`), e o app mostra
+*"em breve"*. Quando uma for definida, ela ganha comportamento no app
+([abilities.js](../src/game/abilities.js)) — e, **se mexer em moeda ou
+pontuação**, a regra correspondente precisa entrar aqui também, senão a
+conferência da partida recusa o que a habilidade legitimamente rendeu.
 
 ## Configuração
 
@@ -302,8 +416,11 @@ Tudo por variável de ambiente, com padrão razoável. A lista comentada está e
 | `ALLOWED_ORIGINS` | `*` | CORS, para a versão web. O app nativo não passa por aqui. |
 | `TRUST_PROXY` | `false` | **`true` no Dokploy**, que tem o Traefik na frente. |
 | `MAX_RUN_POINTS` | `2000` | Teto de pontos por partida. |
-| `MIN_RUN_GAP_SECONDS` | `5` | Intervalo mínimo entre partidas do mesmo jogador. |
-| `RATE_PER_MINUTE` / `RATE_BURST` | `120` / `40` | Limite de pedidos por IP. |
+| `MIN_SECONDS_PER_POINT` | `0.6` | Piso de tempo por ponto. Placar mais rápido é recusado. |
+| `MAX_RUN_MINUTES` | `180` | Partida aberta há mais tempo que isso não fecha mais. |
+| `ADS_DEV_AUTOVERIFY` | `false` | **Só em desenvolvimento**: prêmio de anúncio sem o aviso do Google. |
+| `ADMOB_KEYS_URL` | chaves do Google | De onde vêm as chaves públicas do SSV. Não mexa. |
+| `RATE_PER_MINUTE` / `RATE_BURST` | `120` / `40` | Limite de pedidos por IP (o aviso do Google fica de fora). |
 
 Mudou uma variável? **Redeploy** — o container é recriado com os valores novos.
 
@@ -315,19 +432,41 @@ Mudou uma variável? **Redeploy** — o container é recriado com os valores nov
 
 `git push` na branch configurada e **Deploy** no painel (ou automático, se o
 webhook estiver ligado). O banco não é tocado: as tabelas são criadas com
-`if not exists` na subida. Um deploy no meio de um envio de placar não perde o
-placar — o servidor termina o que está em andamento antes de sair.
+`if not exists` na subida. Um deploy no meio do fechamento de uma partida não
+perde as moedas dela — o servidor termina o que está em andamento antes de sair.
 
 ## Backup
 
 Use o backup do próprio Dokploy na página do Postgres (agendamento + destino S3).
 É o caminho mais confiável, porque a cópia sai da máquina — backup que mora no
-mesmo servidor que o banco não é backup.
+mesmo servidor que o banco não é backup. Agora que o banco guarda as moedas e as
+compras de todo mundo, ele deixou de ser opcional.
 
 Manualmente, pelo terminal da VPS:
 
 ```bash
 docker exec -t <container-do-postgres> pg_dump -U majorflyer majorflyer | gzip > backup-$(date +%F).sql.gz
+```
+
+## De onde vieram as moedas de alguém
+
+O código do jogador está em *Configurações* no app dele. No terminal do Postgres
+(Dokploy → banco → **Terminal**, ou `psql`):
+
+```sql
+-- saldo atual
+select coins, lives, shields, continues, equipped_bird
+  from wallets where player_id = 'CODIGO-DO-JOGADOR';
+
+-- as ultimas 50 mudancas de saldo, com o motivo
+select created_at, kind, coins, lives, shields, continues, ref
+  from ledger where player_id = 'CODIGO-DO-JOGADOR'
+ order by created_at desc limit 50;
+
+-- partidas recusadas (placar impossivel) ou abandonadas
+select started_at, status, points, coins
+  from game_sessions where player_id = 'CODIGO-DO-JOGADOR'
+ order by started_at desc limit 20;
 ```
 
 ## Testes
@@ -337,19 +476,28 @@ morre no fim):
 
 ```bash
 cd server
-docker compose -f docker-compose.test.yml run --rm test
+docker compose -f docker-compose.test.yml run --rm --build test
 ```
 
-São dois conjuntos. Um confere a **conta da rodada** sem banco nenhum — oito
-semanas hora a hora, para garantir que todo instante cai dentro de exatamente
-uma rodada e que o servidor e o aplicativo nunca discordem sobre qual é ela. O
-outro sobe a API de verdade contra o Postgres e percorre o caminho do jogador:
-registrar, pontuar, criar grupo, convidar, recusar quem não é líder, encher o
-grupo, passar a coroa. Banco de mentira não serviria: metade das regras mora em
-índice e em SQL, e é justamente essa metade que precisa ser conferida.
+O código entra no container pelo *build*, e não por pasta montada: no Docker
+Desktop do Windows a montagem de pasta já travou a criação do container sem
+mensagem nenhuma. O `--build` é o que faz a imagem acompanhar o código novo.
 
-O lado do jogo nessa conversa (cabeçalhos, fila offline, o que ele refaz e o que
-não refaz) é coberto pelo `npm test` da raiz.
+Três conjuntos:
+
+- **As contas que o app refaz**: a rodada da semana (oito semanas, hora a hora)
+  e a das moedas, com os mesmos números de referência do `npm test` do app.
+- **A verificação do Google**: chamadas assinadas com uma chave gerada no teste
+  — só a assinatura certa passa; trocar o jogador no meio do caminho não passa.
+- **A API contra o Postgres**, tentando ganhar o que não tem direito: moeda que
+  não existia, placar rápido demais, partida fechada duas vezes, nova chance
+  repetida, compra sem saldo, prêmio de anúncio sem aviso do Google (ou com
+  aviso falso, ou o mesmo aviso duas vezes). E o caminho honesto junto, porque o
+  teste só vale se ele continuar funcionando: partida, loja, grupo, coroa,
+  ranking.
+
+O lado do jogo nessa conversa (o que o app manda, que ele nunca soma saldo nem
+grava economia no aparelho) é coberto pelo `npm test` da raiz.
 
 > O `TEST_DATABASE_URL` usado pelos testes precisa apontar para um banco
 > **descartável** — eles limpam as tabelas antes de cada caso. O
@@ -358,10 +506,17 @@ não refaz) é coberto pelo `npm test` da raiz.
 ## Rodando fora do Dokploy
 
 O [`docker-compose.yml`](docker-compose.yml) sobe a API + Postgres em qualquer
-máquina com Docker, publicando a porta direto (`cp .env.example .env`, trocar a
-senha, `docker compose up -d --build`). Serve para desenvolver no seu computador
-ou para uma VPS crua — aí o HTTPS fica por sua conta, com um proxy na frente, e
-`TRUST_PROXY` só deve ser ligado se esse proxy existir.
+máquina com Docker, publicando a porta direto:
+
+```bash
+cp .env.example .env    # troque a senha
+docker compose up -d --build
+```
+
+É o **servidor de desenvolvimento**: para testar os prêmios de anúncio no
+`npx expo start`, ponha `ADS_DEV_AUTOVERIFY=true` no `.env` dele. Numa VPS crua o
+HTTPS fica por sua conta, com um proxy na frente, e `TRUST_PROXY` só deve ser
+ligado se esse proxy existir.
 
 ## Se algo der errado
 
@@ -371,6 +526,10 @@ ou para uma VPS crua — aí o HTTPS fica por sua conta, com um proxy na frente,
 | `falta DATABASE_URL` nos logs | a variável não foi salva, ou o deploy foi antes de salvar |
 | `banco não respondeu` | o Postgres ainda subindo, ou host/senha errados na `DATABASE_URL` |
 | `/health` não responde pelo domínio | DNS ainda propagando, ou o domínio não foi criado na aba *Domains* com a porta 8080 |
-| App diz "ranking online desligado" | o endereço não chegou nele: `DEFAULT_API_URL` vazio, ou build antigo (passos 7 e 9) |
+| App diz "SEM CONEXÃO · MODO TREINO" | o endereço não chegou nele: `DEFAULT_API_URL` vazio, ou build antigo (passos 8 e 10) |
+| Assisti ao vídeo e não ganhei nada | a verificação não está ligada na unidade premiada, ou a URL do callback está errada (passo 7) |
+| Prêmio não sai no `expo start` | anúncio de teste não gera aviso: use um servidor de desenvolvimento com `ADS_DEV_AUTOVERIFY=true` |
+| `ssv recusado` nos logs | aviso sem assinatura válida. Se forem muitos e sem motivo, confira se algum proxy está alterando a query string |
+| Partidas de todo mundo recusadas como "rápidas demais" | `MIN_SECONDS_PER_POINT` alto demais para o jogo atual |
 | Nenhum pedido no log ao mexer no app | o problema está no aplicativo, não aqui |
 | Todos os jogadores caem no limite de pedidos juntos | `TRUST_PROXY` não está `true`: o servidor vê só o IP do Traefik |

@@ -21,12 +21,14 @@ const MODULES = [
   'src/game/constants.js',
   'src/game/stages.js',
   'src/game/layout.js',
+  'src/game/coins.js',
+  'src/game/abilities.js',
   'src/game/World.js',
   'src/game/session.js',
-  'src/services/lives.js',
   'src/services/season.js',
   'src/services/identity.js',
   'src/services/cloud.js',
+  'src/services/economy.js',
 ];
 
 function build() {
@@ -64,9 +66,9 @@ const {
 } = require(path.join(BUILD, 'src/game/constants.js'));
 const { captureSession, restoreSession } = require(path.join(BUILD, 'src/game/session.js'));
 
-// O modulo de vidas fala com o AsyncStorage, que so existe no celular. Como
-// ele usa tres metodos, um Map faz o papel do disco — e a regra das cinco
-// partidas passa a ser testavel aqui, sem emulador.
+// A identidade do jogador fala com o AsyncStorage, que so existe no celular.
+// Como ela usa tres metodos, um Map faz o papel do disco — e e esse mesmo Map
+// que prova, na secao da economia, que nenhuma moeda vai parar no aparelho.
 const disk = new Map();
 const memoryStorage = {
   getItem: async (k) => (disk.has(k) ? disk.get(k) : null),
@@ -94,17 +96,8 @@ const FAKE_API = 'http://servidor-de-teste';
 process.env.EXPO_PUBLIC_API_URL = FAKE_API;
 const cloud = require(path.join(BUILD, 'src/services/cloud.js'));
 
-const LIVES_KEY = '@major-flyer/lives';
-const {
-  MAX_LIVES,
-  loadLives,
-  saveLives,
-  initLives,
-  livesNow,
-  spendLife,
-  refillLives,
-  resetLivesState,
-} = require(path.join(BUILD, 'src/services/lives.js'));
+const economy = require(path.join(BUILD, 'src/services/economy.js'));
+const coins = require(path.join(BUILD, 'src/game/coins.js'));
 
 let failures = 0;
 function check(name, ok, extra = '') {
@@ -300,7 +293,7 @@ section('Rotacao no meio da partida');
 
   const rotated = new World(Lx);
   const resumed = restoreSession(rotated, session);
-  check('retomou a partida', resumed === true);
+  check('retomou a partida', resumed === 'live', String(resumed));
   check('placar preservado', rotated.score === scoreBefore, `${rotated.score} vs ${scoreBefore}`);
   check('volta em READY, sem cair de surpresa', rotated.phase === PHASE.READY);
   check('layout novo e o de paisagem', rotated.layout.landscape === true);
@@ -315,8 +308,15 @@ section('Rotacao no meio da partida');
   const deadSession = captureSession(dead);
   dead.destroy();
   const afterDeath = new World(Lx);
-  check('girar depois de perder nao ressuscita', restoreSession(afterDeath, deadSession) === false);
-  check('placar zerado apos a morte', afterDeath.score === 0);
+  // Perdeu, mas a partida ainda nao foi encerrada no servidor: a oferta da nova
+  // chance precisa sobreviver a virada, com o placar de quando caiu.
+  const restored = restoreSession(afterDeath, deadSession);
+  check(
+    'girar depois de perder nao ressuscita',
+    restored === 'over' && afterDeath.phase === PHASE.OVER,
+    String(restored)
+  );
+  check('a tela de fim volta com o placar da queda', afterDeath.score === deadSession.score);
   afterDeath.destroy();
 
   // varias viradas seguidas
@@ -888,76 +888,234 @@ section('Reinicio de partida');
   world.destroy();
 }
 
-// --------------------------------------------------------------- 5. vidas
+// --------------------------------------------------------------- 5. moedas
 
 /**
- * As cinco partidas: o unico lugar do jogo em que o jogador pode ficar sem
- * poder jogar. Um erro de sinal aqui e ou vida infinita (e nenhum anuncio) ou
- * um jogador trancado para sempre — os dois calados.
+ * As moedas: onde aparecem, quando sao pegas e o que vai para o servidor.
+ *
+ * O servidor confere cada moeda pelo NUMERO do obstaculo (server/coins.go). Se
+ * o app numerar errado — contar do lugar errado depois de uma troca de fase ou
+ * de uma nova chance —, moeda honesta vira moeda recusada, e o jogador nem fica
+ * sabendo por que. Por isso a numeracao e testada em partida de verdade, com o
+ * bot voando.
  */
-async function livesSection() {
-  section('Vidas: cinco partidas e o video premiado');
-  disk.clear();
+function coinsSection() {
+  section('Moedas: a mesma conta do servidor');
 
-  check('instalacao nova comeca com o tanque cheio', (await loadLives()) === MAX_LIVES, `${MAX_LIVES}`);
+  // Os mesmos valores de server/coins_test.go.
+  const referencia = {
+    1: [2767685996, 1136996714, 1885302839, 1460141003, 2082786835, 3876931674],
+    12345: [1868776673, 1162198605, 3936060331, 3751896808, 1195200802, 1711063604],
+    2654435769: [0, 1248097530, 2307639841, 2771223418, 2311093537, 3409687398],
+    4294967295: [903996321, 3101234265, 2403485737, 4133615121, 2418229727, 1440506045],
+  };
+  let bate = true;
+  let onde = '';
+  for (const [seed, rolagens] of Object.entries(referencia)) {
+    rolagens.forEach((quer, i) => {
+      const veio = coins.coinRoll(Number(seed), i + 1);
+      if (veio !== quer && bate) {
+        bate = false;
+        onde = `semente ${seed}, obstaculo ${i + 1}: ${veio} em vez de ${quer}`;
+      }
+    });
+  }
+  check('a conta das moedas bate bit a bit com a do servidor', bate, onde);
 
-  const afterOne = await saveLives((await loadLives()) - 1);
+  const daSemente = [];
+  for (let o = 1; o <= 30; o++) if (coins.hasCoin(12345, o, 3)) daSemente.push(o);
   check(
-    'comecar uma partida gasta uma vida, e ela fica gravada',
-    afterOne === MAX_LIVES - 1 && (await loadLives()) === MAX_LIVES - 1,
-    `${afterOne}`
+    'as moedas da semente 12345 sao as mesmas que o servidor ve',
+    JSON.stringify(daSemente) === JSON.stringify([2, 9, 10, 13, 17, 18, 19, 24, 26]),
+    JSON.stringify(daSemente)
   );
+  check('sem semente (treino) nao ha moeda', !coins.hasCoin(null, 2, 3) && !coins.hasCoin(undefined, 9, 3));
 
-  let left = afterOne;
-  for (let i = 0; i < 10; i++) left = await saveLives((await loadLives()) - 1);
-  check('nao passa de zero por baixo', left === 0 && (await loadLives()) === 0);
+  const L = computeLayout(390, 844);
+  const RUN = { seed: 12345, coinEvery: 3 };
 
-  check('o video premiado devolve as cinco', (await saveLives(MAX_LIVES)) === MAX_LIVES);
-  check('e nunca guarda mais que o maximo', (await saveLives(99)) === MAX_LIVES);
+  section('Moedas no voo');
+  {
+    const treino = new World(L);
+    treino.flap();
+    autoplay(treino, L, 60 * 20);
+    check(
+      'no treino o voo inteiro passa sem moeda nenhuma',
+      treino.coins === 0 && treino.pillars.every((p) => p.coin === null)
+    );
+    treino.destroy();
+  }
 
-  disk.set(LIVES_KEY, 'isto nao e numero');
-  check('valor corrompido no disco nao trava o jogador', (await loadLives()) === MAX_LIVES);
-  disk.set(LIVES_KEY, '-4');
-  check('valor negativo no disco vira zero', (await loadLives()) === 0);
+  {
+    const w = new World(L);
+    w.setRun(RUN);
+    const p = w.pillars.find((q) => q.coin);
+    check('com a semente do servidor, a fila ja nasce com moeda', Boolean(p));
+    if (p) {
+      const y = w.coinY(p);
+      const raio = L.birdRadius * coins.COIN_RADIUS;
+      // Folga do tamanho do gelo (15% do vao) dos dois lados: a moeda nunca fica
+      // dentro do bloco que sai do cano.
+      check(
+        'a moeda fica no vao, longe do gelo dos canos',
+        y - raio > w.topEdgeOf(p) + p.gap * 0.15 && y + raio < w.bottomEdgeOf(p) - p.gap * 0.15,
+        `${(y - p.gapCenter).toFixed(1)}px do centro do vao`
+      );
 
-  // --- o numero que a tela le ---
-  //
-  // Aqui mora o bug que ja escapou: depois do video, o jogador ganhava as cinco
-  // vidas, comecava outra partida e o painel continuava marcando cinco. O
-  // numero so existia depois de uma ida e volta ao disco, e no Android essa ida
-  // e volta chegava tarde demais.
-  section('Vidas: o numero que a tela le');
-  disk.clear();
-  resetLivesState();
+      p.x = L.birdX;
+      w.bird.position.y = y;
+      w._collectCoins();
+      check('encostar na moeda pega a moeda', w.coins === 1 && p.coin.taken === true, `${w.coins}`);
+      check(
+        'e guarda o numero do obstaculo, que e o que vai para o servidor',
+        w.coinOrdinals[0] === p.ordinal
+      );
+      w._collectCoins();
+      check('a mesma moeda nao conta duas vezes', w.coins === 1 && w.coinOrdinals.length === 1);
+    }
+    w.destroy();
+  }
 
-  await initLives();
-  check('abre o app com o tanque cheio', livesNow() === MAX_LIVES, `${livesNow()}`);
+  {
+    // Partida de verdade: o bot voa por um minuto, atravessando troca de fase.
+    const w = new World(L);
+    w.setRun(RUN);
+    w.flap();
+    let colunas = 0;
+    let errada = '';
+    for (let f = 0; f < 60 * 60 && w.phase !== PHASE.OVER; f++) {
+      if (w.phase === PHASE.STAGE_CLEAR) {
+        w.nextStage();
+        w.flap();
+      }
+      const jaPassadas = new Set(w.pillars.filter((q) => q.scored));
+      const placar = w.score;
+      botStep(w, L);
+      if (w.score === placar) continue;
+      for (const q of w.pillars) {
+        if (!q.scored || jaPassadas.has(q)) continue;
+        colunas++;
+        if (q.ordinal !== w.score && !errada) errada = `coluna ${q.ordinal} passada com placar ${w.score}`;
+      }
+    }
+    check(
+      'cada coluna e passada com o placar igual ao numero dela',
+      !errada && colunas > 10,
+      errada || `${colunas} colunas`
+    );
+    check(
+      'toda moeda pega e de obstaculo que tinha moeda',
+      w.coinOrdinals.every((o) => coins.hasCoin(RUN.seed, o, RUN.coinEvery))
+    );
+    check('nenhuma moeda repetida na lista', new Set(w.coinOrdinals).size === w.coinOrdinals.length);
+    check('nenhuma alem de onde o passaro chegou', w.coinOrdinals.every((o) => o <= w.score + 1));
+    check('o contador bate com a lista', w.coins === w.coinOrdinals.length, `${w.coins} moedas`);
+    w.destroy();
+  }
 
-  check('gastar vale na hora, sem esperar disco', spendLife() === MAX_LIVES - 1);
-  check('e o valor lido confere', livesNow() === MAX_LIVES - 1);
+  {
+    const w = new World(L);
+    w.setRun(RUN);
+    w.score = STAGE_LENGTH;
+    w.phase = PHASE.STAGE_CLEAR;
+    w.nextStage();
+    const ordinais = w.pillars.map((q) => q.ordinal).sort((x, y) => x - y);
+    check(
+      'fase nova: a fila continua numerada a partir do placar',
+      ordinais[0] === STAGE_LENGTH + 1,
+      JSON.stringify(ordinais)
+    );
+    w.destroy();
+  }
 
-  for (let i = 0; i < 10; i++) spendLife();
-  check('nao passa de zero', livesNow() === 0);
+  section('Nova chance');
+  {
+    const w = new World(L);
+    w.setRun(RUN);
+    w.flap();
+    for (let f = 0; f < 10; f++) w.update();
+    // Como se ja tivesse passado sete obstaculos: a fila vem numerada do 8.
+    w.score = 7;
+    w._layPillars();
 
-  check('o video devolve as cinco', refillLives() === MAX_LIVES);
-  check(
-    'e a partida logo depois do video ja debita',
-    spendLife() === MAX_LIVES - 1,
-    `${livesNow()} vidas`
-  );
+    // Uma moeda pega a mao numa coluna que ainda estava por vir, para o teste
+    // nao depender da mira do bot. Guarda-se o NUMERO: depois da nova chance a
+    // mesma coluna e renumerada, e o que importa e o obstaculo, nao o objeto.
+    const alvo = w.pillars.find((q) => q.coin && !q.coin.taken);
+    const numeroDoAlvo = alvo ? alvo.ordinal : null;
+    if (alvo) {
+      alvo.x = L.birdX;
+      w.bird.position.y = w.coinY(alvo);
+      w._collectCoins();
+    }
+    const placar = w.score;
+    const moedas = w.coinOrdinals.slice();
 
-  // O disco vem atras, na fila, mas tem que terminar com o mesmo numero.
-  await new Promise((r) => setTimeout(r, 30));
-  check('o disco acompanha', (await loadLives()) === MAX_LIVES - 1, `${await loadLives()}`);
+    check('fora da queda nao ha nova chance', w.revive() === false);
+    w.birdY = w.bird.position.y; // a batida forcada mira onde o passaro esta de fato
+    forceCrash(w, L);
+    check('a batida sem escudo derruba', w.phase === PHASE.OVER);
+    check('com o passaro caido, a nova chance vale', w.revive() === true);
+    check('volta em READY, esperando o toque', w.phase === PHASE.READY);
+    check(
+      'placar e moedas ficam',
+      w.score === placar && JSON.stringify(w.coinOrdinals) === JSON.stringify(moedas),
+      `${w.score} pontos, ${w.coins} moedas`
+    );
+    check('as colunas recomecam fora da tela', w.pillars.every((q) => q.x > L.width));
+    check(
+      'numeradas a partir do placar',
+      Math.min(...w.pillars.map((q) => q.ordinal)) === w.score + 1
+    );
+    check('a nova chance fica contada', w.continuesUsed === 1);
+    if (numeroDoAlvo !== null) {
+      const mesma = w.pillars.find((q) => q.ordinal === numeroDoAlvo);
+      check(
+        'moeda pega antes da queda nao reaparece',
+        Boolean(mesma) && mesma.coin !== null && mesma.coin.taken === true,
+        mesma ? `obstaculo ${numeroDoAlvo}` : 'a coluna nao voltou para a fila'
+      );
+    }
+    check('e nao ha segunda nova chance sem cair de novo', w.revive() === false);
+    w.destroy();
+  }
 
-  // Leitura inicial lenta: gastar antes de o disco responder nao pode ser
-  // desfeito pelo valor velho que chega depois.
-  disk.set(LIVES_KEY, '5');
-  resetLivesState();
-  const slowInit = initLives();
-  spendLife();
-  await slowInit;
-  check('disco atrasado nao devolve a vida ja gasta', livesNow() === MAX_LIVES - 1, `${livesNow()}`);
+  section('Moedas e escudo atravessam a virada de tela');
+  {
+    const P = computeLayout(390, 844);
+    const Lx = computeLayout(844, 390);
+    const w = new World(P);
+    w.setRun(RUN);
+    w.flap();
+    for (let f = 0; f < 10; f++) w.update();
+    w.score = 5;
+    const alvo = w.pillars.find((q) => q.coin && !q.coin.taken);
+    if (alvo) {
+      alvo.x = P.birdX;
+      w.bird.position.y = w.coinY(alvo);
+      w._collectCoins();
+    }
+    w.grantShield();
+    const pacote = captureSession(w);
+    w.destroy();
+
+    const girado = new World(Lx);
+    girado.setRun(RUN);
+    const como = restoreSession(girado, pacote);
+    check('a partida volta', como === 'live', String(como));
+    check(
+      'com as mesmas moedas',
+      girado.coins === pacote.coins &&
+        JSON.stringify(girado.coinOrdinals) === JSON.stringify(pacote.coinOrdinals),
+      `${girado.coins}`
+    );
+    check('com o escudo que ja estava pago', girado.shield === true);
+    check(
+      'e a fila numerada a partir do placar',
+      Math.min(...girado.pillars.map((q) => q.ordinal)) === girado.score + 1
+    );
+    girado.destroy();
+  }
 }
 
 // -------------------------------------------------------- 6. rodadas semanais
@@ -1042,105 +1200,267 @@ function identitySection() {
   );
 }
 
-// ------------------------------------------------ 8. a conversa com o servidor
+// ------------------------------------------- 8. a economia, pelo lado do app
 
 /**
- * O lado do jogo na conversa com o servidor do ranking (`server/`, em Go).
+ * Moedas, vidas, loja e partidas, vistas pelo app (economy.js).
  *
- * O servidor tem os testes dele, contra um Postgres de verdade. O que se
- * confere AQUI e o combinado entre os dois: quais cabecalhos vao, o que o jogo
- * faz quando a rede cai no meio de um placar, e o que ele NAO refaz quando o
- * servidor disse um "nao" definitivo. Um `fetch` de mentira basta — nenhuma
- * dessas respostas precisa de servidor no ar.
+ * O servidor tem os testes dele, contra um Postgres de verdade. Aqui se confere
+ * o outro lado do combinado: o app so MOSTRA o que o servidor devolve (nunca
+ * soma saldo por conta propria), nao grava nada de economia no aparelho, espera
+ * a confirmacao do anuncio e nao perde a partida fechada sem rede. Um `fetch` de
+ * mentira faz o papel do servidor.
+ */
+async function economySection() {
+  section('Economia: o servidor manda, o aparelho so mostra');
+
+  const pedidos = [];
+  let responder = () => ({ status: 200, body: {} });
+  const fetchOriginal = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    const pedido = {
+      path: String(url).replace(FAKE_API, ''),
+      method: options.method,
+      headers: options.headers || {},
+      corpo: options.body ? JSON.parse(options.body) : null,
+    };
+    pedidos.push(pedido);
+    const r = responder(pedido);
+    if (r.falha) throw Object.assign(new Error('sem rede'), { name: r.falha });
+    return {
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      text: async () => JSON.stringify(r.body ?? {}),
+    };
+  };
+
+  const carteira = (extra = {}) => ({
+    coins: 120,
+    lives: 4,
+    maxLives: 5,
+    shields: 1,
+    continues: 0,
+    equippedBird: 'classic',
+    ownedBirds: ['classic'],
+    ...extra,
+  });
+  const catalogo = {
+    birds: [
+      { id: 'classic', name: 'Major', price: 0, ability: null },
+      { id: 'frost', name: 'Geada', price: 150, ability: { id: 'frost', status: 'soon' } },
+    ],
+    items: { shield: { price: 60 }, continue: { price: 100 } },
+    rules: { maxLives: 5, coinEvery: 3, stageLength: 100, stageBonus: 10 },
+  };
+  const naoAchou = { status: 404, body: {} };
+
+  try {
+    identity.resetPlayerState();
+    economy.resetEconomyState();
+    disk.clear();
+    const jogador = await identity.initPlayer();
+    const chavesDoJogador = new Set(disk.keys());
+
+    // ---- abrir o app
+    responder = (p) => {
+      if (p.path === '/v1/catalog') return { status: 200, body: catalogo };
+      if (p.path === '/v1/me/wallet') return { status: 200, body: { wallet: carteira() } };
+      return naoAchou;
+    };
+    await economy.refresh();
+    check(
+      'ao abrir, a carteira vem do servidor',
+      economy.economyNow().status === 'ready' && economy.economyNow().wallet.coins === 120
+    );
+    check(
+      'e os precos tambem',
+      economy.priceOf('continue') === 100 && economy.birdById('frost').price === 150
+    );
+
+    // ---- abrir partida
+    pedidos.length = 0;
+    responder = (p) =>
+      p.path === '/v1/runs/start'
+        ? {
+            status: 200,
+            body: {
+              run: { id: 'r1', seed: 12345, coinEvery: 3, maxContinues: 1 },
+              wallet: carteira({ lives: 3 }),
+            },
+          }
+        : naoAchou;
+    const aberta = await economy.startRun();
+    check('a partida so comeca com a semente vinda do servidor', aberta.ok && aberta.run.seed === 12345);
+    check('quem desconta a vida e o servidor', economy.economyNow().wallet.lives === 3);
+    check(
+      'o pedido vai identificado',
+      pedidos[0]?.headers['X-Player-Id'] === jogador.id &&
+        pedidos[0]?.headers['X-Player-Secret'] === jogador.secret
+    );
+
+    // ---- fechar partida
+    pedidos.length = 0;
+    responder = (p) =>
+      p.path === '/v1/runs/r1/finish'
+        ? {
+            status: 200,
+            body: {
+              result: { points: 42, coins: 2, stageBonus: 0 },
+              wallet: carteira({ coins: 500, lives: 3 }),
+            },
+          }
+        : naoAchou;
+    const fechada = await economy.finishRun('r1', { points: 42, coinOrdinals: [2, 9, 10] });
+    check(
+      'fechar manda o placar e os numeros dos obstaculos das moedas',
+      JSON.stringify(pedidos[0]?.corpo) === JSON.stringify({ points: 42, coinOrdinals: [2, 9, 10] }),
+      JSON.stringify(pedidos[0]?.corpo)
+    );
+    check('o que vale e o que o servidor creditou', fechada.ok && fechada.result.coins === 2);
+    check(
+      'o saldo na tela e o do servidor, sem conta feita no aparelho',
+      economy.economyNow().wallet.coins === 500,
+      `${economy.economyNow().wallet.coins}`
+    );
+
+    // ---- recusa
+    responder = () => ({ status: 409, body: { error: 'moedas insuficientes', code: 'not_enough_coins' } });
+    const recusa = await economy.buy('bird', 'frost');
+    check(
+      'a recusa chega com o motivo e o codigo',
+      !recusa.ok && recusa.code === 'not_enough_coins' && recusa.error === 'moedas insuficientes'
+    );
+    check('e a carteira nao muda', economy.economyNow().wallet.coins === 500);
+
+    // ---- anuncio
+    let tentativas = 0;
+    responder = (p) => {
+      if (p.path !== '/v1/ads/claim') return naoAchou;
+      tentativas++;
+      return tentativas < 3
+        ? { status: 202, body: { pending: true } }
+        : { status: 200, body: { wallet: carteira({ coins: 500, lives: 5 }), kind: 'lives' } };
+    };
+    const premio = await economy.claimAd('lives', { delays: [0, 0, 0], wait: async () => {} });
+    check(
+      'o premio espera a confirmacao do Google chegar ao servidor',
+      premio.ok && tentativas === 3,
+      `${tentativas} tentativas`
+    );
+    check('e so aparece quando o servidor registra', economy.economyNow().wallet.lives === 5);
+
+    responder = () => ({ status: 202, body: { pending: true } });
+    const semConfirmacao = await economy.claimAd('shield', { delays: [0, 0], wait: async () => {} });
+    check('sem confirmacao, nao ha premio', !semConfirmacao.ok && semConfirmacao.pending === true);
+
+    // ---- sem rede
+    responder = () => ({ falha: 'TypeError' });
+    const semRede = await economy.finishRun('r2', { points: 12, coinOrdinals: [9] });
+    check('sem rede, o fechamento falha como offline', !semRede.ok && semRede.offline === true);
+    check('e a tela passa a oferecer so o treino', economy.economyNow().status === 'offline');
+
+    pedidos.length = 0;
+    responder = (p) => {
+      if (p.path === '/v1/runs/r2/finish') {
+        return { status: 200, body: { result: { coins: 1, stageBonus: 0 }, wallet: carteira({ coins: 501 }) } };
+      }
+      if (p.path === '/v1/runs/start') {
+        return {
+          status: 200,
+          body: {
+            run: { id: 'r3', seed: 7, coinEvery: 3, maxContinues: 1 },
+            wallet: carteira({ coins: 501, lives: 2 }),
+          },
+        };
+      }
+      return naoAchou;
+    };
+    await economy.startRun();
+    const ordem = pedidos.map((p) => p.path);
+    check(
+      'a partida fechada sem rede sobe antes de abrir a proxima',
+      ordem[0] === '/v1/runs/r2/finish' && ordem.includes('/v1/runs/start'),
+      JSON.stringify(ordem)
+    );
+
+    // ---- disco
+    const novas = [...disk.keys()].filter((k) => !chavesDoJogador.has(k));
+    check('nada de moeda, vida ou item gravado no aparelho', novas.length === 0, JSON.stringify(novas));
+  } finally {
+    global.fetch = fetchOriginal;
+    economy.resetEconomyState();
+    identity.resetPlayerState();
+  }
+}
+
+// ------------------------------------------------ 9. a conversa com o servidor
+
+/**
+ * O transporte e as rotas de grupo e ranking (cloud.js): os cabecalhos que vao,
+ * a apresentacao automatica a um servidor que nao conhece o aparelho, e as
+ * respostas estranhas que nao podem derrubar o jogo.
  */
 async function cloudSection() {
   section('Ranking online: o combinado com o servidor');
 
   const pedidos = [];
   let respostas = [];
-
   const fetchOriginal = global.fetch;
   global.fetch = async (url, options = {}) => {
     pedidos.push({ url, ...options });
     const r = respostas.shift() || { status: 200, body: {} };
-    if (r.falha) {
-      throw Object.assign(new Error('sem rede'), { name: r.falha });
-    }
+    if (r.falha) throw Object.assign(new Error('sem rede'), { name: r.falha });
     return {
-      ok: r.status < 400,
+      ok: r.status >= 200 && r.status < 300,
       status: r.status,
-      text: async () => JSON.stringify(r.body ?? {}),
+      text: async () => (r.texto !== undefined ? r.texto : JSON.stringify(r.body ?? {})),
     };
   };
 
-  const limpar = async () => {
-    pedidos.length = 0;
-    respostas = [];
-    disk.delete('@major-flyer/pending-runs');
-  };
-
   try {
-    check('com endereco configurado, o ranking liga', cloud.isConfigured() === true);
+    check('com endereco configurado, o online liga', cloud.isConfigured() === true);
 
     identity.resetPlayerState();
     disk.clear();
     const jogador = await identity.initPlayer();
 
-    // ---- o placar comum
-    await limpar();
-    respostas = [{ status: 200, body: { points: 140, total: 140, best: 140 } }];
-    const enviado = await cloud.submitRun(140);
-    const pedido = pedidos[0] || {};
-    check('o placar sobe', enviado.ok === true);
-    check('...pelo caminho certo', pedido.url === `${FAKE_API}/v1/runs`, pedido.url);
-    check('...com o codigo do jogador no cabecalho', pedido.headers?.['X-Player-Id'] === jogador.id);
-    check('...e com o segredo, que nunca aparece na tela', pedido.headers?.['X-Player-Secret'] === jogador.secret);
-    check('...levando so os pontos', pedido.body === JSON.stringify({ points: 140 }));
-
-    // ---- a regra do servidor chega inteira na tela
-    await limpar();
-    respostas = [{ status: 409, body: { error: 'a rodada está em apuração' } }];
-    const recusado = await cloud.submitRun(10);
-    check('o "nao" do servidor chega escrito', recusado.error === 'a rodada está em apuração');
-    check(
-      '...e um placar recusado por regra nao volta para a fila',
-      !disk.has('@major-flyer/pending-runs') || JSON.parse(disk.get('@major-flyer/pending-runs')).length === 0
-    );
-
-    // ---- sem rede: guarda e manda depois
-    await limpar();
-    respostas = [{ falha: 'TypeError' }];
-    const perdido = await cloud.submitRun(77);
-    check('sem rede o placar nao se perde', perdido.ok === false && disk.has('@major-flyer/pending-runs'));
-    check(
-      '...ele fica guardado com os pontos certos',
-      JSON.parse(disk.get('@major-flyer/pending-runs'))[0]?.points === 77
-    );
-
+    // ---- servidor novo (ou banco restaurado): se apresenta e insiste
     pedidos.length = 0;
-    respostas = [{ status: 200, body: { total: 77 } }];
-    const subiram = await cloud.flushPending();
-    check('e sobe na primeira conexao que der', subiram === 1);
-    check('...uma vez so', pedidos.length === 1);
-    check('...esvaziando a fila', JSON.parse(disk.get('@major-flyer/pending-runs')).length === 0);
-
-    // ---- servidor novo (ou banco restaurado): se registra e tenta de novo
-    await limpar();
     respostas = [
       { status: 401, body: { error: 'jogador desconhecido neste servidor' } },
       { status: 200, body: { player: { id: jogador.id, name: jogador.name } } },
-      { status: 200, body: { total: 12 } },
+      { status: 200, body: { group: null } },
     ];
-    const depoisDoRegistro = await cloud.submitRun(12);
-    check('servidor que nao conhece o aparelho: ele se apresenta e insiste', depoisDoRegistro.ok === true);
-    check('...e a apresentacao foi mesmo em /v1/players', pedidos[1]?.url === `${FAKE_API}/v1/players`, pedidos[1]?.url);
+    const grupo = await cloud.myGroup();
+    check('servidor que nao conhece o aparelho: ele se apresenta e insiste', grupo.ok === true);
+    check(
+      '...e a apresentacao foi em /v1/players',
+      pedidos[1]?.url === `${FAKE_API}/v1/players`,
+      pedidos[1]?.url
+    );
 
-    // ---- o ranking e publico: nao precisa de identificacao
-    await limpar();
+    // ---- ranking publico
+    pedidos.length = 0;
     respostas = [{ status: 200, body: { rows: [] } }];
     await cloud.topPlayers(20);
     check('o ranking sai sem cabecalho de jogador', pedidos[0]?.headers?.['X-Player-Id'] === undefined);
-    check('...e pede o tamanho que a tela quer', pedidos[0]?.url === `${FAKE_API}/v1/rankings/players?limit=20`, pedidos[0]?.url);
+    check(
+      '...e pede o tamanho que a tela quer',
+      pedidos[0]?.url === `${FAKE_API}/v1/rankings/players?limit=20`,
+      pedidos[0]?.url
+    );
+
+    // ---- respostas estranhas
+    respostas = [{ status: 502, texto: '<html>Bad Gateway</html>' }];
+    const proxy = await cloud.topGroups(10);
+    check(
+      'pagina de erro do proxy nao derruba o app e conta como sem conexao',
+      !proxy.ok && proxy.offline === true
+    );
+
+    respostas = [{ falha: 'AbortError' }];
+    const lento = await cloud.topGroups(10);
+    check('servidor que demora demais tambem', !lento.ok && lento.offline === true);
   } finally {
     global.fetch = fetchOriginal;
     identity.resetPlayerState();
@@ -1149,8 +1469,9 @@ async function cloudSection() {
 
 seasonSection();
 identitySection();
+coinsSection();
 
-livesSection()
+economySection()
   .then(cloudSection)
   .catch((e) => {
     failures++;

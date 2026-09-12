@@ -1,12 +1,12 @@
--- Major Flyer — banco do ranking.
+-- Major Flyer — banco do servidor.
 --
 -- Roda sozinho na subida do servidor (store.go faz o embed deste arquivo). E
 -- idempotente de proposito: subir de novo, ou subir duas instancias ao mesmo
 -- tempo, nao apaga nem duplica nada.
 --
--- A regra que importa esta no indice `one_group_per_season`: um jogador em um
--- grupo por rodada, garantido pelo banco. Regra que vive so no aplicativo e
--- regra que da para burlar com um cliente modificado.
+-- A regra que importa no ranking esta no indice `one_group_per_season`: um
+-- jogador em um grupo por rodada, garantido pelo banco. Regra que vive so no
+-- aplicativo e regra que da para burlar com um cliente modificado.
 
 create table if not exists players (
   id          uuid        primary key,
@@ -40,6 +40,8 @@ create table if not exists group_members (
 create unique index if not exists one_group_per_season
   on group_members (player_id, season_id);
 
+-- Pontos que valem no ranking da rodada. So entram aqui partidas FECHADAS no
+-- servidor (game_sessions) — nunca um placar solto mandado pelo app.
 create table if not exists runs (
   id         bigserial   primary key,
   player_id  uuid        not null references players (id),
@@ -48,8 +50,86 @@ create table if not exists runs (
   created_at timestamptz not null default now()
 );
 
--- Os dois caminhos que o ranking percorre: "todos os pontos da rodada" e
--- "quando foi a ultima partida deste jogador" (o intervalo minimo entre
--- partidas).
 create index if not exists runs_season_player on runs (season_id, player_id);
 create index if not exists runs_player_recent on runs (player_id, created_at desc);
+
+-- ------------------------------------------------------------------ economia
+--
+-- Tudo o que o jogador ganha ou gasta mora aqui, e so aqui: o aplicativo nao
+-- guarda moeda, vida nem item no aparelho. Cada mudanca de saldo acontece numa
+-- transacao com a linha da carteira travada (`for update`), entao dois toques
+-- no mesmo instante nao gastam a mesma moeda duas vezes — e os `check` abaixo
+-- sao a ultima barreira se algum dia um bug tentar deixar saldo negativo.
+
+create table if not exists wallets (
+  player_id     uuid        primary key references players (id),
+  coins         integer     not null default 0 check (coins >= 0),
+  lives         integer     not null default 5 check (lives >= 0),
+  shields       integer     not null default 0 check (shields >= 0),
+  continues     integer     not null default 0 check (continues >= 0),
+  equipped_bird text        not null default 'classic',
+  updated_at    timestamptz not null default now()
+);
+
+-- O passaro de sempre nao aparece aqui: todo jogador ja o tem.
+create table if not exists owned_birds (
+  player_id   uuid        not null references players (id),
+  bird_id     text        not null,
+  acquired_at timestamptz not null default now(),
+  primary key (player_id, bird_id)
+);
+
+-- A partida aberta no servidor.
+--
+-- Abrir custa uma vida e sorteia a semente das moedas; fechar confere o placar
+-- e as moedas contra essa semente e contra o relogio DESTE servidor. Status:
+-- open, finished, abandoned (o jogador abriu outra antes de fechar esta),
+-- expired (aberta tempo demais) e rejected (placar impossivel).
+create table if not exists game_sessions (
+  id             uuid        primary key,
+  player_id      uuid        not null references players (id),
+  seed           bigint      not null,
+  status         text        not null default 'open',
+  started_at     timestamptz not null default now(),
+  ended_at       timestamptz,
+  points         integer,
+  coins          integer,
+  stage_bonus    integer,
+  continues_used integer     not null default 0
+);
+
+create index if not exists game_sessions_open on game_sessions (player_id) where status = 'open';
+
+-- Livro-razao: cada entrada e uma mudanca de saldo, com o motivo e a referencia
+-- (partida, passaro, transacao do anuncio). Nunca e apagado nem editado. E o que
+-- responde "de onde vieram essas moedas?" quando alguem reclamar — ou quando
+-- alguem precisar ser investigado.
+create table if not exists ledger (
+  id         bigserial   primary key,
+  player_id  uuid        not null references players (id),
+  kind       text        not null,
+  coins      integer     not null default 0,
+  lives      integer     not null default 0,
+  shields    integer     not null default 0,
+  continues  integer     not null default 0,
+  ref        text        not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ledger_player on ledger (player_id, created_at desc);
+
+-- Video premiado confirmado pelo GOOGLE (SSV). Uma linha por transacao: a chave
+-- primaria faz o mesmo aviso repetido — o Google tenta de novo quando nao
+-- recebe resposta — valer uma vez so. O app troca cada linha por um premio
+-- (vidas, escudo ou nova chance) em ate 30 minutos.
+create table if not exists ad_views (
+  transaction_id text        primary key,
+  player_id      uuid        not null references players (id),
+  ad_unit        text        not null default '',
+  reward_amount  integer     not null default 0,
+  verified_at    timestamptz not null default now(),
+  claimed_at     timestamptz,
+  claimed_for    text
+);
+
+create index if not exists ad_views_unclaimed on ad_views (player_id, verified_at) where claimed_at is null;

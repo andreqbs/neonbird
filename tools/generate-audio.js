@@ -248,6 +248,19 @@ function makeMusic() {
   return fadeEdges(softClip(buf), 12);
 }
 
+/**
+ * Moeda: tres notas agudas, rapidas e subindo. Mais brilhante e mais curta que
+ * o som do ponto — as duas coisas acontecem juntas o tempo todo, e o ouvido
+ * precisa separar uma da outra.
+ */
+function makeCoin() {
+  const buf = new Float32Array(secs(0.24));
+  addNote(buf, 0, 0.06, 1567.98, { wave: 'square', duty: 0.25, gain: 0.2, a: 0.001, d: 0.02, s: 0.7, r: 0.02 });
+  addNote(buf, 0.045, 0.06, 2093.0, { wave: 'square', duty: 0.25, gain: 0.2, a: 0.001, d: 0.02, s: 0.7, r: 0.02 });
+  addNote(buf, 0.09, 0.14, 2637.02, { wave: 'triangle', gain: 0.26, a: 0.001, d: 0.05, s: 0.5, r: 0.08 });
+  return fadeEdges(softClip(buf), 3);
+}
+
 // ---------------------------------------------------------------------- main
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -256,4 +269,7 @@ writeWav('flap.wav', makeFlap());
 writeWav('score.wav', makeScore());
 writeWav('hit.wav', makeHit());
 writeWav('music.wav', makeMusic());
+// Por ultimo: a moeda nao usa ruido, e mesmo assim nao deve mexer na sequencia
+// do gerador de ruido dos sons de cima.
+writeWav('coin.wav', makeCoin());
 console.log('pronto.');
