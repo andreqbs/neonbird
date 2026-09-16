@@ -186,11 +186,113 @@ func TestSoContaMoedaQueExistia(t *testing.T) {
 	if got := num(t, carteira(t, body)["coins"]); got != len(boas) {
 		t.Errorf("saldo: %d, esperava %d", got, len(boas))
 	}
+}
 
-	// Fechar de novo nao paga de novo.
-	st, body = a.fechaPartida(t, ana, id, 30, lista)
-	if st != http.StatusConflict {
-		t.Errorf("fechar a mesma partida duas vezes: status %d (%v)", st, body)
+// O app repete o fechamento quando a resposta se perde no caminho: o servidor
+// gravou, a conexao caiu antes de o aparelho ouvir. A repeticao devolve o que ja
+// estava gravado — nem moeda nem ponto em dobro, e placar novo nao entra.
+func TestFecharDeNovoDevolveOMesmoResultado(t *testing.T) {
+	a := novoAmbiente(t, nil)
+	ana := a.registra(t, "Ana")
+
+	id, seed := a.abrePartida(t, ana)
+	st, body := a.fechaPartida(t, ana, id, 120, moedasDe(seed, 120))
+	if st != http.StatusOK {
+		t.Fatalf("fechar: status %d (%v)", st, body)
+	}
+	primeiro, _ := body["result"].(map[string]any)
+	saldo := num(t, carteira(t, body)["coins"])
+
+	// A repeticao chega com outro placar, como mandaria um app adulterado.
+	st, body = a.fechaPartida(t, ana, id, 500, moedasDe(seed, 500))
+	if st != http.StatusOK {
+		t.Fatalf("fechar de novo: status %d (%v), esperava 200 com o mesmo resultado", st, body)
+	}
+	segundo, _ := body["result"].(map[string]any)
+	for _, campo := range []string{"points", "coins", "stageBonus"} {
+		if num(t, segundo[campo]) != num(t, primeiro[campo]) {
+			t.Errorf("%s mudou na repeticao: %v -> %v", campo, primeiro[campo], segundo[campo])
+		}
+	}
+	if segundo["ranked"] != primeiro["ranked"] {
+		t.Errorf("ranked mudou na repeticao: %v -> %v", primeiro["ranked"], segundo["ranked"])
+	}
+	if got := num(t, carteira(t, body)["coins"]); got != saldo {
+		t.Errorf("fechar de novo pagou de novo: saldo %d, esperava %d", got, saldo)
+	}
+
+	if CurrentSeason().Open {
+		_, body = a.chama(t, &ana, "GET", "/v1/me/standing", nil)
+		posicao, _ := body["standing"].(map[string]any)
+		if got := num(t, posicao["total"]); got != 120 {
+			t.Errorf("pontos na rodada: %d, esperava 120 (a partida conta uma vez)", got)
+		}
+	}
+}
+
+// envelhecePartida empurra a abertura da partida `segundos` para o passado —
+// atalho para testar o que depende do relogio sem esperar de verdade.
+func (a *ambiente) envelhecePartida(t *testing.T, id string, segundos float64) {
+	t.Helper()
+	if _, err := a.store.pool.Exec(context.Background(),
+		`update game_sessions set started_at = started_at - make_interval(secs => $2) where id = $1`,
+		id, segundos); err != nil {
+		t.Fatalf("envelhecer partida: %v", err)
+	}
+}
+
+// Tempo de voo: o app mede so o tempo voando de fato e manda ao fechar a
+// partida; o servidor soma na carteira. Nao vale moeda, entao a conferencia e so
+// contra o absurdo: voo maior que o tempo desde a abertura vira esse tempo.
+func TestTempoDeVooSomaNaCarteira(t *testing.T) {
+	a := novoAmbiente(t, nil)
+	ana := a.registra(t, "Ana")
+
+	fecha := func(id string, voo int64) map[string]any {
+		t.Helper()
+		st, body := a.chama(t, &ana, "POST", "/v1/runs/"+id+"/finish", map[string]any{
+			"points": 5, "coinOrdinals": []int{}, "flightMs": voo,
+		})
+		if st != http.StatusOK {
+			t.Fatalf("fechar com tempo de voo: status %d (%v)", st, body)
+		}
+		return body
+	}
+
+	// Partida aberta ha 5 minutos, com 42 s de voo.
+	id, _ := a.abrePartida(t, ana)
+	a.envelhecePartida(t, id, 300)
+	body := fecha(id, 42_000)
+	res, _ := body["result"].(map[string]any)
+	if got := num(t, res["flightMs"]); got != 42_000 {
+		t.Errorf("voo da partida: %d ms, esperava 42000", got)
+	}
+	if got := num(t, carteira(t, body)["flightMs"]); got != 42_000 {
+		t.Errorf("voo na carteira: %d ms, esperava 42000", got)
+	}
+
+	// Voo impossivel: 10 horas numa partida aberta ha 2 minutos.
+	outra, _ := a.abrePartida(t, ana)
+	a.envelhecePartida(t, outra, 120)
+	body = fecha(outra, 36_000_000)
+	res, _ = body["result"].(map[string]any)
+	voo := num(t, res["flightMs"])
+	if voo < 119_000 || voo > 125_000 {
+		t.Errorf("voo impossivel virou %d ms, esperava ~120000 (o tempo desde a abertura)", voo)
+	}
+	total := num(t, carteira(t, body)["flightMs"])
+	if total != 42_000+voo {
+		t.Errorf("voo somado: %d ms, esperava %d", total, 42_000+voo)
+	}
+
+	// Fechar de novo devolve o mesmo voo e nao soma outra vez.
+	body = fecha(outra, 36_000_000)
+	res, _ = body["result"].(map[string]any)
+	if got := num(t, res["flightMs"]); got != voo {
+		t.Errorf("a repeticao mudou o voo da partida: %d ms, esperava %d", got, voo)
+	}
+	if got := num(t, carteira(t, body)["flightMs"]); got != total {
+		t.Errorf("fechar de novo somou o voo outra vez: %d ms, esperava %d", got, total)
 	}
 }
 
@@ -217,6 +319,12 @@ func TestPlacarRapidoDemaisNaoRendeNada(t *testing.T) {
 	st, body := a.fechaPartida(t, ana, id, 80, moedasDe(seed, 80))
 	if st != http.StatusUnprocessableEntity || codigoDe(body) != "run_rejected" {
 		t.Fatalf("80 pontos em milissegundos: status %d (%v), esperava 422 run_rejected", st, body)
+	}
+
+	// Insistir nao muda nada: a partida continua recusada.
+	st, body = a.fechaPartida(t, ana, id, 80, moedasDe(seed, 80))
+	if st != http.StatusUnprocessableEntity || codigoDe(body) != "run_rejected" {
+		t.Errorf("repetir a partida recusada: status %d (%v), esperava 422 run_rejected", st, body)
 	}
 
 	_, body = a.chama(t, &ana, "GET", "/v1/me/wallet", nil)

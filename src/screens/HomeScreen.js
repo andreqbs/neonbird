@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,6 +16,7 @@ import useAds from '../hooks/useAds';
 import useEconomy from '../hooks/useEconomy';
 import economy from '../services/economy';
 import AdCover from '../ui/AdCover';
+import { formatFlightTime } from '../ui/flightTime';
 import LifeBirds from '../ui/LifeBirds';
 import { SKY_GRADIENT, theme } from '../ui/theme';
 
@@ -27,7 +36,14 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
   }, []);
 
   // Em paisagem sobra largura e falta altura: marca de um lado, menu do outro.
+  // No celular o app fica em retrato; paisagem so aparece na web.
   const side = width > height;
+
+  // A altura que sobra de fato. No Android a barra de navegacao do sistema come
+  // o rodape, e num celular comum (360x800) nao cabem arte grande, textos e
+  // quatro botoes com folga: ali tudo aperta um pouco, em vez de o menu encostar
+  // nos botoes do sistema. Se nem assim couber (tela bem pequena), a Home rola.
+  const compact = !side && height - insets.top - insets.bottom < 760;
 
   const wallet = eco.wallet;
   const ready = eco.status === 'ready' && Boolean(wallet);
@@ -102,23 +118,25 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
       <LinearGradient colors={SKY_GRADIENT} locations={[0, 0.3, 0.56, 0.8, 1]} style={StyleSheet.absoluteFill} />
       <View style={styles.vignette} />
 
-      <View
-        style={[
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
           styles.content,
           side && styles.contentSide,
           {
-            paddingTop: insets.top + (side ? 12 : 32),
-            paddingBottom: insets.bottom + 24,
+            paddingTop: insets.top + (side || compact ? 12 : 32),
+            paddingBottom: insets.bottom + (compact ? 12 : 24),
             paddingLeft: insets.left + 24,
             paddingRight: insets.right + 24,
           },
         ]}
       >
-        <View style={[styles.brand, side && styles.brandSide]}>
+        <View style={[styles.brand, compact && styles.brandCompact, side && styles.brandSide]}>
           {/* Mesma arte do icone/splash do app, em vez de um desenho paralelo. */}
           <Image
             source={require('../../assets/splash-icon.png')}
-            style={[styles.badge, side && styles.badgeSide]}
+            style={[styles.badge, compact && styles.badgeCompact, side && styles.badgeSide]}
             resizeMode="contain"
           />
           <Text style={styles.title}>MAJOR FLYER</Text>
@@ -126,7 +144,7 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
             Toque para bater as asas. Solte e a gravidade cobra o preço.
           </Text>
 
-          <View style={styles.pills}>
+          <View style={[styles.pills, compact && styles.pillsCompact]}>
             <View style={styles.pill}>
               <Text style={styles.pillLabel}>RECORDE</Text>
               <Text style={styles.pillValue}>{best}</Text>
@@ -139,9 +157,20 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
             </View>
           </View>
 
-          <View style={[styles.pill, styles.livesPill, !ready && styles.pillWaiting]}>
+          <View
+            style={[styles.pill, styles.stacked, compact && styles.stackedCompact, !ready && styles.pillWaiting]}
+          >
             <Text style={styles.pillLabel}>VIDAS</Text>
             <LifeBirds lives={ready ? lives : 0} total={maxLives} size={20} gap={7} />
+          </View>
+
+          {/* Tempo de voo: so o tempo voando de fato, somado pelo servidor a cada
+              partida fechada. */}
+          <View
+            style={[styles.pill, styles.stacked, compact && styles.stackedCompact, !ready && styles.pillWaiting]}
+          >
+            <Text style={styles.pillLabel}>TEMPO DE VOO</Text>
+            <Text style={styles.flightValue}>{ready ? formatFlightTime(wallet.flightMs) : '—'}</Text>
           </View>
 
           {offline ? (
@@ -154,20 +183,20 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </View>
 
-        <View style={[styles.menu, side && styles.menuSide]}>
-          <MenuButton item={primary} primary onPress={primary.onPress} />
+        <View style={[styles.menu, compact && styles.menuCompact, side && styles.menuSide]}>
+          <MenuButton item={primary} primary compact={compact} onPress={primary.onPress} />
           {items.map((item) => (
-            <MenuButton key={item.id} item={item} onPress={() => onNavigate(item.id)} />
+            <MenuButton key={item.id} item={item} compact={compact} onPress={() => onNavigate(item.id)} />
           ))}
         </View>
-      </View>
+      </ScrollView>
 
       <AdCover state={adState} seconds={adSeconds} />
     </View>
   );
 }
 
-function MenuButton({ item, primary, onPress }) {
+function MenuButton({ item, primary, compact, onPress }) {
   const disabled = !onPress;
   return (
     <Pressable
@@ -175,6 +204,7 @@ function MenuButton({ item, primary, onPress }) {
       disabled={disabled}
       style={({ pressed }) => [
         styles.item,
+        compact && styles.itemCompact,
         primary ? styles.itemPrimary : styles.itemGhost,
         disabled && { opacity: 0.6 },
         pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
@@ -195,16 +225,22 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.skyTop },
   vignette: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6,9,26,0.45)' },
 
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  // flexGrow: com folga, o conteudo fica no centro; sem folga, rola.
+  scroll: { flex: 1 },
+  content: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   contentSide: { flexDirection: 'row', gap: 44 },
 
   brand: { alignItems: 'center', maxWidth: 400, marginBottom: 30 },
+  brandCompact: { marginBottom: 18 },
   brandSide: { marginBottom: 0, flex: 1, maxWidth: 340 },
 
   // A arte ja traz o halo, entao nada de sombra por cima (que no Android
-  // viraria `elevation` e mudaria a ordem de desenho).
-  badge: { width: 148, height: 148, marginBottom: 8 },
-  badgeSide: { width: 108, height: 108, marginBottom: 4 },
+  // viraria `elevation` e mudaria a ordem de desenho). Ela tambem tem uma faixa
+  // transparente embaixo do passaro: a margem negativa encosta o titulo nele,
+  // e nao no fim da imagem.
+  badge: { width: 148, height: 148, marginBottom: -14 },
+  badgeCompact: { width: 120, height: 120, marginBottom: -12 },
+  badgeSide: { width: 108, height: 108, marginBottom: -8 },
 
   title: {
     color: theme.text,
@@ -224,6 +260,7 @@ const styles = StyleSheet.create({
   },
 
   pills: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  pillsCompact: { marginTop: 14 },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -238,7 +275,10 @@ const styles = StyleSheet.create({
   pillWaiting: { opacity: 0.45 },
   pillLabel: { color: theme.textDim, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
   pillValue: { color: theme.bird, fontSize: 20, fontWeight: '900' },
-  livesPill: { marginTop: 10, gap: 12 },
+  // Vidas e tempo de voo: uma pilula embaixo da outra.
+  stacked: { marginTop: 10, gap: 12 },
+  stackedCompact: { marginTop: 8 },
+  flightValue: { color: theme.bird, fontSize: 18, fontWeight: '900' },
 
   offline: {
     marginTop: 14,
@@ -263,6 +303,7 @@ const styles = StyleSheet.create({
   },
 
   menu: { width: '100%', maxWidth: 380, gap: 12 },
+  menuCompact: { gap: 10 },
   menuSide: { flex: 1, maxWidth: 340 },
 
   item: {
@@ -273,6 +314,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1.5,
   },
+  itemCompact: { paddingVertical: 12 },
   itemPrimary: {
     backgroundColor: theme.pillar,
     borderColor: theme.pillarLight,

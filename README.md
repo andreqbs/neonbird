@@ -4,7 +4,8 @@ Jogo estilo *Flappy Bird* feito em **React Native (Expo)** com física real do
 **matter-js**. Toque na tela para bater as asas; sem toque, a gravidade puxa o
 pássaro para baixo.
 
-A tela **acompanha a rotação do aparelho** — retrato e paisagem, sem escolher nada.
+O jogo é **só em retrato**: em paisagem os obstáculos ficam bem mais espaçados e
+o voo fica fácil demais para o mesmo ranking ([Só retrato](#só-retrato)).
 
 ---
 
@@ -66,7 +67,7 @@ cd server && docker compose -f docker-compose.test.yml run --rm --build test
 
 | Tela | O que tem |
 |------|-----------|
-| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações; recorde, moedas e as 5 vidas |
+| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações; recorde, moedas, as 5 vidas e o tempo de voo |
 | **Loja** | 5 pássaros novos, escudos e novas chances — em moedas ou assistindo a um vídeo |
 | **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (histórico local) |
 | **Configurações** | Música de fundo, som do toque, efeitos, nome e código do jogador, apagar recordes |
@@ -215,10 +216,49 @@ consegue dizer "assisti" sozinho.
 
 > **O limite honesto:** a física roda no celular. O servidor garante que ninguém
 > ganha o que não existia — moeda fora da semente, placar impossível, prêmio sem
-> vídeo, compra sem saldo —, mas não assiste ao voo. Um app adulterado que voe
-> sozinho de forma plausível ainda passa. Cada mudança de saldo fica num
-> livro-razão no banco para quando for preciso investigar
+> vídeo, compra sem saldo —, mas não assiste ao voo. Cada mudança de saldo fica
+> num livro-razão no banco para quando for preciso investigar
 > ([server/README.md](server/README.md#de-onde-vieram-as-moedas-de-alguém)).
+
+### A prova de que a partida foi jogada
+
+Um app adulterado que voasse sozinho de forma plausível passaria por todas as
+conferências acima — olhando só para o resultado, nenhum jogo com a física no
+aparelho consegue separar um voo de um número bem escolhido. É essa fresta que a
+**prova de integridade** fecha ([integrity.js](src/services/integrity.js) e
+[server/integrity.go](server/integrity.go)).
+
+No fim de cada partida que rendeu alguma coisa, o app pede ao **Google Play** um
+selo amarrado àquele resultado — placar, moedas e tempo de voo, num resumo
+SHA-256 — e manda junto com o fechamento. O servidor abre o selo no Google e
+confere que:
+
+- é o **app original**, instalado pela Play Store: quem mexe no código precisa
+  assinar o app de novo, e aí o Google não o reconhece mais;
+- o aparelho é **genuíno**, sem root nem emulador;
+- o resultado é **exatamente** o que o selo diz, e o selo é novo;
+- não havia app **controlando a tela** — clique automático, macro, bot. Gravar a
+  tela ou ter uma janela por cima não barra ninguém: fica só registrado.
+
+Quem decide o que fazer com isso é o **servidor** (`INTEGRITY_MODE`: ignorar,
+registrar ou recusar), então não adianta mexer no app para desligar. E nada
+disso trava o jogo: sem Play Store, sem internet ou com o Google fora do ar a
+partida sobe do mesmo jeito, e o servidor é que resolve. Como ligar está em
+[server/README.md](server/README.md#parte-4--a-prova-de-integridade-das-partidas).
+
+No celular, o pássaro **só sobe com o toque na tela**: não há modo automático,
+nenhum comando de teclado ou de acessibilidade bate as asas, e o jogo não expõe
+nada que mova o pássaro de fora.
+
+### Tempo de voo
+
+A tela inicial mostra, abaixo das vidas, o **tempo de voo** somado de todas as
+partidas. Só conta o tempo **no ar**, do primeiro toque até a batida
+([World.js](src/game/World.js) conta os frames em `PLAYING` fora do chão): a
+espera pelo toque, o pássaro parado no chão, a pausa, os painéis e os anúncios
+ficam de fora. O app manda o tempo da partida ao fechá-la, e o servidor soma na
+carteira — limitando cada partida ao tempo desde que ela foi aberta. No treino,
+sem internet, não conta.
 
 ### Sem internet: modo treino
 
@@ -245,26 +285,30 @@ servidor, senão a conferência recusa o que ela rendeu.
 
 ---
 
-## Rotação automática
+## Só retrato
 
-Não há escolha de orientação: o app fica destravado (`ScreenOrientation.unlockAsync`)
-e segue o aparelho. Todo o layout do jogo é derivado do tamanho da tela, então
-girar apenas recalcula as medidas.
+O jogo trava a tela **em retrato**: `orientation: "portrait"` no
+[app.json](app.json) e `ScreenOrientation.lockAsync` no [App.js](App.js). Em
+paisagem as colunas ficam bem mais espaçadas em relação ao pássaro e o jogo fica
+mais fácil, o que desequilibraria o ranking.
 
-**Girar no meio de uma partida não custa o placar.** Como largura, altura, vão,
-tamanho do pássaro e posição de todas as colunas mudam, o mundo é refeito do
-zero — mas o placar atravessa a virada e o jogo volta ao estado "toque para
-voar", em vez de deixar o pássaro cair numa tela que acabou de mudar de forma.
-A regra está isolada em [session.js](src/game/session.js) e é coberta por testes.
+- **Tablets e dobráveis no Android 16+:** em tela grande o sistema ignora a trava
+  de orientação dos apps comuns. O plugin [withGameCategory](plugins/withGameCategory.js)
+  declara o app como jogo (`android:appCategory="game"`), e jogos ficam de fora
+  dessa regra.
+- **Zoom out:** no retrato a câmera fica um pouco mais longe (`PORTRAIT_ZOOM = 0.85`
+  em [layout.js](src/game/layout.js)). Pássaro, colunas, espaçamento e velocidade
+  encolhem juntos: cabe mais caminho na tela e o ritmo entre uma coluna e outra
+  não muda. **O vão não encolhe** — continua 31% da altura de jogo. A moeda ficou
+  10% maior (`COIN_RADIUS` em [coins.js](src/game/coins.js)) para compensar.
+- **Build nova:** a trava do `app.json` e o plugin só chegam ao Android com build
+  nova (`npx expo prebuild --clean`, ou EAS). Até lá, o `lockAsync` já trava o
+  build de desenvolvimento que está instalado.
 
-Dois pontos que valem saber:
-
-- Se a **rotação automática do sistema** estiver desligada, o Android não gira o
-  app — é uma trava do sistema, não do jogo. Há um aviso sobre isso em Configurações.
-- Como girar devolve o jogador ao estado "pronto", em tese dá para girar de
-  propósito para escapar de uma coluna difícil. Para um jogo casual isso é
-  preferível a punir quem mudou o jeito de segurar o celular; se o ranking
-  competitivo pesar mais, trave a orientação enquanto a fase for `PLAYING`.
+A área de jogo ainda pode mudar de tamanho (multi-janela do Android, janela do
+navegador). Quando muda, o mundo é refeito e o progresso atravessa: placar,
+moedas, novas chances e tempo de voo ([session.js](src/game/session.js), coberto
+por testes).
 
 ---
 
@@ -477,8 +521,8 @@ Onde ele aparece, e o que rende:
 
 O escudo (anel azul em volta do pássaro) **não some no impacto**: começa a se
 dissipar, pisca e leva ~1,5 s para apagar — e *enquanto ainda houver anel na tela
-toda colisão continua sendo perdoada*, seja a outra coluna do mesmo par, a
-seguinte ou o chão. O tempo está em `SHIELD_FADE_FRAMES`
+toda colisão continua sendo perdoada*, seja a outra coluna do mesmo par ou a
+seguinte. O tempo está em `SHIELD_FADE_FRAMES`
 ([constants.js](src/game/constants.js)).
 
 Recusar é sempre de graça: **Continuar sem escudo** vai direto para a fase
@@ -487,10 +531,16 @@ quem acabou de dizer "não quero" é a maneira mais rápida de perder o jogador.
 
 **O prêmio só existe quando o servidor confirma.** O vídeo carrega com o código
 do jogador; quando termina, o Google avisa o servidor, e o app troca o vídeo
-confirmado pelo prêmio — tentando por alguns segundos enquanto o aviso não chega
-(a tela mostra *"Confirmando o prêmio..."*). Por isso a verificação do lado do
-servidor precisa estar ligada nas unidades premiadas do AdMob
+confirmado pelo prêmio — tentando por alguns segundos enquanto o aviso não chega.
+Na build da loja o jogador vê só *"Liberando seu prêmio..."* e, se não sair,
+*"Não deu para liberar seu prêmio agora"* — sem falar de Google nem de servidor.
+Para o aviso chegar, a verificação do lado do servidor precisa estar ligada nas
+unidades premiadas do AdMob, com o servidor num domínio de **certificado válido**
 ([server/README.md](server/README.md#7-a-verificação-dos-anúncios)).
+
+Em desenvolvimento o vídeo é de teste, e o Google **nunca** confirma anúncio de
+teste: o app tenta uma vez só e diz isso na tela. Contra o servidor do Dokploy
+(`ADS_DEV_AUTOVERIFY=false`) o prêmio não sai — e é assim que deve ser.
 
 O vídeo começa a **carregar antes do clique** (quando a fase fecha e quando o
 pássaro cai): anúncio que só carrega na hora faz o jogador apertar o botão e não
@@ -712,9 +762,12 @@ O `World` cria um `Matter.Engine` de verdade:
 
 - O pássaro é um **corpo dinâmico** (círculo). A queda vem da gravidade do
   próprio motor; o toque aplica `Body.setVelocity` com um impulso para cima.
-- As colunas são **corpos estáticos com `isSensor: true`**. O matter-js detecta o
-  contato e dispara `collisionStart` (é assim que o jogo sabe que você bateu),
-  mas não empurra o pássaro.
+- As colunas são **corpos estáticos com `isSensor: true`** — o cano e a tampa (a
+  ponta larga virada para o vão), com as mesmas medidas do desenho
+  ([caps.js](src/game/caps.js)). O matter-js detecta o contato e dispara
+  `collisionStart` (é assim que o jogo sabe que você bateu), mas não empurra o
+  pássaro. **Só isso encerra a partida**: chão e teto seguram o pássaro, sem
+  derrubar.
 - O loop roda com **passo fixo de 16,67 ms e acumulador**. A simulação fica
   idêntica em 60 Hz, 90 Hz ou 120 Hz, e o jogo não "teleporta" ao voltar do
   segundo plano.
@@ -726,17 +779,20 @@ Nada é fixo em pixels. `layout.js` deriva tudo em cadeia, começando pelo vão:
 | Medida | Base |
 |--------|------|
 | Vão entre colunas | 31% da altura útil (retrato) / 40% (paisagem) |
-| Tamanho do pássaro | `vão / 5.5` — a razão é **fixa** |
-| Largura da coluna | `3,4 ×` o diâmetro do pássaro |
+| Tamanho do pássaro | `vão / 5.5`, vezes o zoom (`0,85` no retrato, `1` em paisagem) |
+| Largura da coluna | `3,4 ×` o raio do pássaro |
 | Gravidade | `altura * 0.00078` px/frame² |
 | Impulso do toque | `-sqrt(2 * gravidade * vão * 0.48)` |
-| Velocidade | `largura / 190` px/frame |
+| Velocidade e espaçamento | `largura / 190` px/frame e `66%` da largura (retrato), vezes o zoom |
 
 O ponto central: **o pássaro é medido a partir do vão, não da tela**. Sem isso,
 em paisagem sobra pouca altura e o pássaro fica grande demais para o vão — a
 primeira versão dava 6,2× em retrato contra 3,5× em paisagem, ou seja, dois jogos
-de dificuldades bem diferentes. Agora a razão é 5,5× em todos os formatos, e
-`npm test` verifica isso em seis tamanhos de tela.
+de dificuldades bem diferentes. Agora a razão é a mesma em qualquer celular:
+~6,5× no retrato, onde o zoom out deixa o pássaro menor dentro do mesmo vão (ver
+[Só retrato](#só-retrato)), e 5,5× em paisagem. `npm test` verifica isso em seis
+tamanhos de tela e confere que o zoom não encolhe o vão nem muda o ritmo entre as
+colunas.
 
 Pelo mesmo motivo o impulso do toque é derivado da gravidade e do vão: um toque
 sempre ganha 48% do vão em altura, e o ápice sempre chega em ~0,33 s. A altura
@@ -777,8 +833,9 @@ nativas.
 | Toque na tela | Bate as asas / começa a partida |
 | Botão **Pausar** | Congela a simulação |
 | App vai pro fundo | Pausa sozinho e silencia |
-| Girar o aparelho | Adapta a tela, mantendo o placar |
-| Cair | Oferta de nova chance (quando há como pagar), depois o resultado |
+| Girar o aparelho | Nada: o jogo fica em retrato |
+| Encostar no chão ou no teto | Nada: o pássaro só para ali. Quem encerra a partida é o obstáculo |
+| Bater em qualquer parte do obstáculo | Oferta de nova chance (quando há como pagar), depois o resultado |
 | Tela de resultado | Toque (após 0,65 s) começa outra partida — se houver vida |
 
 A dificuldade agora vem das **fases** (seção abaixo), e não mais de uma rampa

@@ -31,7 +31,7 @@ export const DEFAULT_API_URL = '';
 
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
 
-/** Quanto esperamos por uma resposta antes de desistir e seguir o jogo. */
+/** Quanto cada tentativa espera por uma resposta antes de desistir. */
 const TIMEOUT_MS = 8000;
 
 export function isConfigured() {
@@ -59,17 +59,53 @@ function authHeaders() {
  * rede, demorou demais). E a diferenca que o jogo usa para escolher entre "o
  * servidor disse nao" — mostra o motivo — e "estamos sem internet" — oferece o
  * treino.
+ *
+ * `retry`: o pedido pode ser repetido sem efeito em dobro — consulta, fechar
+ * partida (o servidor devolve o mesmo resultado), apresentar o jogador. Quando
+ * nenhuma resposta volta, ele tenta mais uma vez. Abrir partida, comprar e
+ * trocar video por premio NUNCA repetem sozinhos: a primeira tentativa pode ter
+ * chegado e so a resposta ter se perdido.
+ *
+ * `headers`: cabecalhos extras so deste pedido — hoje, a prova de integridade da
+ * partida (integrity.js).
  */
-export async function request(method, path, { body, auth = true } = {}) {
+export async function request(
+  method,
+  path,
+  { body, auth = true, headers: extras, retry = method === 'GET' } = {}
+) {
   if (!isConfigured()) return { ok: false, error: 'offline', offline: true };
 
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = {
+    'Content-Type': 'application/json',
+    // Conexao nova a cada pedido. Entre um pedido e outro o jogo passa muito
+    // tempo calado — a partida inteira, um video de 30 s —, e conexao parada
+    // pode morrer EM SILENCIO no caminho ate a VPS: alguem no meio (operadora,
+    // roteador, firewall) esquece dela sem avisar as pontas. O Android
+    // reaproveitaria a conexao morta, o pedido sumiria, e o jogador leria "sem
+    // conexao" com a internet funcionando. Custa um aperto de mao por pedido, e
+    // o jogo faz poucos.
+    Connection: 'close',
+  };
   if (auth) {
     const id = authHeaders();
     if (!id) return { ok: false, error: 'sem jogador' };
     Object.assign(headers, id);
   }
+  if (extras) Object.assign(headers, extras);
 
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const r = await attempt(method, path, headers, payload);
+  // Sem status e porque nenhuma resposta voltou. Quem pode repetir, repete — ja
+  // numa conexao nova.
+  if (retry && r.offline && r.status === undefined) {
+    return attempt(method, path, headers, payload);
+  }
+  return r;
+}
+
+/** Uma tentativa: o fetch com prazo e a resposta traduzida. */
+async function attempt(method, path, headers, payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   let res;
@@ -77,7 +113,7 @@ export async function request(method, path, { body, auth = true } = {}) {
     res = await fetch(`${API_URL}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: payload,
       signal: controller.signal,
     });
   } catch (e) {
@@ -121,8 +157,10 @@ export async function request(method, path, { body, auth = true } = {}) {
 export async function syncPlayer() {
   const p = playerNow();
   if (!p) return { ok: false, error: 'sem jogador' };
+  // Repetir e seguro: na segunda vez o servidor so grava o apelido de novo.
   return request('POST', '/v1/players', {
     auth: false,
+    retry: true,
     body: { id: p.id, secret: p.secret, name: p.name },
   });
 }

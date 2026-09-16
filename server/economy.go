@@ -32,6 +32,9 @@ type Wallet struct {
 	Continues    int      `json:"continues"`
 	EquippedBird string   `json:"equippedBird"`
 	OwnedBirds   []string `json:"ownedBirds"`
+	// Tempo de voo somado de todas as partidas, em ms. Nao e saldo — nao se
+	// gasta nem se compra —, mas mora aqui porque a Home ja busca a carteira.
+	FlightMs int64 `json:"flightMs"`
 }
 
 type RunSession struct {
@@ -48,13 +51,17 @@ type RunRules struct {
 	MaxPoints          int
 	MinSecondsPerPoint float64
 	MaxDuration        time.Duration
+	// EnforceIntegrity: partida que falhou na verificacao de integridade nao
+	// rende nada (INTEGRITY_MODE=enforce).
+	EnforceIntegrity bool
 }
 
 type FinishResult struct {
-	Points     int  `json:"points"`
-	Coins      int  `json:"coins"`
-	StageBonus int  `json:"stageBonus"`
-	Ranked     bool `json:"ranked"`
+	Points     int   `json:"points"`
+	Coins      int   `json:"coins"`
+	StageBonus int   `json:"stageBonus"`
+	Ranked     bool  `json:"ranked"`
+	FlightMs   int64 `json:"flightMs"`
 }
 
 // AdViewTTL: quanto tempo um video confirmado espera o app troca-lo por premio.
@@ -95,7 +102,7 @@ func ensureWallet(ctx context.Context, q querier, playerID string) error {
 
 func scanWallet(row pgx.Row) (Wallet, error) {
 	w := Wallet{MaxLives: MaxLives}
-	err := row.Scan(&w.Coins, &w.Lives, &w.Shields, &w.Continues, &w.EquippedBird)
+	err := row.Scan(&w.Coins, &w.Lives, &w.Shields, &w.Continues, &w.EquippedBird, &w.FlightMs)
 	return w, err
 }
 
@@ -106,14 +113,14 @@ func lockWallet(ctx context.Context, tx pgx.Tx, playerID string) (Wallet, error)
 		return Wallet{}, err
 	}
 	return scanWallet(tx.QueryRow(ctx, `
-		select coins, lives, shields, continues, equipped_bird
+		select coins, lives, shields, continues, equipped_bird, flight_ms
 		  from wallets where player_id = $1 for update`, playerID))
 }
 
 // readWallet devolve a carteira com a lista de passaros, do jeito que a tela usa.
 func readWallet(ctx context.Context, q querier, playerID string) (Wallet, error) {
 	w, err := scanWallet(q.QueryRow(ctx, `
-		select coins, lives, shields, continues, equipped_bird
+		select coins, lives, shields, continues, equipped_bird, flight_ms
 		  from wallets where player_id = $1`, playerID))
 	if err != nil {
 		return Wallet{}, err
@@ -170,7 +177,8 @@ type runRow struct {
 	seed          uint32
 	status        string
 	continuesUsed int
-	elapsed       float64 // segundos desde a abertura, no relogio do banco
+	elapsed       float64      // segundos desde a abertura, no relogio do banco
+	result        FinishResult // o que rendeu, se ja foi fechada
 }
 
 // lockRun trava a partida. Partida de outro jogador responde igual a partida
@@ -181,9 +189,11 @@ func lockRun(ctx context.Context, tx pgx.Tx, playerID, runID string) (runRow, er
 	var r runRow
 	err := tx.QueryRow(ctx, `
 		select player_id::text, seed, status, continues_used,
-		       extract(epoch from now() - started_at)::float8
+		       extract(epoch from now() - started_at)::float8,
+		       coalesce(points, 0), coalesce(coins, 0), coalesce(stage_bonus, 0), ranked, flight_ms
 		  from game_sessions where id = $1 for update`, runID).
-		Scan(&dono, &seed, &r.status, &r.continuesUsed, &r.elapsed)
+		Scan(&dono, &seed, &r.status, &r.continuesUsed, &r.elapsed,
+			&r.result.Points, &r.result.Coins, &r.result.StageBonus, &r.result.Ranked, &r.result.FlightMs)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && dono != playerID) {
 		return runRow{}, ruleCode(404, "run_not_found", "partida não encontrada")
 	}
@@ -250,6 +260,28 @@ func (s *Store) StartRun(ctx context.Context, playerID string) (RunSession, Wall
 	return run, wallet, err
 }
 
+// RunIsOpen diz se a partida existe, e deste jogador, e ainda esta aberta. O
+// fechamento pergunta antes de gastar uma verificacao de integridade: repetir um
+// fechamento ja gravado nao precisa passar pelo Google de novo.
+func (s *Store) RunIsOpen(ctx context.Context, playerID, runID string) (bool, error) {
+	var aberta bool
+	err := s.pool.QueryRow(ctx, `
+		select exists(select 1 from game_sessions where id = $1 and player_id = $2 and status = 'open')`,
+		runID, playerID).Scan(&aberta)
+	return aberta, err
+}
+
+// integrityRefusal e o que o jogador le quando a partida nao passou na
+// verificacao de integridade. Sem bastidor: nem Google nem servidor.
+func integrityRefusal(v IntegrityVerdict) error {
+	if v.Reason == "controlling" {
+		return ruleCode(422, "run_unverified",
+			"Um app está controlando a tela (como os de clique automático). Desative-o para suas partidas valerem moedas e ranking.")
+	}
+	return ruleCode(422, "run_unverified",
+		"Esta partida não pôde ser validada neste aparelho e não vale moedas nem ranking.")
+}
+
 // FinishRun fecha a partida e credita o que ela rendeu.
 //
 // Tres conferencias, todas com numeros DESTE servidor e nao do aparelho:
@@ -260,7 +292,21 @@ func (s *Store) StartRun(ctx context.Context, playerID string) (RunSession, Wall
 //   - cada moeda existia mesmo (ValidCoins).
 //
 // Placar impossivel fecha a partida como "rejected": sem moeda e sem ranking.
-func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points int, ordinals []int, rules RunRules, season Season) (FinishResult, Wallet, error) {
+//
+// Fechar de novo uma partida ja fechada devolve o MESMO resultado, sem pagar de
+// novo e sem ler o placar novo. E o que deixa o app repetir o pedido quando a
+// resposta se perde no caminho — o servidor gravou, a conexao caiu antes de o
+// aparelho ouvir — sem o jogador ler "partida encerrada" no lugar das moedas que
+// ganhou.
+//
+// `flightMs` e o tempo voando de fato, medido no aparelho, que vai somando na
+// carteira. Ele nao vale moeda nem ponto, entao a conferencia e so contra o
+// absurdo (flightTime).
+//
+// `integrity` e o resultado da verificacao de integridade deste fechamento
+// (integrity.go). Ele fica gravado na partida sempre; com o enforce ligado,
+// partida que nao passou nao rende nada.
+func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points int, ordinals []int, flightMs int64, integrity IntegrityVerdict, rules RunRules, season Season) (FinishResult, Wallet, error) {
 	var res FinishResult
 	var wallet Wallet
 	var recusa error
@@ -270,8 +316,21 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 		if err != nil {
 			return err
 		}
-		if r.status != "open" {
+		switch r.status {
+		case "open":
+		case "finished":
+			res = r.result
+			wallet, err = readWallet(ctx, tx, playerID)
+			return err
+		case "rejected":
+			return ruleCode(422, "run_rejected", "esta partida foi recusada")
+		default:
 			return ruleCode(409, "run_closed", "esta partida já foi encerrada")
+		}
+
+		if _, err := tx.Exec(ctx,
+			`update game_sessions set integrity = $2 where id = $1`, runID, integrity.Summary()); err != nil {
+			return err
 		}
 
 		// As recusas gravam o motivo na partida ANTES de responder: por isso a
@@ -288,16 +347,26 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 			recusa = ruleCode(422, "run_rejected", "placar rápido demais para ser de verdade")
 			return markRun(ctx, tx, runID, "rejected")
 		}
+		if rules.EnforceIntegrity && integrity.Blocks() {
+			recusa = integrityRefusal(integrity)
+			return markRun(ctx, tx, runID, "rejected")
+		}
 
 		res = FinishResult{
 			Points:     points,
 			Coins:      ValidCoins(r.seed, points, ordinals, CoinEvery),
 			StageBonus: (points / StageLength) * StageBonus,
+			// Pontos entram no ranking so com a rodada aberta. Na apuracao
+			// (domingo 18h-20h) a partida ainda rende moedas, mas nao mexe no
+			// placar da semana.
+			Ranked:   points > 0 && season.Open,
+			FlightMs: flightTime(flightMs, r.elapsed),
 		}
 		if _, err := tx.Exec(ctx, `
 			update game_sessions
-			   set status = 'finished', ended_at = now(), points = $2, coins = $3, stage_bonus = $4
-			 where id = $1`, runID, points, res.Coins, res.StageBonus); err != nil {
+			   set status = 'finished', ended_at = now(),
+			       points = $2, coins = $3, stage_bonus = $4, ranked = $5, flight_ms = $6
+			 where id = $1`, runID, points, res.Coins, res.StageBonus, res.Ranked, res.FlightMs); err != nil {
 			return err
 		}
 		if total := res.Coins + res.StageBonus; total > 0 {
@@ -305,16 +374,19 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 				return err
 			}
 		}
-
-		// Pontos entram no ranking so com a rodada aberta. Na apuracao (domingo
-		// 18h-20h) a partida ainda rende moedas, mas nao mexe no placar da semana.
-		if points > 0 && season.Open {
+		if res.FlightMs > 0 {
+			if _, err := tx.Exec(ctx,
+				`update wallets set flight_ms = flight_ms + $2 where player_id = $1`,
+				playerID, res.FlightMs); err != nil {
+				return err
+			}
+		}
+		if res.Ranked {
 			if _, err := tx.Exec(ctx,
 				`insert into runs (player_id, season_id, points) values ($1, $2, $3)`,
 				playerID, season.ID, points); err != nil {
 				return err
 			}
-			res.Ranked = true
 		}
 
 		wallet, err = readWallet(ctx, tx, playerID)
@@ -327,6 +399,12 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 		return FinishResult{}, Wallet{}, recusa
 	}
 	return res, wallet, nil
+}
+
+// flightTime e o tempo de voo que o servidor aceita: o que o aparelho mediu,
+// limitado ao tempo desde a abertura da partida — voar mais que isso nao cabe.
+func flightTime(ms int64, elapsedSeconds float64) int64 {
+	return max(0, min(ms, int64(elapsedSeconds*1000)))
 }
 
 // ContinueRun paga a nova chance de uma partida aberta: com uma nova chance

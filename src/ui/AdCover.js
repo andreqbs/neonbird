@@ -1,12 +1,18 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { USE_TEST_UNITS } from '../services/ads';
 import { theme } from './theme';
 
 /**
  * A cobertura que fica na frente de tudo enquanto o anuncio roda — e enquanto o
  * servidor confirma o premio —, engolindo os toques para ninguem bater asa (nem
  * apertar um botao) por tras.
+ *
+ * O texto da confirmacao depende de onde o app roda. Na build da loja, o jogador
+ * so precisa saber que o premio esta saindo — Google e servidor sao detalhe de
+ * bastidor. Em desenvolvimento (anuncio de teste), a tela diz o que acontece de
+ * verdade, porque ali o aviso do Google nunca chega.
  *
  * As medidas sao explicitas em vez de `absoluteFill`: no Android o par
  * top/bottom dentro de um pai posicionado resolvia altura zero e a cobertura
@@ -24,9 +30,12 @@ export default function AdCover({ state, seconds }) {
   if (simulated) {
     title = 'Propaganda (simulação)';
     text = 'Aqui entra o vídeo premiado quando o AdMob estiver configurado.';
-  } else if (confirming) {
+  } else if (confirming && USE_TEST_UNITS) {
     title = 'Confirmando o prêmio...';
-    text = 'O prêmio é registrado no servidor assim que o Google confirma o vídeo.';
+    text = 'Anúncio de teste: o Google não manda confirmação ao servidor.';
+  } else if (confirming) {
+    title = 'Liberando seu prêmio...';
+    text = 'Só um instante.';
   }
 
   return (

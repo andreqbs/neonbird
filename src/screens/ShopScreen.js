@@ -120,7 +120,6 @@ export default function ShopScreen({ onBack }) {
 
   const shieldPrice = catalog.items?.shield?.price ?? null;
   const continuePrice = catalog.items?.continue?.price ?? null;
-  const bonus = catalog.rules?.stageBonus ?? 0;
 
   const footer = message ? (
     <Text style={message.error ? styles.error : styles.success}>{message.text}</Text>
@@ -193,12 +192,6 @@ export default function ShopScreen({ onBack }) {
             onWatch={() => act('ad:continue', () => watchAdFor('continue'), 'Nova chance guardada.')}
           />
         </Card>
-
-        <Text style={styles.footnote}>
-          As moedas aparecem no vão dos obstáculos: passe por elas para pegar.
-          {bonus > 0 ? ` Cada fase fechada rende mais ${bonus}.` : ''} Tudo o que você ganha e compra
-          fica guardado no servidor.
-        </Text>
       </Screen>
 
       <AdCover state={adState} seconds={adSeconds} />
@@ -433,13 +426,6 @@ const styles = StyleSheet.create({
   priceText: { color: theme.bird, fontSize: 14, fontWeight: '900' },
   priceArmedText: { color: '#1A1330', fontSize: 13, fontWeight: '900' },
 
-  footnote: {
-    color: theme.textDim,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 14,
-    marginHorizontal: 4,
-  },
   error: { color: theme.danger, fontSize: 13, fontWeight: '700', textAlign: 'center' },
   success: { color: theme.pillar, fontSize: 13, fontWeight: '700', textAlign: 'center' },
 });

@@ -3,7 +3,7 @@
     "name": "Major Flyer",
     "slug": "major-flyer",
     "version": "1.0.0",
-    "orientation": "default",
+    "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#080C22",
     "icon": "./assets/icon.png",
@@ -56,7 +56,8 @@
             "enableMinifyInReleaseBuilds": true
           }
         }
-      ]
+      ],
+      "./plugins/withGameCategory"
     ],
     "extra": {
       "eas": {

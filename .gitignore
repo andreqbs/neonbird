@@ -16,6 +16,8 @@ credentials.json
 *.jks
 *.keystore
 *-credentials.md
+*service-account*.json
+*service_account*.json
 
 # senhas do servidor e endereco da API (ver .env.example)
 .env

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Animated, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { capShape } from '../caps';
 import { stageAt } from '../stages';
 
 /** Cor do aviso: a mesma da armadilha em qualquer fase, para nao dar duvida. */
@@ -18,7 +19,9 @@ const ICE = {
  * que "trocar o obstaculo" e so mexer em numeros, sem componente novo.
  */
 function Column({ width, height, capAtBottom, look }) {
-  const cap = Math.max(14, width * look.capRatio);
+  // As mesmas medidas da tampa que derruba o passaro (caps.js).
+  const tampa = capShape(width, look);
+  const cap = tampa.height;
   const capColor = look.cap[1];
 
   return (
@@ -68,10 +71,10 @@ function Column({ width, height, capAtBottom, look }) {
         end={{ x: 1, y: 0 }}
         style={{
           position: 'absolute',
-          left: -width * 0.09,
-          width: width * 1.18,
+          left: -(tampa.width - width) / 2,
+          width: tampa.width,
           height: cap,
-          borderRadius: cap * look.capRadius,
+          borderRadius: tampa.radius,
           [capAtBottom ? 'bottom' : 'top']: 0,
           // sem `elevation`: no Android ela vira sombra cinza e reordena os
           // filhos. O contraste do topo ja vem do proprio gradiente.

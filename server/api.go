@@ -16,10 +16,12 @@ import (
 // fazer com um stack trace.
 
 type API struct {
-	store *Store
-	cfg   Config
-	log   *slog.Logger
-	ssv   *SSVVerifier
+	store     *Store
+	cfg       Config
+	log       *slog.Logger
+	ssv       *SSVVerifier
+	access    *accessLog
+	integrity *IntegrityVerifier
 }
 
 func (a *API) Routes() http.Handler {
@@ -119,6 +121,8 @@ func (a *API) auth(w http.ResponseWriter, r *http.Request) (Player, bool) {
 		a.fail(w, r, err)
 		return Player{}, false
 	}
+	// Todo pedido identificado entra no registro de acesso (access.go).
+	a.access.Record(r.Context(), p.ID, clientIP(r, a.cfg.TrustProxy))
 	return p, true
 }
 

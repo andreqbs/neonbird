@@ -27,8 +27,8 @@ export const STAGE_LENGTH = 100;
  * frames de 60 Hz (90 = 1,5 s).
  *
  * Ele nao some no instante do impacto: vai apagando, e ENQUANTO houver anel na
- * tela toda colisao continua sendo perdoada — a outra coluna do mesmo par, a
- * coluna seguinte ou o chao. E tempo de sobra para a coluna que acertou o
+ * tela toda colisao continua sendo perdoada — a outra coluna do mesmo par ou a
+ * coluna seguinte. E tempo de sobra para a coluna que acertou o
  * passaro sair da frente, e agora o jogador ve quanto de perdao ainda lhe resta
  * em vez de contar com uma invulnerabilidade invisivel.
  */

@@ -32,6 +32,11 @@ type Config struct {
 	AdsDevAutoVerify bool
 	AdmobKeysURL     string
 
+	IntegrityMode        string
+	PlayIntegrityPackage string
+	PlayIntegrityURL     string
+	GoogleServiceAccount string
+
 	RatePerMinute int
 	RateBurst     int
 }
@@ -78,10 +83,11 @@ func loadConfig() Config {
 		// para discutir o voo de ninguem.
 		MaxRunPoints: envInt("MAX_RUN_POINTS", 2000),
 
-		// Piso de tempo por ponto. O obstaculo mais rapido do jogo (fase 5) leva
-		// ~1,15 s para chegar ao passaro; 0,6 s deixa folga de sobra e ainda
-		// barra o placar feito em cinco segundos.
-		MinSecondsPerPoint: envFloat("MIN_SECONDS_PER_POINT", 0.6),
+		// Piso de tempo por ponto. No celular, em retrato, um obstaculo leva
+		// ~2,1 s para chegar ao passaro na fase 1 e ~1,3 s na fase 5 — e o relogio
+		// ainda conta espera, pausa e paineis. 1 s nunca alcanca um jogador de
+		// verdade e barra quem fecha a partida mais rapido do que o jogo permite.
+		MinSecondsPerPoint: envFloat("MIN_SECONDS_PER_POINT", 1.0),
 
 		// Partida aberta ha mais tempo que isso nao fecha mais.
 		MaxRunDuration: time.Duration(envInt("MAX_RUN_MINUTES", 180)) * time.Minute,
@@ -92,6 +98,13 @@ func loadConfig() Config {
 		// producao, qualquer um ganha premio sem assistir nada.
 		AdsDevAutoVerify: env("ADS_DEV_AUTOVERIFY", "false") == "true",
 		AdmobKeysURL:     env("ADMOB_KEYS_URL", DefaultAdmobKeysURL),
+
+		// Verificacao de integridade das partidas (integrity.go): off, log ou
+		// enforce. Ligada, precisa da chave da conta de servico do Google Cloud.
+		IntegrityMode:        env("INTEGRITY_MODE", IntegrityOff),
+		PlayIntegrityPackage: env("PLAY_INTEGRITY_PACKAGE", DefaultPlayIntegrityPackage),
+		PlayIntegrityURL:     env("PLAY_INTEGRITY_URL", DefaultPlayIntegrityURL),
+		GoogleServiceAccount: env("GOOGLE_SERVICE_ACCOUNT", ""),
 
 		RatePerMinute: envInt("RATE_PER_MINUTE", 120),
 		RateBurst:     envInt("RATE_BURST", 40),
@@ -142,7 +155,29 @@ func main() {
 			"Isto e so para desenvolvimento — nunca deixe ligado no servidor do app publicado.")
 	}
 
-	api := &API{store: store, cfg: cfg, log: log, ssv: NewSSVVerifier(cfg.AdmobKeysURL)}
+	integrity, err := NewIntegrityVerifier(cfg)
+	if err != nil {
+		log.Error("verificacao de integridade mal configurada (INTEGRITY_MODE / GOOGLE_SERVICE_ACCOUNT)", "erro", err)
+		os.Exit(1)
+	}
+	switch integrity.Mode() {
+	case IntegrityOff:
+		log.Warn("INTEGRITY_MODE=off: partidas fecham sem verificacao de integridade do Google Play")
+	default:
+		log.Info("verificacao de integridade ligada", "modo", integrity.Mode(), "pacote", cfg.PlayIntegrityPackage)
+	}
+
+	api := &API{
+		store:     store,
+		cfg:       cfg,
+		log:       log,
+		ssv:       NewSSVVerifier(cfg.AdmobKeysURL),
+		integrity: integrity,
+		access:    newAccessLog(store, log, AccessWriteEvery),
+	}
+
+	// O registro de acesso com mais de 6 meses sai do banco (access.go).
+	go purgeAccessLoop(ctx, store, log)
 	limite := newLimiter(cfg.RatePerMinute, cfg.RateBurst)
 
 	handler := recoverPanic(log,

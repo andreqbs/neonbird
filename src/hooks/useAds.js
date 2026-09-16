@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import audio from '../audio/AudioManager';
-import ads from '../services/ads';
+import ads, { USE_TEST_UNITS } from '../services/ads';
 import economy from '../services/economy';
 
 /**
@@ -44,27 +44,33 @@ export default function useAds() {
 
   /**
    * Roda o video de verdade ou, quando nao ha nenhum possivel, a propaganda
-   * simulada. Devolve `rewarded` (chegou ao fim), `shown` (chegou a aparecer) e
-   * `busy` (ja havia outro em andamento).
+   * simulada. Devolve `rewarded` (chegou ao fim), `shown` (chegou a aparecer),
+   * `busy` (ja havia outro em andamento) e `testAd` (era anuncio de teste ou
+   * simulado — esse nunca gera o aviso do Google ao servidor).
    */
   const play = useCallback(async () => {
-    if (busyRef.current) return { shown: false, rewarded: false, busy: true };
+    if (busyRef.current) return { shown: false, rewarded: false, busy: true, testAd: false };
     busyRef.current = true;
     try {
       if (ads.availability('rewarded').available) {
         setStateSafe('showing');
         const result = await ads.showRewarded();
         setStateSafe('idle');
-        return { shown: Boolean(result.shown), rewarded: Boolean(result.rewarded), busy: false };
+        return {
+          shown: Boolean(result.shown),
+          rewarded: Boolean(result.rewarded),
+          busy: false,
+          testAd: USE_TEST_UNITS,
+        };
       }
       if (ads.SIMULATE_WHEN_UNAVAILABLE) {
         setStateSafe('simulating');
         if (mountedRef.current) setAdSeconds(Math.ceil(ads.SIMULATED_DURATION / 1000));
         await new Promise((resolve) => setTimeout(resolve, ads.SIMULATED_DURATION));
         setStateSafe('idle');
-        return { shown: true, rewarded: true, busy: false };
+        return { shown: true, rewarded: true, busy: false, testAd: true };
       }
-      return { shown: false, rewarded: false, busy: false };
+      return { shown: false, rewarded: false, busy: false, testAd: false };
     } finally {
       busyRef.current = false;
     }
@@ -76,12 +82,13 @@ export default function useAds() {
    *
    * O video termina aqui, mas o premio so existe quando o SERVIDOR confirma: o
    * Google avisa o servidor, e o app pede a troca, tentando por alguns segundos
-   * enquanto o aviso nao chega. Devolve ok com a carteira ja atualizada, ou o
-   * motivo em texto.
+   * enquanto o aviso nao chega. Com anuncio de teste o aviso nunca vem, e a
+   * troca e tentada uma vez so (ver economy.claimAd). Devolve ok com a carteira
+   * ja atualizada, ou o motivo em texto.
    */
   const watchAdFor = useCallback(
     async (kind) => {
-      const { rewarded, shown, busy } = await play();
+      const { rewarded, shown, busy, testAd } = await play();
       if (busy) return { ok: false, error: null };
       if (!rewarded) {
         return {
@@ -93,7 +100,7 @@ export default function useAds() {
       }
       setStateSafe('confirming');
       try {
-        return await economy.claimAd(kind);
+        return await economy.claimAd(kind, { testAd });
       } finally {
         setStateSafe('idle');
       }

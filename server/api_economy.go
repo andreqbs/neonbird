@@ -16,6 +16,7 @@ func (a *API) runRules() RunRules {
 		MaxPoints:          a.cfg.MaxRunPoints,
 		MinSecondsPerPoint: a.cfg.MinSecondsPerPoint,
 		MaxDuration:        a.cfg.MaxRunDuration,
+		EnforceIntegrity:   a.integrity.Enforcing(),
 	}
 }
 
@@ -72,6 +73,7 @@ func (a *API) finishRun(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Points       int   `json:"points"`
 		CoinOrdinals []int `json:"coinOrdinals"`
+		FlightMs     int64 `json:"flightMs"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -82,12 +84,54 @@ func (a *API) finishRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, wallet, err := a.store.FinishRun(r.Context(), p.ID, id, body.Points, body.CoinOrdinals, a.runRules(), CurrentSeason())
+	verdict, ok := a.checkFinishIntegrity(w, r, p.ID, id, body.Points, body.FlightMs, body.CoinOrdinals)
+	if !ok {
+		return
+	}
+
+	res, wallet, err := a.store.FinishRun(r.Context(), p.ID, id, body.Points, body.CoinOrdinals, body.FlightMs, verdict, a.runRules(), CurrentSeason())
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"result": res, "wallet": wallet})
+}
+
+// checkFinishIntegrity roda a verificacao de integridade (integrity.go) de um
+// fechamento — so de partida que rendeu algo e ainda esta aberta: repetir um
+// fechamento ja gravado nao gasta outra verificacao.
+//
+// Com o enforce ligado, problema do NOSSO lado (Google fora, credencial) nao
+// fecha a partida: responde 503, e o app tenta de novo mais tarde.
+func (a *API) checkFinishIntegrity(w http.ResponseWriter, r *http.Request, playerID, runID string, points int, flightMs int64, ordinals []int) (IntegrityVerdict, bool) {
+	if a.integrity.Mode() == IntegrityOff {
+		return IntegrityVerdict{Status: "off"}, true
+	}
+	if points <= 0 && len(ordinals) == 0 {
+		return IntegrityVerdict{Status: "skipped"}, true
+	}
+	aberta, err := a.store.RunIsOpen(r.Context(), playerID, runID)
+	if err != nil {
+		a.fail(w, r, err)
+		return IntegrityVerdict{}, false
+	}
+	if !aberta {
+		// Ja fechada (ou nem existe): o FinishRun responde sem precisar do Google.
+		return IntegrityVerdict{Status: "skipped"}, true
+	}
+
+	verdict := a.integrity.Check(r.Context(), r.Header.Get("X-Integrity-Token"), FinishHash(runID, points, flightMs, ordinals))
+	if verdict.Status == "error" {
+		a.log.Error("verificacao de integridade indisponivel", "modo", a.integrity.Mode(), "erro", verdict.Reason)
+		if a.integrity.Enforcing() {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error": "Não deu para guardar seu voo agora. Tente de novo em instantes.",
+				"code":  "integrity_unavailable",
+			})
+			return IntegrityVerdict{}, false
+		}
+	}
+	return verdict, true
 }
 
 func (a *API) continueRun(w http.ResponseWriter, r *http.Request) {

@@ -15,8 +15,11 @@
 /** Quanto do vao a moeda pode ocupar: centro, com ate 22% para cima ou para baixo. */
 export const COIN_SPREAD = 0.44;
 
-/** Raio da moeda, em fracao do raio do passaro. */
-export const COIN_RADIUS = 0.5;
+/**
+ * Raio da moeda, em fracao do raio do passaro. Era 0,5 e subiu 10% junto com o
+ * zoom out do retrato (layout.js), que deixou tudo menor na tela.
+ */
+export const COIN_RADIUS = 0.55;
 
 /** Embaralhador de 32 bits (mesmo algoritmo em server/coins.go). */
 export function mix32(value) {

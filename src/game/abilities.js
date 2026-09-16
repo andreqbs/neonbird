@@ -10,10 +10,11 @@
  *   onStageStart(world)      fase nova
  *   onFrame(world)           cada passo de simulacao, com o voo rolando
  *   onCoin(world, pillar)    pegou a moeda do obstaculo `pillar`
- *   onHit(world, what)       bateu sem escudo ('pillar' ou 'ground'). Devolver
- *                            true perdoa a batida — e ai e a habilidade quem
- *                            tira o passaro do perigo, senao ele bate de novo
- *                            no frame seguinte
+ *   onHit(world, what)       bateu num obstaculo sem escudo (what = 'pillar';
+ *                            chao e teto nao sao batida). Devolver true perdoa
+ *                            a batida — e ai e a habilidade quem tira o
+ *                            passaro do perigo, senao ele bate de novo no
+ *                            frame seguinte
  *   onRevive(world)          voltou com a nova chance
  *
  * Todos sao opcionais: entrada sem gancho nenhum e um passaro so de visual,

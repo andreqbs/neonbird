@@ -49,10 +49,13 @@ services:
       # fosse um jogador só.
       TRUST_PROXY: "true"
       MAX_RUN_POINTS: ${MAX_RUN_POINTS:-2000}
-      MIN_SECONDS_PER_POINT: ${MIN_SECONDS_PER_POINT:-0.6}
+      MIN_SECONDS_PER_POINT: ${MIN_SECONDS_PER_POINT:-1.0}
       MAX_RUN_MINUTES: ${MAX_RUN_MINUTES:-180}
       # Nunca true neste arquivo: ele e o do servidor de verdade. Ver .env.example.
       ADS_DEV_AUTOVERIFY: "false"
+      # Verificacao de integridade das partidas: off -> log -> enforce (README).
+      INTEGRITY_MODE: ${INTEGRITY_MODE:-off}
+      GOOGLE_SERVICE_ACCOUNT: ${GOOGLE_SERVICE_ACCOUNT:-}
       RATE_PER_MINUTE: ${RATE_PER_MINUTE:-120}
       RATE_BURST: ${RATE_BURST:-40}
     healthcheck:

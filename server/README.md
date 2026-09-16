@@ -22,6 +22,11 @@ São três metades: **subir o servidor**, **ligar a verificação dos anúncios*
 caro aqui: o jogo funciona, mas quem assiste a um vídeo premiado nunca recebe o
 prêmio.
 
+Depois delas, com o jogo já de pé, vem a
+[prova de integridade das partidas](#parte-4--a-prova-de-integridade-das-partidas)
+(passos 12 a 14): opcional para o jogo funcionar, e o que separa o placar de
+quem jogou do placar de um bot.
+
 **No Dokploy**
 
 1. [Apontar o domínio](#1-o-domínio) para a VPS
@@ -41,6 +46,12 @@ prêmio.
 9. [Testar com `npx expo start`](#9-testar-antes-de-gerar-o-build) antes de gastar um build
 10. [Gerar o build da loja](#10-o-build-que-vai-para-a-loja)
 11. [Conferir que os dois se falam](#11-conferindo-que-estão-conversando)
+
+**No Google Cloud e no Play Console** (depois, sem pressa)
+
+12. [Criar o projeto e ligar a Play Integrity API](#12-o-projeto-no-google-cloud)
+13. [Pôr a chave da conta de serviço no servidor](#13-a-chave-no-servidor)
+14. [Número do projeto no app e a virada da chave](#14-o-app-e-a-virada-da-chave)
 
 ---
 
@@ -118,9 +129,10 @@ PORT=8080
 TRUST_PROXY=true
 ALLOWED_ORIGINS=*
 MAX_RUN_POINTS=2000
-MIN_SECONDS_PER_POINT=0.6
+MIN_SECONDS_PER_POINT=1.0
 MAX_RUN_MINUTES=180
 ADS_DEV_AUTOVERIFY=false
+INTEGRITY_MODE=off
 RATE_PER_MINUTE=120
 RATE_BURST=40
 ```
@@ -132,14 +144,17 @@ Três que não são opcionais:
   rede interna, e não precisa mesmo — esse tráfego não sai da máquina.
 - **`TRUST_PROXY=true`** porque o Traefik do Dokploy está na frente. É o que faz
   o servidor acreditar no `X-Forwarded-For` para saber de quem é cada pedido.
-  Sem isso, todo mundo vira "o IP do Traefik" e um jogador sozinho estoura o
-  limite de pedidos de todos os outros.
+  Sem isso, todo mundo vira "o IP do Traefik": um jogador sozinho estoura o
+  limite de pedidos de todos os outros, e o [registro de acesso](#registro-de-acesso-ip)
+  guarda o IP do Traefik no lugar do IP do jogador.
 - **`ADS_DEV_AUTOVERIFY=false`**, sempre, neste servidor. Ligada, ela entrega o
   prêmio do anúncio sem a confirmação do Google — qualquer um ganharia vidas,
   escudos e novas chances sem assistir nada. Ela existe só para o servidor de
   desenvolvimento ([Rodando fora do Dokploy](#rodando-fora-do-dokploy)).
 
-O resto tem padrão razoável; a lista comentada está em
+`INTEGRITY_MODE` fica em `off` até você chegar no [passo 12](#12-o-projeto-no-google-cloud):
+é ela que liga a prova de integridade das partidas, e ligada exige a chave do
+Google. O resto tem padrão razoável; a lista comentada está em
 [`.env.example`](.env.example) e a tabela em [Configuração](#configuração).
 
 ## 5. Domínio e HTTPS
@@ -214,15 +229,21 @@ O servidor confere a assinatura de cada aviso com as chaves públicas do Google
 quando não recebe resposta) e o app troca cada vídeo confirmado por um prêmio em
 até 30 minutos.
 
-Sem este passo, o sintoma é exato: o jogador assiste ao vídeo inteiro, a tela
-fica em *"Confirmando o prêmio..."* por alguns segundos e termina em *"O anúncio
-ainda não foi confirmado"*.
+O Google só consegue avisar um endereço **HTTPS com certificado válido**. O
+domínio automático `*.traefik.me` do Dokploy serve o certificado padrão do
+Traefik, que ninguém aceita — nem o Google, nem o celular. Use um domínio seu com
+Let's Encrypt (passo 5) antes de ligar a verificação.
+
+Sem este passo, o sintoma é exato: no app da loja o jogador assiste ao vídeo
+inteiro, a tela fica em *"Liberando seu prêmio..."* por alguns segundos e termina
+em *"Não deu para liberar seu prêmio agora"*.
 
 > **Anúncio de teste não gera aviso.** O `npx expo start` e as builds de debug
 > usam as unidades de teste do Google (ou a propaganda simulada, na web), e
-> nenhuma delas chama este servidor. Para testar prêmios em desenvolvimento, use
-> um servidor de desenvolvimento com `ADS_DEV_AUTOVERIFY=true` — nunca o do
-> Dokploy.
+> nenhuma delas chama este servidor. Por isso, em desenvolvimento, o app tenta uma
+> vez só e mostra *"Anúncio de teste não é confirmado pelo Google"*. Para testar
+> prêmios, use um servidor de desenvolvimento com `ADS_DEV_AUTOVERIFY=true` —
+> nunca o do Dokploy.
 
 ---
 
@@ -305,6 +326,123 @@ Dois celulares (ou um celular e o navegador com `npm run web`):
 
 ---
 
+# Parte 4 — a prova de integridade das partidas
+
+Esta parte é **opcional para o jogo funcionar**, e é o que separa o placar de
+quem jogou do placar de um bot.
+
+Com ela ligada, no fim de cada partida que rendeu alguma coisa o app pede ao
+**Google Play** um selo amarrado àquele resultado (placar, moedas e tempo de
+voo) e manda junto com o fechamento. O servidor abre o selo no Google e só
+credita se ele disser que aquilo veio do **app original**, instalado pela Play
+Store, num **aparelho genuíno** (sem root nem emulador) e sem nada
+**controlando a tela** — clique automático, macro, bot.
+
+Só o fechamento passa por aí: abrir partida gasta vida, a loja gasta moeda já
+conferida e o prêmio de vídeo já chega assinado pelo Google. Dá **uma conferência
+por partida que rendeu** — repetir o mesmo fechamento reaproveita o resultado —,
+e o limite gratuito do Google é de **10 000 por dia**.
+
+## 12. O projeto no Google Cloud
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → **criar
+   projeto** (ou usar um que você já tenha). Anote o **número do projeto** — só
+   dígitos, aparece na página inicial do projeto. Ele vai para o app no passo 14.
+2. **APIs e serviços** → *Ativar APIs e serviços* → procure **Play Integrity
+   API** → **Ativar**.
+3. [Play Console](https://play.google.com/console) → o app **Major Flyer** →
+   **Proteção do app** (em algumas contas, *Integridade do app*) → aba **Play
+   Integrity API** → **Vincular projeto do Cloud** e escolha o do passo 1.
+4. Ainda nessa tela, em *Respostas*, vale marcar o **risco de acesso ao app**
+   (*app access risk*): é o que faz o Google contar se havia app **controlando a
+   tela** durante a partida. Sem isso o resto continua valendo — o servidor só
+   não recebe essa informação.
+5. Google Cloud → **IAM e administrador** → **Contas de serviço** → *Criar conta
+   de serviço* (nome à sua escolha, **sem papel nenhum**) → na conta criada, aba
+   **Chaves** → *Adicionar chave* → *Criar nova chave* → **JSON**. O arquivo
+   baixa uma vez só.
+
+> **A chave é uma senha.** Ela nunca entra no repositório e nunca vai por
+> mensagem. Vazou? Apague a chave no Google Cloud e crie outra — o app não
+> precisa de build novo por causa disso.
+
+## 13. A chave no servidor
+
+A variável aceita o JSON inteiro, mas ele tem quebras de linha e o painel do
+Dokploy não gosta. Converta para uma linha só, no PowerShell:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:caminhochave.json")) | Set-Clipboard
+```
+
+Na aba **Environment** da aplicação, no Dokploy:
+
+```
+INTEGRITY_MODE=log
+GOOGLE_SERVICE_ACCOUNT=cole-aqui-o-que-o-comando-copiou
+```
+
+**Redeploy.** No log tem que aparecer `verificacao de integridade ligada` com o
+modo. Chave errada ou faltando, o servidor **não sobe** e diz o motivo — é de
+propósito: melhor não subir do que subir fingindo que confere.
+
+| `INTEGRITY_MODE` | O que acontece |
+| --- | --- |
+| `off` (padrão) | não confere nada, e nem pede a chave |
+| `log` | confere e **grava** o resultado em cada partida, sem barrar ninguém |
+| `enforce` | partida que não passa **não rende** moedas, ranking nem tempo de voo |
+
+## 14. O app e a virada da chave
+
+No topo de [`src/services/integrity.js`](../src/services/integrity.js):
+
+```js
+export const DEFAULT_CLOUD_PROJECT_NUMBER = '123456789012';
+```
+
+É o **número** do projeto do passo 12 (só dígitos). Sem ele, o app não pede selo
+nenhum. Depois: **build novo** (`npm run aab`) — isto entrou como módulo nativo,
+então atualizar o bundle não basta — e publique no **teste interno**.
+
+> O selo só sai em app **instalado pela Play Store**. No `npx expo start`, em
+> build de desenvolvimento e em APK instalado na mão, o app nem pede (e o
+> servidor de desenvolvimento roda com `INTEGRITY_MODE=off`). Para testar de
+> verdade, instale pela **faixa de teste interno**.
+
+Então, sem pressa:
+
+1. Deixe em **`log`** por alguns dias, com a versão nova já na loja.
+2. Veja o que está chegando:
+
+```sql
+-- como andaram as partidas que renderam algo, nos ultimos 7 dias
+select integrity, count(*)
+  from game_sessions
+ where status = 'finished' and started_at > now() - interval '7 days'
+ group by integrity
+ order by count(*) desc;
+```
+
+   `ok` é a partida que passou. `missing` é partida **sem selo**: app antigo,
+   instalado fora da Play Store, ou iPhone. `failed:...` é o que o Google
+   recusou — `app` (não é o app original), `device` (root, emulador),
+   `license` (não veio da sua conta da Play Store), `controlling` (app
+   clicando na tela), `hash` (o resultado não é o que o selo diz) e `stale`
+   (selo velho). `skipped` é partida que não rendeu nada, e `error:...` é
+   problema deste lado (Google fora, credencial).
+3. Quando quase tudo for `ok`, troque para **`enforce`** e faça redeploy.
+
+O que o jogador lê quando a partida não passa: *"Esta partida não pôde ser
+validada neste aparelho e não vale moedas nem ranking."* — e, quando havia app
+controlando a tela, o texto pede para desativá-lo. Nada de Google, servidor ou
+token na tela.
+
+> **iPhone:** a prova equivalente da Apple (App Attest) **não está
+> implementada**. Com `enforce` ligado, partida de iPhone cairia como
+> `missing` — então não ligue o `enforce` enquanto houver app iOS publicado.
+
+---
+
 # Referência
 
 ## O que cada rota faz
@@ -320,9 +458,9 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | `GET /health` | Diz se o banco responde e qual é a rodada. É o exame do Docker. |
 | `POST /v1/players` | Cadastra o aparelho ou troca o apelido. Corpo: `{id, secret, name}`. |
 | `GET /v1/catalog` | Pássaros, preços e regras. Público. |
-| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances e pássaros do jogador. |
+| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros e tempo de voo (`flightMs`) do jogador. |
 | `POST /v1/runs/start` | Abre uma partida: desconta uma vida e devolve a semente das moedas. |
-| `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals}` — os números dos obstáculos das moedas pegas. |
+| `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals, flightMs}` — os números dos obstáculos das moedas pegas e o tempo voando de fato, em ms. Fechar de novo devolve o mesmo resultado. Partida que rendeu algo leva também o cabeçalho `X-Integrity-Token` ([passo 12](#12-o-projeto-no-google-cloud)). |
 | `POST /v1/runs/{id}/continue` | Nova chance. Corpo: `{method}` — `stock` (guardada) ou `coins`. |
 | `POST /v1/runs/{id}/shield` | Usa um escudo guardado na partida. |
 | `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `shield` ou `continue`. |
@@ -362,11 +500,25 @@ partida já foi usada"*); o código é o que o app usa para decidir o que fazer
   lados têm testes com os mesmos números de referência.
 - **Uma moeda a cada 3 obstáculos**, em média, e **+10 por fase fechada**.
 - O placar precisa **caber no tempo**: cada ponto exige pelo menos
-  `MIN_SECONDS_PER_POINT` desde a abertura, medidos no relógio do banco — o
-  obstáculo mais rápido do jogo leva ~1,15 s para chegar ao pássaro. Placar
-  impossível fecha a partida como **recusada**: sem moedas e sem ranking.
+  `MIN_SECONDS_PER_POINT` (padrão **1 s**) desde a abertura, medidos no relógio
+  do banco. Em retrato, o obstáculo mais rápido do jogo (fase 5) leva ~1,3 s para
+  chegar ao pássaro, e ~2,1 s na fase 1 — e o relógio ainda conta espera, pausa e
+  painéis. Placar impossível fecha a partida como **recusada**: sem moedas e sem
+  ranking.
+- Com a [prova de integridade](#parte-4--a-prova-de-integridade-das-partidas) em
+  `enforce`, partida que rendeu algo só é creditada se o Google Play confirmar
+  que ela veio do **app original**, num **aparelho genuíno** e sem nada
+  **controlando a tela**. O veredito de cada partida fica gravado em
+  `game_sessions.integrity`.
 - Só partida **fechada** entra no ranking. Não existe mais rota que aceite um
   placar solto.
+- Fechar **de novo** uma partida já fechada devolve o **mesmo resultado**, sem
+  pagar de novo e sem aceitar placar novo. É o que deixa o app repetir o pedido
+  quando a resposta se perde no caminho.
+- O **tempo de voo** de cada partida vem do app, que conta só o tempo voando de
+  fato, e soma na carteira (`flightMs`). Ele não vale moeda nem ponto, então a
+  conferência é só contra o absurdo: nenhuma partida voa mais do que o tempo
+  desde que foi aberta.
 
 **Itens e loja**
 
@@ -394,10 +546,15 @@ partida já foi usada"*); o código é o que o app usa para decidir o que fazer
 
 A física do jogo roda no celular, e o servidor não assiste ao voo. O que ele
 garante é que ninguém ganha **o que não existia** (moeda fora da semente, placar
-mais rápido que o jogo, prêmio sem vídeo, compra sem saldo). Um app adulterado
-que voe sozinho **de forma plausível** ainda passa — isso nenhum jogo com a
-física no aparelho consegue impedir. O livro-razão existe para quando for
-preciso investigar alguém.
+mais rápido que o jogo, prêmio sem vídeo, compra sem saldo).
+
+Um app adulterado que voasse sozinho **de forma plausível** passaria por tudo
+isso — nenhum jogo com a física no aparelho consegue conferir o voo. É essa
+fresta que a [prova de integridade](#parte-4--a-prova-de-integridade-das-partidas)
+fecha: quem mexe no código precisa assinar o app de novo, e aí o Google Play não
+o reconhece mais; quem deixa um app clicando na tela aparece no veredito. Sobra
+o jogador de verdade — e o livro-razão, para quando for preciso investigar
+alguém.
 
 ## Pássaros e habilidades
 
@@ -424,10 +581,13 @@ Tudo por variável de ambiente, com padrão razoável. A lista comentada está e
 | `ALLOWED_ORIGINS` | `*` | CORS, para a versão web. O app nativo não passa por aqui. |
 | `TRUST_PROXY` | `false` | **`true` no Dokploy**, que tem o Traefik na frente. |
 | `MAX_RUN_POINTS` | `2000` | Teto de pontos por partida. |
-| `MIN_SECONDS_PER_POINT` | `0.6` | Piso de tempo por ponto. Placar mais rápido é recusado. |
+| `MIN_SECONDS_PER_POINT` | `1.0` | Piso de tempo por ponto. Placar mais rápido é recusado. |
 | `MAX_RUN_MINUTES` | `180` | Partida aberta há mais tempo que isso não fecha mais. |
 | `ADS_DEV_AUTOVERIFY` | `false` | **Só em desenvolvimento**: prêmio de anúncio sem o aviso do Google. |
 | `ADMOB_KEYS_URL` | chaves do Google | De onde vêm as chaves públicas do SSV. Não mexa. |
+| `INTEGRITY_MODE` | `off` | Prova de integridade das partidas: `off`, `log` ou `enforce` ([parte 4](#parte-4--a-prova-de-integridade-das-partidas)). |
+| `GOOGLE_SERVICE_ACCOUNT` | — | A chave da conta de serviço (JSON ou base64). Obrigatória fora do `off`. **Segredo.** |
+| `PLAY_INTEGRITY_PACKAGE` | `com.aqblab.majorflyer` | O pacote do app conferido no selo. Só muda se o app mudar de nome. |
 | `RATE_PER_MINUTE` / `RATE_BURST` | `120` / `40` | Limite de pedidos por IP (o aviso do Google fica de fora). |
 
 Mudou uma variável? **Redeploy** — o container é recriado com os valores novos.
@@ -475,6 +635,36 @@ select created_at, kind, coins, lives, shields, continues, ref
 select started_at, status, points, coins
   from game_sessions where player_id = 'CODIGO-DO-JOGADOR'
  order by started_at desc limit 20;
+```
+
+## Registro de acesso (IP)
+
+Todo pedido identificado (com o código do jogador) entra em `player_access`: de
+que IP o jogador usou o jogo, e quando ([access.go](access.go)). É **uma linha
+por visita** — pedidos do mesmo IP com menos de 30 minutos de pausa estendem a
+mesma linha (`last_seen`); IP novo ou pausa maior abre outra. O servidor vai ao
+banco no máximo uma vez por minuto para o mesmo jogador e IP.
+
+Serve para validar e proteger o jogo (muitas contas no mesmo IP, um código usado
+de lugares demais) e é o registro de acesso que o Marco Civil da Internet pede no
+art. 15: **guardado por 6 meses**. O próprio servidor apaga o que venceu, na
+subida e depois uma vez por dia. Se o banco falhar ao registrar, fica no log e o
+jogo segue. O IP só é o do jogador com `TRUST_PROXY=true` atrás do Traefik
+(passo 4).
+
+```sql
+-- as visitas de um jogador
+select host(ip) as ip, first_seen, last_seen
+  from player_access where player_id = 'CODIGO-DO-JOGADOR'
+ order by first_seen desc limit 50;
+
+-- IPs usados por mais de um jogador nos ultimos 30 dias
+select host(ip) as ip, count(distinct player_id) as jogadores
+  from player_access
+ where last_seen > now() - interval '30 days'
+ group by ip
+having count(distinct player_id) > 1
+ order by jogadores desc;
 ```
 
 ## Testes
@@ -535,9 +725,13 @@ ligado se esse proxy existir.
 | `banco não respondeu` | o Postgres ainda subindo, ou host/senha errados na `DATABASE_URL` |
 | `/health` não responde pelo domínio | DNS ainda propagando, ou o domínio não foi criado na aba *Domains* com a porta 8080 |
 | App diz "SEM CONEXÃO · MODO TREINO" | o endereço não chegou nele: `DEFAULT_API_URL` vazio, ou build antigo (passos 8 e 10) |
+| No fim da partida o app demora e diz "Sem conexão agora", com a internet boa | app de antes de 12/09/2026. No caminho até a VPS, conexão parada por uns 30 s morre sem avisar ninguém, e o Android reaproveitava essa conexão morta. O app atual abre conexão nova a cada pedido: `npx expo start --clear`, ou build novo |
 | Assisti ao vídeo e não ganhei nada | a verificação não está ligada na unidade premiada, ou a URL do callback está errada (passo 7) |
 | Prêmio não sai no `expo start` | anúncio de teste não gera aviso: use um servidor de desenvolvimento com `ADS_DEV_AUTOVERIFY=true` |
 | `ssv recusado` nos logs | aviso sem assinatura válida. Se forem muitos e sem motivo, confira se algum proxy está alterando a query string |
 | Partidas de todo mundo recusadas como "rápidas demais" | `MIN_SECONDS_PER_POINT` alto demais para o jogo atual |
+| O servidor não sobe: `INTEGRITY_MODE=... precisa de uma GOOGLE_SERVICE_ACCOUNT valida` | a chave não foi colada inteira, ou não é a chave JSON da conta de serviço (passo 13) |
+| Depois do `enforce`, todo mundo ouve que a partida "não pôde ser validada" | app publicado antes do passo 14 (não manda selo), número do projeto vazio no app, ou o projeto do Cloud não foi vinculado no Play Console. Volte para `log` e olhe a coluna `integrity` |
+| `verificacao de integridade indisponivel` no log | o Google não respondeu, ou a chave perdeu o acesso. Com `enforce`, a partida fica **aberta** e o app tenta de novo: ninguém perde moeda por isso |
 | Nenhum pedido no log ao mexer no app | o problema está no aplicativo, não aqui |
 | Todos os jogadores caem no limite de pedidos juntos | `TRUST_PROXY` não está `true`: o servidor vê só o IP do Traefik |

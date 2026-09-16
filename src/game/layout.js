@@ -1,47 +1,63 @@
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 // O que realmente define a dificuldade e a razao entre o vao e o tamanho do
-// passaro. Mantendo essa razao fixa, o jogo tem exatamente o mesmo aperto num
-// celular pequeno em retrato e num tablet em paisagem.
-const GAP_TO_BIRD = 5.5;
+// passaro. Sem zoom (paisagem, que hoje so existe na web) ela e exatamente esta;
+// no retrato o zoom out deixa o passaro menor dentro do mesmo vao.
+export const GAP_TO_BIRD = 5.5;
 
 // Altura que um unico toque ganha, como fracao do vao.
 const FLAP_RISE = 0.48;
 
 /**
+ * Zoom out do retrato — o unico formato no celular (App.js trava a orientacao).
+ *
+ * A camera fica um pouco mais longe: passaro, colunas, espacamento e velocidade
+ * encolhem juntos, entao cabe mais caminho na tela e o ritmo nao muda (o tempo
+ * de uma coluna ate a outra e o mesmo). O VAO NAO ENCOLHE: continua 31% da
+ * altura de jogo, como antes do zoom — quem ficou menor foi o passaro dentro dele.
+ */
+export const PORTRAIT_ZOOM = 0.85;
+
+/**
  * Calcula todas as medidas do jogo a partir do tamanho real da area de jogo.
  * Tudo e derivado, entao o mesmo codigo serve para retrato e paisagem,
  * em celular ou tablet, sem numeros magicos espalhados pelo projeto.
+ *
+ * `zoom` so existe para os testes compararem com o jogo sem zoom.
  */
-export function computeLayout(width, height) {
+export function computeLayout(width, height, { zoom: zoomOverride } = {}) {
   const landscape = width >= height;
+  const zoom = zoomOverride ?? (landscape ? 1 : PORTRAIT_ZOOM);
 
   const groundHeight = clamp(height * (landscape ? 0.12 : 0.14), 44, 140);
   const playHeight = height - groundHeight;
 
-  // 1. O vao vem primeiro. Em paisagem sobra pouca altura, entao ele precisa
-  //    ocupar uma fatia proporcionalmente maior da tela.
+  // 1. O vao vem primeiro, e fica fora do zoom. Em paisagem sobra pouca altura,
+  //    entao ele precisa ocupar uma fatia proporcionalmente maior da tela.
   const gap = clamp(playHeight * (landscape ? 0.4 : 0.31), 84, playHeight * 0.5);
   const gapMin = gap * 0.86; // vao no nivel maximo de dificuldade
 
-  // 2. O passaro e derivado do vao, nao da tela.
-  const birdRadius = clamp(gap / (GAP_TO_BIRD * 2), 8, 30);
+  // 2. O passaro e derivado do vao, nao da tela — e encolhe com o zoom.
+  const birdRadius = clamp((gap / (GAP_TO_BIRD * 2)) * zoom, 8, 30);
   const birdX = width * (landscape ? 0.24 : 0.28);
 
   // 3. As colunas acompanham o passaro na largura.
   const pillarWidth = clamp(birdRadius * 3.4, 30, 110);
 
-  // Velocidade em px por frame: proporcional a largura, entao uma coluna leva
-  // sempre ~3,2 s para atravessar a tela, em qualquer aparelho.
-  const speed = width / 190;
+  // Velocidade em px por frame: proporcional a largura e ao zoom. Sem zoom uma
+  // coluna leva ~3,2 s para atravessar a tela; com o zoom do retrato, ~3,7 s —
+  // a tela mostra mais caminho, e o espacamento encolhe junto para o ritmo ficar
+  // o mesmo.
+  const speed = (width / 190) * zoom;
   const spacing = clamp(
-    width * (landscape ? 0.58 : 0.66),
+    width * (landscape ? 0.58 : 0.66) * zoom,
     pillarWidth * 3.4,
     width * 0.92
   );
 
   // Gravidade em px/frame^2. O impulso do toque e derivado dela e do vao,
-  // entao o "peso" do passaro e identico em qualquer resolucao.
+  // entao o "peso" do passaro e identico em qualquer resolucao — e o zoom nao
+  // mexe nele, porque o vao nao mudou.
   const gravity = playHeight * 0.00078;
   const flapVelocity = -Math.sqrt(2 * gravity * gap * FLAP_RISE);
   const maxFall = Math.abs(flapVelocity) * 1.7;
@@ -54,6 +70,7 @@ export function computeLayout(width, height) {
     width,
     height,
     landscape,
+    zoom,
     groundHeight,
     playHeight,
     birdRadius,

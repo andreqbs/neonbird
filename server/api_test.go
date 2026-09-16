@@ -63,7 +63,7 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 	// Cada teste comeca com o banco limpo: saldo herdado de outro teste da
 	// falso positivo dos bons (passa por acaso).
 	if _, err := store.pool.Exec(ctx, `
-		truncate ad_views, ledger, game_sessions, owned_birds, wallets,
+		truncate player_access, ad_views, ledger, game_sessions, owned_birds, wallets,
 		         runs, group_members, groups, players
 		restart identity cascade`); err != nil {
 		t.Fatalf("limpar: %v", err)
@@ -71,11 +71,19 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 
 	chave := novaChave(t)
 	const keyID = 424242
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	integridade, err := NewIntegrityVerifier(cfg)
+	if err != nil {
+		t.Fatalf("verificacao de integridade: %v", err)
+	}
 	api := &API{
-		store: store,
-		cfg:   cfg,
-		log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ssv:   &SSVVerifier{keys: chavesFixas{keyID: &chave.PublicKey}},
+		store:     store,
+		cfg:       cfg,
+		log:       log,
+		ssv:       &SSVVerifier{keys: chavesFixas{keyID: &chave.PublicKey}},
+		integrity: integridade,
+		// Sem intervalo entre as idas ao banco: cada pedido do teste conta.
+		access: newAccessLog(store, log, 0),
 	}
 	srv := httptest.NewServer(api.Routes())
 	t.Cleanup(func() {

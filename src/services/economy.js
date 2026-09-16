@@ -1,5 +1,6 @@
 import { isConfigured, request, requestRegistered } from './cloud';
 import { initPlayer } from './identity';
+import integrity from './integrity';
 
 /**
  * A economia do jogo vista pelo app: moedas, vidas, escudos, novas chances e
@@ -130,17 +131,21 @@ export async function startRun() {
 }
 
 /**
- * Fecha a partida mandando o placar e os NUMEROS dos obstaculos das moedas
- * pegas. O servidor confere cada uma e devolve o que foi creditado.
+ * Fecha a partida mandando o placar, os NUMEROS dos obstaculos das moedas pegas
+ * e o tempo de voo (so o tempo voando de fato, em ms). O servidor confere cada
+ * moeda e devolve o que foi creditado.
+ *
+ * Repetir e seguro (`retry`): partida ja fechada devolve o mesmo resultado e nao
+ * paga de novo. Se a resposta da primeira tentativa se perder no caminho, a
+ * segunda ainda traz as moedas certas.
  */
-export async function finishRun(runId, { points, coinOrdinals }) {
+export async function finishRun(runId, { points, coinOrdinals, flightMs }) {
   const payload = {
     points: Math.max(0, Math.floor(points || 0)),
     coinOrdinals: Array.isArray(coinOrdinals) ? coinOrdinals.slice() : [],
+    flightMs: Math.max(0, Math.round(flightMs || 0)),
   };
-  const r = absorb(
-    await requestRegistered('POST', `/v1/runs/${runId}/finish`, { body: payload })
-  );
+  const r = await sendFinish(runId, payload);
   if (r.ok) {
     pendingFinishes.delete(runId);
     return { ok: true, result: r.data.result };
@@ -149,11 +154,26 @@ export async function finishRun(runId, { points, coinOrdinals }) {
   return r;
 }
 
+/**
+ * Manda o fechamento ao servidor. Partida que rendeu alguma coisa leva junto a
+ * prova de integridade DESTE placar (integrity.js).
+ *
+ * A prova e pedida na hora do envio, inclusive no fechamento guardado que sobe
+ * mais tarde: token velho nao vale, e partida que nao rendeu nada nao gasta
+ * verificacao nenhuma.
+ */
+async function sendFinish(runId, payload) {
+  const options = { body: payload, retry: true };
+  if (payload.points > 0 || payload.coinOrdinals.length > 0) {
+    const token = await integrity.tokenFor(integrity.finishHash(runId, payload));
+    if (token) options.headers = { 'X-Integrity-Token': token };
+  }
+  return absorb(await requestRegistered('POST', `/v1/runs/${runId}/finish`, options));
+}
+
 async function flushFinishes() {
   for (const [runId, payload] of [...pendingFinishes]) {
-    const r = absorb(
-      await requestRegistered('POST', `/v1/runs/${runId}/finish`, { body: payload })
-    );
+    const r = await sendFinish(runId, payload);
     if (r.ok || !r.offline) pendingFinishes.delete(runId);
   }
 }
@@ -197,22 +217,42 @@ export const CLAIM_DELAYS_MS = [800, 1200, 1500, 2000, 2500, 3000, 3000, 4000, 4
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * O que o jogador le quando o video nao vira premio.
+ *
+ * Na build da loja, sem bastidor: nem Google nem servidor — so que o premio nao
+ * saiu e que da para tentar de novo. O texto do anuncio de teste e para quem
+ * desenvolve, e so aparece la (ver `testAd` abaixo).
+ */
+export const CLAIM_MESSAGES = {
+  production: 'Não deu para liberar seu prêmio agora. Tente de novo em alguns instantes.',
+  testAd:
+    'Anúncio de teste não é confirmado pelo Google. Para testar prêmios, use um servidor com ADS_DEV_AUTOVERIFY=true.',
+};
+
+/**
  * Troca um video premiado confirmado pelo premio: 'lives', 'shield' ou
  * 'continue'. So devolve ok com o premio ja registrado no servidor.
+ *
+ * `testAd`: o video era de teste ou simulado (desenvolvimento). Esse video nunca
+ * gera o aviso do Google, entao so um servidor de desenvolvimento
+ * (ADS_DEV_AUTOVERIFY=true) libera o premio — e ele responde na primeira
+ * tentativa. Com anuncio de teste a troca e tentada uma vez so: esperar os ~25 s
+ * nao mudaria o resultado.
  */
-export async function claimAd(kind, { delays = CLAIM_DELAYS_MS, wait = sleep } = {}) {
+export async function claimAd(kind, { delays = CLAIM_DELAYS_MS, wait = sleep, testAd = false } = {}) {
+  const esperas = testAd ? [] : delays;
   for (let tentativa = 0; ; tentativa++) {
     const r = absorb(await requestRegistered('POST', '/v1/ads/claim', { body: { kind } }));
     if (!r.ok) return r;
     if (r.status !== 202) return { ok: true };
-    if (tentativa >= delays.length) {
+    if (tentativa >= esperas.length) {
       return {
         ok: false,
         pending: true,
-        error: 'O anúncio ainda não foi confirmado. Tente de novo em instantes.',
+        error: testAd ? CLAIM_MESSAGES.testAd : CLAIM_MESSAGES.production,
       };
     }
-    await wait(delays[tentativa]);
+    await wait(esperas[tentativa]);
   }
 }
 

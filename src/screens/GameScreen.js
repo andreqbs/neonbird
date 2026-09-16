@@ -411,11 +411,11 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   }, [runRef, training, world]);
 
   /**
-   * Fecha a partida: manda placar e moedas ao servidor e guarda o que ele
-   * creditou. O recorde local vai junto, como sempre.
+   * Fecha a partida: manda placar, moedas e tempo de voo ao servidor e guarda o
+   * que ele creditou. O recorde local vai junto, como sempre.
    *
-   * Continua valendo se a tela girar ou sair no meio da espera: o resultado
-   * fica no runRef e quem estiver montado redesenha.
+   * Continua valendo se a area de jogo mudar de tamanho ou sair no meio da
+   * espera: o resultado fica no runRef e quem estiver montado redesenha.
    */
   const finishRun = useCallback(async () => {
     const rs = runRef.current;
@@ -427,6 +427,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     const score = world.score;
     const coinOrdinals = world.coinOrdinals.slice();
     const collected = world.coins;
+    const flightMs = world.flightMs;
 
     // Historico local: vai para o proximo tick, gravar em disco nao pode
     // atrasar o painel.
@@ -442,7 +443,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     if (!rs.run) {
       result = { training: true };
     } else {
-      const r = await economy.finishRun(rs.run.id, { points: score, coinOrdinals });
+      const r = await economy.finishRun(rs.run.id, { points: score, coinOrdinals, flightMs });
       result = r.ok
         ? { coins: r.result.coins, stageBonus: r.result.stageBonus, collected }
         : {
@@ -1159,7 +1160,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           ) : overMode === 'finishing' ? (
             <View style={styles.panel}>
               <ActivityIndicator color={theme.pillar} />
-              <Text style={styles.busyText}>Guardando o voo no servidor...</Text>
+              <Text style={styles.busyText}>Guardando seu voo...</Text>
             </View>
           ) : (
             <View style={styles.panel}>

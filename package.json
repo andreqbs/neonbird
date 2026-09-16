@@ -18,6 +18,7 @@
     "aab": "eas build --platform android --profile production"
   },
   "dependencies": {
+    "@expo/app-integrity": "^57.0.2",
     "@expo/metro-runtime": "~57.0.14",
     "@react-native-async-storage/async-storage": "2.2.0",
     "babel-preset-expo": "~57.0.0",

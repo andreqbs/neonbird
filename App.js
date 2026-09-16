@@ -12,6 +12,7 @@ import ShopScreen from './src/screens/ShopScreen';
 import useScores from './src/hooks/useScores';
 import usePlayer from './src/hooks/usePlayer';
 import economy from './src/services/economy';
+import integrity from './src/services/integrity';
 import audio from './src/audio/AudioManager';
 import ads from './src/services/ads';
 import { SettingsProvider, useSettings } from './src/state/SettingsContext';
@@ -37,10 +38,19 @@ function Root() {
   // servidor, nem video premiado que pague a alguem.
   usePlayer();
 
-  // A tela acompanha o aparelho: nada de travar orientacao. O layout inteiro do
-  // jogo e derivado do tamanho, entao girar so recalcula as medidas.
+  // So retrato. Em paisagem as colunas ficam bem mais espacadas e o jogo fica
+  // mais facil — injusto no ranking. O app.json ja abre travado; esta chamada
+  // vale na hora, inclusive no build de desenvolvimento ja instalado (a trava do
+  // app.json so chega ao Android com build nova).
   useEffect(() => {
-    ScreenOrientation.unlockAsync().catch(() => {});
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
+  // Prepara a prova de integridade das partidas (Play Integrity): a primeira
+  // preparacao com o Google leva alguns segundos, e no fim da partida o token
+  // precisa sair na hora. Sem modulo nativo ou sem projeto, nao faz nada.
+  useEffect(() => {
+    integrity.prepare();
   }, []);
 
   // Liga o AdMob. O primeiro video premiado so carrega quando o jogador existe

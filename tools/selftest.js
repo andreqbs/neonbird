@@ -7,9 +7,11 @@
  * sem React: `computeLayout` so faz conta, e `World` so precisa do matter-js.
  * Os testes cobrem tres coisas que quebram calado num jogo:
  *
- *   1. Proporcao — a dificuldade tem que ser a mesma em qualquer tela.
+ *   1. Proporcao — a dificuldade tem que ser a mesma em qualquer celular, e o
+ *      zoom out do retrato nao pode encolher o vao.
  *   2. Jogabilidade — um bot simples precisa conseguir sobreviver.
- *   3. Rotacao — girar o aparelho no meio da partida nao pode custar o placar.
+ *   3. Area refeita — mudar o tamanho da area de jogo no meio da partida (web,
+ *      multi-janela) nao pode custar o placar.
  */
 const fs = require('fs');
 const path = require('path');
@@ -23,12 +25,16 @@ const MODULES = [
   'src/game/layout.js',
   'src/game/coins.js',
   'src/game/abilities.js',
+  'src/game/caps.js',
   'src/game/World.js',
   'src/game/session.js',
   'src/services/season.js',
+  'src/services/sha256.js',
+  'src/services/integrity.js',
   'src/services/identity.js',
   'src/services/cloud.js',
   'src/services/economy.js',
+  'src/ui/flightTime.js',
 ];
 
 function build() {
@@ -47,7 +53,8 @@ function build() {
 
 build();
 
-const { computeLayout } = require(path.join(BUILD, 'src/game/layout.js'));
+const { computeLayout, GAP_TO_BIRD, PORTRAIT_ZOOM } = require(path.join(BUILD, 'src/game/layout.js'));
+const { formatFlightTime } = require(path.join(BUILD, 'src/ui/flightTime.js'));
 const World = require(path.join(BUILD, 'src/game/World.js')).default;
 const { PHASE, SHIELD_FADE_FRAMES, STAGE_LENGTH } = require(path.join(
   BUILD,
@@ -98,6 +105,8 @@ const cloud = require(path.join(BUILD, 'src/services/cloud.js'));
 
 const economy = require(path.join(BUILD, 'src/services/economy.js'));
 const coins = require(path.join(BUILD, 'src/game/coins.js'));
+const { sha256Hex } = require(path.join(BUILD, 'src/services/sha256.js'));
+const integrity = require(path.join(BUILD, 'src/services/integrity.js'));
 
 let failures = 0;
 function check(name, ok, extra = '') {
@@ -206,19 +215,35 @@ for (const [name, w, h] of SCREENS) {
     `\n [${name}] ${w}x${h} — vao ${L.gap.toFixed(0)}px, passaro ${(L.birdRadius * 2).toFixed(0)}px, ` +
       `${(L.spacing / L.speed / 60).toFixed(2)}s entre colunas`
   );
-  check('razao vao/passaro constante (5.50x)', Math.abs(ratio - 5.5) < 0.01, `${ratio.toFixed(2)}x`);
+  // Sem zoom (paisagem) a razao e a de sempre; no retrato o zoom out deixa o
+  // passaro menor dentro do mesmo vao.
+  const razao = GAP_TO_BIRD / L.zoom;
+  check(
+    `razao vao/passaro de ${razao.toFixed(2)}x (${L.landscape ? 'paisagem' : 'retrato, com zoom out'})`,
+    Math.abs(ratio - razao) < 0.01,
+    `${ratio.toFixed(2)}x`
+  );
   check('um toque sobe ~48% do vao', Math.abs(rise / L.gap - 0.48) < 0.01, `${((rise / L.gap) * 100).toFixed(0)}%`);
   check('faixa vertical dos vaos e usavel', hi - lo > L.gap * 0.15, `${(hi - lo).toFixed(0)}px`);
 
-  // sem tocar em nada, a gravidade tem que derrubar o passaro
+  // Sem tocar em nada o passaro cai — e o chao NAO derruba: ele fica la ate a
+  // primeira coluna chegar, e e o cano de baixo que encerra a partida.
   const falling = new World(L);
   falling.flap();
   let frames = 0;
+  let tocouOChao = false;
   while (falling.phase !== PHASE.OVER && frames < 3000) {
     falling.update();
     frames++;
+    if (falling.phase === PHASE.PLAYING && falling.birdY >= L.playHeight - L.birdRadius - 0.01) {
+      tocouOChao = true;
+    }
   }
-  check('sem tocar, cai e perde', falling.phase === PHASE.OVER && frames < 400, `${(frames / 60).toFixed(2)}s`);
+  check(
+    'sem tocar, cai no chao e so perde quando a coluna chega',
+    tocouOChao && falling.phase === PHASE.OVER && frames < 400,
+    `${(frames / 60).toFixed(2)}s`
+  );
   falling.destroy();
 
   // e jogavel: o bot precisa aguentar 2 minutos
@@ -232,6 +257,43 @@ for (const [name, w, h] of SCREENS) {
   }
   const worst = Math.min(...scores);
   check('bot sobrevive e pontua', worst >= 20, `pontos: ${scores.join(', ')}`);
+}
+
+// ---------------------------------------------------- 1a. zoom do retrato
+
+section('Zoom out do retrato');
+for (const [name, w, h] of SCREENS.filter(([, sw, sh]) => sw < sh)) {
+  const perto = computeLayout(w, h, { zoom: 1 }); // como era antes do zoom
+  const L = computeLayout(w, h);
+  const ritmo = (x) => x.spacing / x.speed / 60;
+  const aFrente = (x) => (x.width - x.birdX) / x.speed / 60;
+
+  console.log(
+    `\n [${name}] ${w}x${h} — passaro ${(perto.birdRadius * 2).toFixed(0)}px -> ${(L.birdRadius * 2).toFixed(0)}px, ` +
+      `coluna ${perto.pillarWidth.toFixed(0)}px -> ${L.pillarWidth.toFixed(0)}px, vao ${L.gap.toFixed(0)}px`
+  );
+  check(`o zoom do retrato e de ${Math.round((1 - PORTRAIT_ZOOM) * 100)}%`, L.zoom === PORTRAIT_ZOOM);
+  check(
+    'o vao nao encolhe: continua 31% da altura de jogo',
+    L.gap === perto.gap && Math.abs(L.gap / L.playHeight - 0.31) < 1e-9,
+    `${((L.gap / L.playHeight) * 100).toFixed(1)}%`
+  );
+  check(
+    'passaro e colunas encolhem juntos',
+    Math.abs(L.birdRadius / perto.birdRadius - PORTRAIT_ZOOM) < 1e-9 &&
+      Math.abs(L.pillarWidth / perto.pillarWidth - PORTRAIT_ZOOM) < 1e-9
+  );
+  check('o ritmo entre colunas nao muda', Math.abs(ritmo(L) - ritmo(perto)) < 1e-9, `${ritmo(L).toFixed(2)}s`);
+  check(
+    'e cabe mais caminho na tela',
+    aFrente(L) > aFrente(perto),
+    `${aFrente(perto).toFixed(2)}s -> ${aFrente(L).toFixed(2)}s de caminho a vista`
+  );
+  check(
+    'a moeda cresceu 10% em relacao ao passaro',
+    Math.abs(coins.COIN_RADIUS - 0.5 * 1.1) < 1e-9,
+    `${Math.round(coins.COIN_RADIUS * 100)}% do raio do passaro`
+  );
 }
 
 // ------------------------------------------------------- 1b. placar na hora
@@ -437,7 +499,8 @@ section('Fases, velocidade e escudo');
   check('proximo alvo e o dobro', world.stageTarget === STAGE_LENGTH * 2);
   world.destroy();
 
-  // escudo: uma queda perdoada
+  // Escudo: sem tocar, o passaro fica no chao ate a coluna chegar. Sem escudo a
+  // primeira coluna derruba; com escudo ela e perdoada, e so a seguinte derruba.
   const bare = new World(L);
   bare.flap();
   let bareFrames = 0;
@@ -456,7 +519,7 @@ section('Fases, velocidade e escudo');
     shieldFrames++;
   }
   check(
-    'escudo segura a queda e depois some',
+    'escudo perdoa a primeira coluna e depois some',
     shielded.shield === false && shieldFrames > bareFrames * 1.5,
     `${bareFrames} -> ${shieldFrames} frames`
   );
@@ -868,6 +931,137 @@ section('Fases, velocidade e escudo');
   check('fase e derivada do placar', late.stage === 3, `fase ${late.stage + 1}`);
   check('alvo acompanha a fase', late.stageTarget === STAGE_LENGTH * 4);
   late.destroy();
+}
+
+// ----------------------------------------------- 3a. so o obstaculo derruba
+
+section('So o obstaculo derruba: chao e teto nao');
+{
+  const Matter = require('matter-js');
+  const L = computeLayout(390, 844);
+  // Tira as colunas do caminho por um bom tempo: sobram so o chao e o teto.
+  const semColunas = (w) => {
+    for (const p of w.pillars) {
+      p.x = L.width * 20;
+      w._syncPillar(p);
+    }
+  };
+
+  const w = new World(L);
+  w.flap();
+  semColunas(w);
+  for (let f = 0; f < 300; f++) w.update(); // cai e fica parado no chao
+  check(
+    'encostar no chao nao encerra a partida',
+    w.phase === PHASE.PLAYING && w.birdY >= L.playHeight - L.birdRadius - 0.01,
+    `passaro em y=${w.birdY.toFixed(0)}, chao em ${(L.playHeight - L.birdRadius).toFixed(0)}`
+  );
+  const vooAntes = w.flightFrames;
+  for (let f = 0; f < 120; f++) w.update();
+  check('e o tempo parado no chao nao conta como voo', w.flightFrames === vooAntes);
+
+  for (let f = 0; f < 240; f++) {
+    if (f % 5 === 0) w.flap();
+    w.update();
+  }
+  check(
+    'bater no teto tambem nao',
+    w.phase === PHASE.PLAYING && w.bird.position.y <= L.birdRadius * 3,
+    `passaro em y=${w.bird.position.y.toFixed(0)}`
+  );
+  w.destroy();
+
+  // A tampa — a ponta larga do cano, virada para o vao — tambem e obstaculo.
+  // `folga` e a distancia entre o passaro e a borda da tampa no passo da fisica:
+  // negativa, encosta; positiva, passa rente. O corpo do cano fica sempre fora.
+  const passaPelaTampa = (folga) => {
+    const t = new World(L);
+    t.flap();
+    Matter.Body.setVelocity(t.bird, { x: 0, y: 0 });
+    semColunas(t);
+    const p = t.pillars[0];
+    const tampa = t._capShape;
+    const bordaDaTampa = L.birdX + L.birdRadius + folga;
+    p.x = bordaDaTampa + tampa.width / 2 + t.speed; // o passo ainda anda `speed`
+    // Passaro na altura do meio da tampa do cano de cima.
+    p.gapCenter = t.bird.position.y + tampa.height / 2 + p.gap / 2;
+    t._syncPillar(p);
+    t.update();
+    const bateu = t.phase === PHASE.OVER;
+    t.destroy();
+    return bateu;
+  };
+  check('encostar so na tampa do cano ja encerra a partida', passaPelaTampa(-3) === true);
+  check('passar rente a tampa, sem encostar, nao', passaPelaTampa(3) === false);
+}
+
+// --------------------------------------------------------- 3b. tempo de voo
+
+section('Tempo de voo');
+{
+  const L = computeLayout(390, 844);
+  const w = new World(L);
+  for (let f = 0; f < 90; f++) w.update(); // esperando o primeiro toque
+  check('esperar o primeiro toque nao conta como voo', w.flightFrames === 0 && w.flightMs === 0);
+
+  w.flap();
+  for (let f = 0; f < 60 && w.phase === PHASE.PLAYING; f++) {
+    if (f % 20 === 0) w.flap();
+    w.update();
+  }
+  check('um segundo voando conta um segundo', w.flightMs === 1000, `${w.flightMs} ms`);
+
+  // Sem tocar mais, o passaro cai; depois da queda o relogio para.
+  const antesDaQueda = w.flightFrames;
+  for (let f = 0; f < 600 && w.phase !== PHASE.OVER; f++) w.update();
+  const naQueda = w.flightFrames;
+  for (let f = 0; f < 120; f++) w.update();
+  check(
+    'a queda conta ate a batida, e depois o relogio para',
+    w.phase === PHASE.OVER && naQueda > antesDaQueda && w.flightFrames === naQueda,
+    `${naQueda - antesDaQueda} frames caindo`
+  );
+
+  check('a nova chance nao zera o voo', w.revive() === true && w.flightFrames === naQueda);
+  for (let f = 0; f < 60; f++) w.update();
+  check('e a espera pelo toque depois dela nao conta', w.flightFrames === naQueda);
+
+  w.flap();
+  w.update();
+  const antesDoPainel = w.flightFrames;
+  w.phase = PHASE.STAGE_CLEAR;
+  for (let f = 0; f < 60; f++) w.update();
+  check('painel de fim de fase nao conta', w.flightFrames === antesDoPainel);
+
+  w.phase = PHASE.PLAYING;
+  w.score = 3;
+  const pacote = captureSession(w);
+  const refeito = new World(computeLayout(412, 915));
+  restoreSession(refeito, pacote);
+  check(
+    'o tempo de voo atravessa a area de jogo refeita',
+    refeito.flightFrames === w.flightFrames,
+    `${refeito.flightMs} ms`
+  );
+  refeito.destroy();
+
+  w.reset();
+  check('partida nova comeca do zero', w.flightFrames === 0);
+  w.destroy();
+
+  const formatos = [
+    [0, '0s'],
+    [45_900, '45s'],
+    [12 * 60_000 + 5_000, '12min 05s'],
+    [3 * 3_600_000 + 7 * 60_000 + 59_000, '3h 07min'],
+    [undefined, '0s'],
+  ];
+  const errado = formatos.find(([ms, quer]) => formatFlightTime(ms) !== quer);
+  check(
+    'na Home o tempo sai curto: 45s, 12min 05s, 3h 07min',
+    !errado,
+    errado ? `${errado[0]} ms virou ${formatFlightTime(errado[0])}` : formatos.map(([ms]) => formatFlightTime(ms)).join(' · ')
+  );
 }
 
 // ------------------------------------------------------------- 4. reset
@@ -1310,10 +1504,15 @@ async function economySection() {
             },
           }
         : naoAchou;
-    const fechada = await economy.finishRun('r1', { points: 42, coinOrdinals: [2, 9, 10] });
+    const fechada = await economy.finishRun('r1', {
+      points: 42,
+      coinOrdinals: [2, 9, 10],
+      flightMs: 61234.4,
+    });
     check(
-      'fechar manda o placar e os numeros dos obstaculos das moedas',
-      JSON.stringify(pedidos[0]?.corpo) === JSON.stringify({ points: 42, coinOrdinals: [2, 9, 10] }),
+      'fechar manda o placar, os numeros dos obstaculos das moedas e o tempo de voo',
+      JSON.stringify(pedidos[0]?.corpo) ===
+        JSON.stringify({ points: 42, coinOrdinals: [2, 9, 10], flightMs: 61234 }),
       JSON.stringify(pedidos[0]?.corpo)
     );
     check('o que vale e o que o servidor creditou', fechada.ok && fechada.result.coins === 2);
@@ -1352,6 +1551,82 @@ async function economySection() {
     responder = () => ({ status: 202, body: { pending: true } });
     const semConfirmacao = await economy.claimAd('shield', { delays: [0, 0], wait: async () => {} });
     check('sem confirmacao, nao ha premio', !semConfirmacao.ok && semConfirmacao.pending === true);
+    check(
+      'e o jogador le um texto sem bastidor (nada de Google ou servidor)',
+      semConfirmacao.error === economy.CLAIM_MESSAGES.production &&
+        !/google|servidor/i.test(semConfirmacao.error)
+    );
+
+    // Anuncio de teste (desenvolvimento) nunca gera o aviso do Google: esperar
+    // 25 s nao muda nada, entao uma tentativa so, com o texto que explica o que
+    // fazer para testar premios.
+    let pedidosDeTeste = 0;
+    responder = (p) => {
+      if (p.path === '/v1/ads/claim') pedidosDeTeste++;
+      return { status: 202, body: { pending: true } };
+    };
+    const deTeste = await economy.claimAd('lives', {
+      testAd: true,
+      delays: [0, 0, 0],
+      wait: async () => {},
+    });
+    check(
+      'anuncio de teste: uma tentativa so, sem esperar a confirmacao que nao vem',
+      !deTeste.ok && pedidosDeTeste === 1,
+      `${pedidosDeTeste} tentativas`
+    );
+    check('...e o texto diz como testar premios', deTeste.error === economy.CLAIM_MESSAGES.testAd);
+
+    // ---- a resposta do fechamento se perde no caminho
+    // Conexao parada morre em silencio no caminho ate a VPS, e o pedido fica sem
+    // resposta ate o prazo. Fechar pode repetir (o servidor devolve o mesmo
+    // resultado), entao o app tenta de novo e fica com as moedas.
+    let fechamentos = 0;
+    responder = (p) => {
+      if (p.path !== '/v1/runs/r1/finish') return naoAchou;
+      fechamentos++;
+      return fechamentos === 1
+        ? { falha: 'AbortError' }
+        : {
+            status: 200,
+            body: {
+              result: { points: 42, coins: 2, stageBonus: 0 },
+              wallet: carteira({ coins: 500, lives: 3 }),
+            },
+          };
+    };
+    const repetido = await economy.finishRun('r1', { points: 42, coinOrdinals: [2, 9, 10] });
+    check(
+      'fechamento sem resposta tenta de novo e fica com o resultado',
+      repetido.ok && repetido.result.coins === 2 && fechamentos === 2,
+      `${fechamentos} tentativas`
+    );
+    check('...sem a tela cair para o modo treino', economy.economyNow().status === 'ready');
+
+    // O que gasta vida, moeda ou video NAO repete sozinho: a primeira tentativa
+    // pode ter chegado e so a resposta ter se perdido.
+    const gastam = [
+      ['abrir partida', '/v1/runs/start', () => economy.startRun()],
+      ['comprar', '/v1/shop/buy', () => economy.buy('shield')],
+      [
+        'trocar video por premio',
+        '/v1/ads/claim',
+        () => economy.claimAd('lives', { delays: [], wait: async () => {} }),
+      ],
+    ];
+    for (const [nome, caminho, chamar] of gastam) {
+      let vezes = 0;
+      responder = (p) => {
+        if (p.path === caminho) vezes++;
+        return { falha: 'AbortError' };
+      };
+      const r = await chamar();
+      check(
+        `${nome} sem resposta nao se repete sozinho`,
+        !r.ok && r.offline === true && vezes === 1,
+        `${vezes} tentativas`
+      );
+    }
 
     // ---- sem rede
     responder = () => ({ falha: 'TypeError' });
@@ -1449,20 +1724,208 @@ async function cloudSection() {
       pedidos[0]?.url === `${FAKE_API}/v1/rankings/players?limit=20`,
       pedidos[0]?.url
     );
+    check(
+      'cada pedido pede conexao nova (conexao parada morre em silencio no caminho)',
+      pedidos[0]?.headers?.Connection === 'close',
+      pedidos[0]?.headers?.Connection
+    );
 
     // ---- respostas estranhas
+    pedidos.length = 0;
     respostas = [{ status: 502, texto: '<html>Bad Gateway</html>' }];
     const proxy = await cloud.topGroups(10);
     check(
       'pagina de erro do proxy nao derruba o app e conta como sem conexao',
       !proxy.ok && proxy.offline === true
     );
+    check('...e nao insiste: o proxy respondeu', pedidos.length === 1, `${pedidos.length} pedidos`);
 
-    respostas = [{ falha: 'AbortError' }];
+    pedidos.length = 0;
+    respostas = [{ falha: 'AbortError' }, { falha: 'AbortError' }];
     const lento = await cloud.topGroups(10);
     check('servidor que demora demais tambem', !lento.ok && lento.offline === true);
+    check('...depois de uma segunda tentativa', pedidos.length === 2, `${pedidos.length} pedidos`);
+
+    pedidos.length = 0;
+    respostas = [{ falha: 'TypeError' }, { status: 200, body: { rows: [] } }];
+    const salvo = await cloud.topGroups(10);
+    check(
+      'consulta que perdeu a conexao no caminho: a segunda tentativa resolve',
+      salvo.ok === true && pedidos.length === 2,
+      `${pedidos.length} pedidos`
+    );
   } finally {
     global.fetch = fetchOriginal;
+    identity.resetPlayerState();
+  }
+}
+
+// -------------------------------------- 10. a prova de integridade da partida
+
+/**
+ * A prova de que a partida foi jogada no app de verdade (integrity.js).
+ *
+ * O token vem do Google Play, entao aqui um dublê faz o papel dele. O que se
+ * confere e o combinado com o servidor: o resumo do fechamento e o MESMO dos
+ * dois lados (os valores de referencia sao os de server/integrity_test.go), so
+ * partida que rendeu alguma coisa gasta uma prova, e nada disso pode impedir a
+ * partida de subir.
+ */
+async function integritySection() {
+  section('Prova de integridade da partida');
+
+  const { createHash } = require('crypto');
+  const noNode = (t) => createHash('sha256').update(t, 'utf8').digest('hex');
+  const textos = ['', 'finish|r1|0|0|', 'voo com acento: coracao é ç 🕊', 'a'.repeat(200)];
+  check(
+    'o SHA-256 do app e o mesmo do Node (e, com ele, o do Go)',
+    textos.every((t) => sha256Hex(t) === noNode(t))
+  );
+
+  const partida = '2f6f1c7e-3b1a-4c5d-9e8f-0a1b2c3d4e5f';
+  check(
+    'o resumo do fechamento bate com o do servidor',
+    integrity.finishHash(partida, { points: 42, coinOrdinals: [2, 9, 10], flightMs: 61234 }) ===
+      '1cb58bfc45863d18bd6314559005ab077670808bcd630abdabb27c04894efbf2'
+  );
+  check(
+    '...inclusive quando nao houve moeda nenhuma',
+    integrity.finishHash(partida, { points: 7, coinOrdinals: [], flightMs: 12000 }) ===
+      'c4d27f8e067a95fa5bd43b1c965ee67f0343a791efaf4cbb3329924e9101490d'
+  );
+
+  const pedidos = [];
+  let responder = () => ({ status: 200, body: {} });
+  const fetchOriginal = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    const pedido = {
+      path: String(url).replace(FAKE_API, ''),
+      headers: options.headers || {},
+      corpo: options.body ? JSON.parse(options.body) : null,
+    };
+    pedidos.push(pedido);
+    const r = responder(pedido);
+    if (r.falha) throw Object.assign(new Error('sem rede'), { name: r.falha });
+    return {
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      text: async () => JSON.stringify(r.body ?? {}),
+    };
+  };
+
+  const carteira = {
+    coins: 0,
+    lives: 5,
+    maxLives: 5,
+    shields: 0,
+    continues: 0,
+    flightMs: 0,
+    equippedBird: 'classic',
+    ownedBirds: ['classic'],
+  };
+  const fechou = {
+    status: 200,
+    body: { result: { points: 0, coins: 0, stageBonus: 0 }, wallet: carteira },
+  };
+
+  // O dublê do Google: conta as preparacoes e as provas, e devolve um token que
+  // diz de qual resumo ele saiu.
+  let preparacoes = 0;
+  let provas = 0;
+  let vencer = 0; // quantas vezes o provedor vai dizer que venceu
+  const google = {
+    prepareIntegrityTokenProviderAsync: async () => {
+      preparacoes++;
+    },
+    requestIntegrityCheckAsync: async (hash) => {
+      if (vencer > 0) {
+        vencer--;
+        throw new Error('provedor vencido');
+      }
+      provas++;
+      return `prova(${hash})`;
+    },
+  };
+  const provaDe = (p) => p && p.headers['X-Integrity-Token'];
+
+  try {
+    identity.resetPlayerState();
+    economy.resetEconomyState();
+    disk.clear();
+    await identity.initPlayer();
+    integrity.__setProvider(google);
+    responder = () => fechou;
+
+    // ---- partida que rendeu sobe com a prova
+    pedidos.length = 0;
+    const jogada = { points: 30, coinOrdinals: [3, 6], flightMs: 20000 };
+    await economy.finishRun('r1', jogada);
+    check(
+      'partida que rendeu sobe com a prova deste placar',
+      provaDe(pedidos[0]) === `prova(${integrity.finishHash('r1', jogada)})`,
+      provaDe(pedidos[0])
+    );
+    check('e a preparacao com o Google acontece uma vez so', preparacoes === 1, `${preparacoes}`);
+
+    // ---- partida que nao rendeu nada nao gasta prova (a cota do dia e do Google)
+    pedidos.length = 0;
+    const antesDeZero = provas;
+    await economy.finishRun('r2', { points: 0, coinOrdinals: [], flightMs: 1000 });
+    check(
+      'partida que nao rendeu nada nao gasta prova nenhuma',
+      provaDe(pedidos[0]) === undefined && provas === antesDeZero
+    );
+
+    // ---- provedor vencido: prepara de novo e a prova sai
+    pedidos.length = 0;
+    vencer = 1;
+    await economy.finishRun('r3', { points: 12, coinOrdinals: [], flightMs: 9000 });
+    check(
+      'provedor vencido: o app prepara de novo e a prova ainda sai',
+      typeof provaDe(pedidos[0]) === 'string' && preparacoes === 2,
+      `${preparacoes} preparacoes`
+    );
+
+    // ---- fechamento guardado sem rede sobe com uma prova NOVA
+    responder = () => ({ falha: 'TypeError' });
+    const guardada = { points: 8, coinOrdinals: [1], flightMs: 5000 };
+    const semRede = await economy.finishRun('r4', guardada);
+    check('sem rede, o fechamento fica guardado', !semRede.ok && semRede.offline === true);
+
+    pedidos.length = 0;
+    const antesDaSubida = provas;
+    responder = (p) =>
+      p.path === '/v1/runs/start'
+        ? {
+            status: 200,
+            body: {
+              run: { id: 'r5', seed: 7, coinEvery: 3, maxContinues: 1 },
+              wallet: carteira,
+            },
+          }
+        : fechou;
+    await economy.startRun();
+    const subiu = pedidos.find((p) => p.path === '/v1/runs/r4/finish');
+    check(
+      'o fechamento guardado sobe com uma prova nova (a antiga ja teria vencido)',
+      provas === antesDaSubida + 1 &&
+        provaDe(subiu) === `prova(${integrity.finishHash('r4', guardada)})`,
+      provaDe(subiu)
+    );
+
+    // ---- sem o modulo do Google, a partida sobe assim mesmo
+    integrity.__setProvider(null);
+    pedidos.length = 0;
+    responder = () => fechou;
+    const semModulo = await economy.finishRun('r6', { points: 5, coinOrdinals: [], flightMs: 3000 });
+    check(
+      'sem o modulo do Google no aparelho, a partida sobe sem prova em vez de travar',
+      semModulo.ok && provaDe(pedidos[0]) === undefined
+    );
+  } finally {
+    global.fetch = fetchOriginal;
+    integrity.__setProvider(undefined);
+    economy.resetEconomyState();
     identity.resetPlayerState();
   }
 }
@@ -1473,6 +1936,7 @@ coinsSection();
 
 economySection()
   .then(cloudSection)
+  .then(integritySection)
   .catch((e) => {
     failures++;
     console.log(`  FALHOU  uma secao assincrona quebrou  (${e.message})`);

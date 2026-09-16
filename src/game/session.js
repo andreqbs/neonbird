@@ -1,13 +1,14 @@
 import { PHASE } from './constants';
 
 /**
- * Continuidade da partida entre orientacoes.
+ * Continuidade da partida quando a area de jogo muda de tamanho.
  *
- * Girar o aparelho muda a largura, a altura, o vao, o tamanho do passaro e a
- * posicao de todas as colunas — nao da para "converter" o mundo antigo, ele e
- * refeito. O que atravessa a virada e o PROGRESSO: placar, moedas pegas (e de
- * quais obstaculos, que e o que vai para o servidor) e as novas chances usadas.
- * O jogador nao deveria perder nada por ter mudado o jeito de segurar o celular.
+ * No celular a tela fica travada em retrato (App.js), mas a area ainda pode
+ * mudar: multi-janela do Android, tablet, janela do navegador. Isso muda a
+ * largura, a altura, o vao, o tamanho do passaro e a posicao de todas as colunas
+ * — nao da para "converter" o mundo antigo, ele e refeito. O que atravessa a
+ * troca e o PROGRESSO: placar, moedas pegas (e de quais obstaculos, que e o que
+ * vai para o servidor), as novas chances usadas e o tempo de voo.
  *
  * Dois casos:
  *   - partida viva: o mundo novo fica em READY e o jogador retoma quando tocar,
@@ -22,6 +23,7 @@ export const EMPTY_SESSION = {
   coins: 0,
   coinOrdinals: [],
   continuesUsed: 0,
+  flightFrames: 0,
   shield: false,
   live: false,
   over: false,
@@ -34,6 +36,7 @@ export function captureSession(world) {
     coins: world.coins,
     coinOrdinals: world.coinOrdinals.slice(),
     continuesUsed: world.continuesUsed,
+    flightFrames: world.flightFrames,
     // Escudo inteiro atravessa a virada: ele foi pago no servidor. O que ja
     // esta se dissipando nao — a batida que o gastou ficou no mundo antigo.
     shield: Boolean(world.shield && !world.shieldFading),

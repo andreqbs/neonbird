@@ -68,8 +68,15 @@ create table if not exists wallets (
   shields       integer     not null default 0 check (shields >= 0),
   continues     integer     not null default 0 check (continues >= 0),
   equipped_bird text        not null default 'classic',
+  flight_ms     bigint      not null default 0 check (flight_ms >= 0),
   updated_at    timestamptz not null default now()
 );
+
+-- Tempo de voo somado de todas as partidas, em ms: so o tempo voando de fato.
+-- Nao e saldo (nao se gasta nem se compra), entao nao passa pelo livro-razao; a
+-- conta de cada partida fica em game_sessions.flight_ms. A coluna chegou depois
+-- da tabela: banco que ja estava no ar ganha aqui.
+alter table wallets add column if not exists flight_ms bigint not null default 0 check (flight_ms >= 0);
 
 -- O passaro de sempre nao aparece aqui: todo jogador ja o tem.
 create table if not exists owned_birds (
@@ -95,8 +102,21 @@ create table if not exists game_sessions (
   points         integer,
   coins          integer,
   stage_bonus    integer,
+  ranked         boolean     not null default false,
+  flight_ms      bigint      not null default 0,
+  integrity      text        not null default '',
   continues_used integer     not null default 0
 );
+
+-- Colunas que chegaram depois da primeira versao: `create table if not exists`
+-- nao mexe em tabela que ja existe, entao o banco que ja estava no ar ganha as
+-- colunas aqui. `flight_ms` e o tempo voando de fato nesta partida: medido no
+-- aparelho e limitado pelo servidor ao tempo desde a abertura. `integrity` e o
+-- resultado da verificacao de integridade no fechamento (integrity.go): ok,
+-- off, skipped, missing, failed:<motivo> ou error:<motivo>.
+alter table game_sessions add column if not exists ranked boolean not null default false;
+alter table game_sessions add column if not exists flight_ms bigint not null default 0;
+alter table game_sessions add column if not exists integrity text not null default '';
 
 create index if not exists game_sessions_open on game_sessions (player_id) where status = 'open';
 
@@ -133,3 +153,20 @@ create table if not exists ad_views (
 );
 
 create index if not exists ad_views_unclaimed on ad_views (player_id, verified_at) where claimed_at is null;
+
+-- Registro de acesso: de que IP cada jogador usou o jogo, e quando (access.go).
+-- Uma linha por visita — pedidos do mesmo IP com menos de 30 min de pausa
+-- estendem a mesma linha; IP novo ou pausa maior abre outra. Serve para validar
+-- e proteger o jogo, e e o registro que o Marco Civil da Internet (art. 15) pede.
+-- O servidor apaga sozinho a visita que terminou ha mais de 6 meses.
+create table if not exists player_access (
+  id         bigserial   primary key,
+  player_id  uuid        not null references players (id),
+  ip         inet        not null,
+  first_seen timestamptz not null default now(),
+  last_seen  timestamptz not null default now()
+);
+
+create index if not exists player_access_visit on player_access (player_id, ip, last_seen desc);
+create index if not exists player_access_ip on player_access (ip);
+create index if not exists player_access_last on player_access (last_seen);

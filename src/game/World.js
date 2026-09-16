@@ -21,14 +21,15 @@ import {
 import { STAGE_COUNT, stageAt, trapsAt } from './stages';
 import { COIN_RADIUS, COIN_SPREAD, coinOffset, hasCoin } from './coins';
 import { NO_ABILITY } from './abilities';
+import { capShape } from './caps';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const randRange = (a, b) => a + Math.random() * (b - a);
 const randInt = ([a, b]) => Math.round(randRange(a, b));
 
-// Contato continuo (raspar na coluna, arrastar no chao) rende varios
-// 'collisionStart' seguidos. Duas absorcoes a menos de 8 frames contam como a
-// mesma batida para efeito de som e estilhaco.
+// Contato continuo (raspar na coluna, passar pela tampa e depois pelo cano)
+// rende varios 'collisionStart' seguidos. Duas absorcoes a menos de 8 frames
+// contam como a mesma batida para efeito de som e estilhaco.
 const ABSORB_COOLDOWN = 8;
 
 /**
@@ -150,6 +151,8 @@ export default class World {
     this._takenOrdinals = new Set();
     this.coinPickups = 0;
     this.continuesUsed = 0;
+    // Tempo de voo: frames em PLAYING, e so eles (ver `flightMs`).
+    this.flightFrames = 0;
 
     Matter.Body.setPosition(this.bird, { x: L.birdX, y: L.playHeight / 2 });
     Matter.Body.setVelocity(this.bird, { x: 0, y: 0 });
@@ -192,10 +195,43 @@ export default class World {
     // gapMin e o piso: nenhuma fase pode apertar o vao alem do jogavel.
     this.gap = Math.max(L.gap * s.gap, L.gapMin);
     this.stageTarget = (this.stage + 1) * STAGE_LENGTH;
+    this._shapeCaps(s.pillar);
     for (const p of this.pillars) {
       p.gap = this.gap;
       this._syncPillar(p);
     }
+  }
+
+  /**
+   * As tampas das colunas — a ponta larga do cano, virada para o vao — tambem
+   * derrubam: sao parte do obstaculo. Cada fase desenha a sua com altura e
+   * cantos proprios (caps.js), entao os corpos sao refeitos quando o formato
+   * muda.
+   */
+  _shapeCaps(look) {
+    const shape = capShape(this.layout.pillarWidth, look);
+    const atual = this._capShape;
+    const igual =
+      atual && atual.width === shape.width && atual.height === shape.height && atual.radius === shape.radius;
+    if (igual) return;
+    this._capShape = shape;
+
+    const world = this.engine.world;
+    for (const p of this.pillars) {
+      if (p.topCap) Matter.Composite.remove(world, [p.topCap, p.bottomCap]);
+      p.topCap = this._capBody(shape);
+      p.bottomCap = this._capBody(shape);
+      Matter.Composite.add(world, [p.topCap, p.bottomCap]);
+    }
+  }
+
+  _capBody(shape) {
+    return Matter.Bodies.rectangle(0, 0, shape.width, shape.height, {
+      isStatic: true,
+      isSensor: true,
+      label: 'pillar',
+      ...(shape.radius > 0.5 ? { chamfer: { radius: shape.radius } } : null),
+    });
   }
 
   /**
@@ -209,17 +245,25 @@ export default class World {
   }
 
   /**
-   * Devolve a um mundo recem-criado o progresso de uma partida (tela girada):
-   * placar, fase e moedas. As colunas recomecam de fora da tela, numeradas a
-   * partir do placar, e moeda ja pega nao reaparece.
+   * Devolve a um mundo recem-criado o progresso de uma partida (area de jogo
+   * refeita): placar, fase, moedas e tempo de voo. As colunas recomecam de fora
+   * da tela, numeradas a partir do placar, e moeda ja pega nao reaparece.
    */
-  restoreProgress({ score = 0, coins, coinOrdinals = [], continuesUsed = 0, shield = false } = {}) {
+  restoreProgress({
+    score = 0,
+    coins,
+    coinOrdinals = [],
+    continuesUsed = 0,
+    shield = false,
+    flightFrames = 0,
+  } = {}) {
     this.score = score;
     this.coinOrdinals = coinOrdinals.slice();
     this._takenOrdinals = new Set(this.coinOrdinals);
     this.coins = Number.isFinite(coins) ? coins : this.coinOrdinals.length;
     this.coinPickups = this.coins;
     this.continuesUsed = continuesUsed;
+    this.flightFrames = flightFrames;
     this.syncStageToScore();
     this._layPillars();
     if (shield) this.grantShield();
@@ -228,6 +272,14 @@ export default class World {
   /** Quantos obstaculos ja foram nesta fase (0..STAGE_LENGTH). */
   get stageProgress() {
     return this.score - this.stage * STAGE_LENGTH;
+  }
+
+  /**
+   * Tempo de voo desta partida, em ms: so os frames voando de fato (PLAYING).
+   * A espera do primeiro toque, a pausa, os paineis e os anuncios nao entram.
+   */
+  get flightMs() {
+    return Math.round(this.flightFrames * FIXED_DT);
   }
 
   /** Existe fase nova depois desta, ou daqui para frente e so repeteco? */
@@ -342,6 +394,10 @@ export default class World {
       return;
     }
 
+    // O passo comeca com o passaro voando? A batida pode trocar a fase no meio
+    // dele, e o tempo de voo conta o passo inteiro (ver o chao, mais abaixo).
+    const jogando = this.phase === PHASE.PLAYING;
+
     // Velocidade e vao sao da fase (ver applyStage), nao do placar.
     if (this.phase === PHASE.PLAYING) {
       for (const p of this.pillars) {
@@ -412,23 +468,20 @@ export default class World {
       }
     }
 
-    // Chao.
+    // Chao: como o teto, segura o passaro mas nao derruba — partida so acaba em
+    // obstaculo. E o cano de baixo desce ate o chao, entao ficar parado la
+    // embaixo nao escapa de nada: a proxima coluna bate.
     const floorY = L.playHeight - L.birdRadius;
-    if (this.bird.position.y >= floorY) {
+    const noChao = this.bird.position.y >= floorY;
+    if (noChao) {
       Matter.Body.setPosition(this.bird, { x: L.birdX, y: floorY });
       Matter.Body.setVelocity(this.bird, { x: 0, y: 0 });
-      if (this.phase === PHASE.PLAYING) {
-        if (this.shield) {
-          // Escudo tambem salva do chao: absorve e devolve o passaro para o ar.
-          this._absorbHit();
-          Matter.Body.setVelocity(this.bird, { x: 0, y: L.flapVelocity });
-        } else if (!this.ability.onHit?.(this, 'ground')) {
-          this.phase = PHASE.OVER;
-        }
-      } else if (this.phase === PHASE.OVER) {
-        this.settled = true;
-      }
+      if (this.phase === PHASE.OVER) this.settled = true;
     }
+
+    // Tempo de voo: o passo que comecou voando, fora do chao. Parado la embaixo
+    // nao e voar.
+    if (jogando && !noChao) this.flightFrames++;
 
     this.birdY = this.bird.position.y;
 
@@ -527,7 +580,7 @@ export default class World {
    *
    * A primeira colisao NAO apaga o escudo: ela dispara a dissipacao. Enquanto
    * sobrar anel na tela (`shieldLevel > 0`) qualquer colisao seguinte tambem e
-   * perdoada — a outra coluna do mesmo par, a coluna seguinte, o chao. Sem
+   * perdoada — a tampa, a outra coluna do mesmo par, a coluna seguinte. Sem
    * isso o passaro, que no frame seguinte ainda esta DENTRO da coluna, morreria
    * do mesmo jeito; a diferenca e que agora o perdao e visivel em vez de ser
    * uma invulnerabilidade escondida.
@@ -780,14 +833,18 @@ export default class World {
   }
 
   /**
-   * Coloca os dois corpos da coluna no lugar.
+   * Coloca os corpos da coluna no lugar: os dois canos e as duas tampas.
    *
    * O gelo nao e um corpo separado: ele empurra a borda daquele lado para
    * dentro do vao, entao a fisica ja o enxerga sem nenhum objeto novo no motor.
+   * A tampa fica na ponta do CANO, e nao na do gelo — como no desenho.
    */
   _syncPillar(p) {
     const half = this.layout.playHeight / 2;
+    const meiaTampa = this._capShape.height / 2;
     Matter.Body.setPosition(p.top, { x: p.x, y: this.topEdgeOf(p) - half });
     Matter.Body.setPosition(p.bottom, { x: p.x, y: this.bottomEdgeOf(p) + half });
+    Matter.Body.setPosition(p.topCap, { x: p.x, y: p.gapCenter - p.gap / 2 - meiaTampa });
+    Matter.Body.setPosition(p.bottomCap, { x: p.x, y: p.gapCenter + p.gap / 2 + meiaTampa });
   }
 }
