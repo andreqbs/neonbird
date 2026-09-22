@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"strings"
 )
 
 // As rotas da economia: catalogo, carteira, partidas, loja e anuncios.
@@ -75,11 +76,14 @@ func (a *API) finishRun(w http.ResponseWriter, r *http.Request) {
 		CoinOrdinals []int `json:"coinOrdinals"`
 		FlightMs     int64 `json:"flightMs"`
 	}
-	if !decode(w, r, &body) {
+	// Um numero por moeda pega: uma partida longa, pegando letras inteiras, passa
+	// facil dos 8 KB dos outros pedidos.
+	if !decodeMax(w, r, &body, 256<<10) {
 		return
 	}
-	// Nao cabe mais moeda do que obstaculo: lista maior que isso nem e lida.
-	if len(body.CoinOrdinals) > a.cfg.MaxRunPoints+1 {
+	// Nao cabe mais moeda do que letras inteiras em todos os obstaculos: lista
+	// maior que isso nem e lida.
+	if len(body.CoinOrdinals) > (a.cfg.MaxRunPoints+1)*MaxLetterCoins {
 		badRequest(w, "moedas demais")
 		return
 	}
@@ -196,6 +200,81 @@ func (a *API) buy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet})
+}
+
+// purchaseBird troca uma compra com dinheiro (Google Play) pelo passaro dela.
+//
+// Repetir e seguro: a mesma compra devolve a mesma carteira. E tambem o caminho
+// da restauracao — o app reinstalado manda as compras que o Google ainda
+// guarda, e o passaro volta para a conta nova (purchases.go).
+func (a *API) purchaseBird(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		BirdID        string `json:"birdId"`
+		PurchaseToken string `json:"purchaseToken"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	b, ok := birdByID(body.BirdID)
+	if !ok || b.ProductID == "" {
+		a.fail(w, r, ruleCode(404, "bird_not_found", "pássaro não encontrado"))
+		return
+	}
+	token := strings.TrimSpace(body.PurchaseToken)
+	if token == "" || len(token) > 2048 {
+		badRequest(w, "compra inválida")
+		return
+	}
+	if !a.billing.Enabled() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Compras com dinheiro indisponíveis agora. Tente mais tarde.",
+			"code":  "billing_unavailable",
+		})
+		return
+	}
+
+	compra, err := a.billing.Purchase(r.Context(), b.ProductID, token)
+	if errors.Is(err, errPurchaseNotFound) {
+		a.fail(w, r, ruleCode(422, "purchase_invalid", "não encontramos esta compra"))
+		return
+	}
+	if err != nil {
+		a.log.Error("compra: o Google nao respondeu", "produto", b.ProductID, "erro", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Não deu para concluir sua compra agora. Tente de novo em instantes.",
+			"code":  "billing_unavailable",
+		})
+		return
+	}
+	switch compra.PurchaseState {
+	case 0:
+	case 2:
+		// Pagamento pendente (boleto, por exemplo): o passaro vem quando aprovar.
+		writeJSON(w, http.StatusAccepted, map[string]any{"pending": true})
+		return
+	default:
+		a.fail(w, r, ruleCode(409, "purchase_canceled", "esta compra foi cancelada"))
+		return
+	}
+
+	wallet, err := a.store.GrantBirdPurchase(r.Context(), p.ID, b.ID, token, compra)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	// Confirma no Google: compra nao confirmada em 3 dias volta para o
+	// comprador. O app confirma tambem, depois desta resposta — se aqui falhar,
+	// la resolve.
+	if compra.AcknowledgementState == 0 {
+		if err := a.billing.Acknowledge(r.Context(), b.ProductID, token); err != nil {
+			a.log.Warn("compra: nao deu para confirmar no Google", "produto", b.ProductID, "erro", err)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet, "birdId": b.ID})
 }
 
 func (a *API) equipBird(w http.ResponseWriter, r *http.Request) {

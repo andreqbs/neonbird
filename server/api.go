@@ -22,6 +22,7 @@ type API struct {
 	ssv       *SSVVerifier
 	access    *accessLog
 	integrity *IntegrityVerifier
+	billing   *PlayBilling
 }
 
 func (a *API) Routes() http.Handler {
@@ -37,6 +38,7 @@ func (a *API) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/me/wallet", a.wallet)
 	mux.HandleFunc("POST /v1/me/bird", a.equipBird)
 	mux.HandleFunc("POST /v1/shop/buy", a.buy)
+	mux.HandleFunc("POST /v1/shop/purchase", a.purchaseBird)
 	mux.HandleFunc("POST /v1/runs/start", a.startRun)
 	mux.HandleFunc("POST /v1/runs/{id}/finish", a.finishRun)
 	mux.HandleFunc("POST /v1/runs/{id}/continue", a.continueRun)
@@ -91,7 +93,13 @@ func badRequest(w http.ResponseWriter, msg string) {
 // decode le o corpo com teto de tamanho e recusa campo desconhecido — corpo
 // gigante e campo inventado sao as duas primeiras coisas que alguem tenta.
 func decode(w http.ResponseWriter, r *http.Request, dst any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	return decodeMax(w, r, dst, 8<<10)
+}
+
+// decodeMax e o decode com outro teto de tamanho — para o fechamento da
+// partida, que manda um numero por moeda pega.
+func decodeMax(w http.ResponseWriter, r *http.Request, dst any, limite int64) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limite)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {

@@ -11,6 +11,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import ShopScreen from './src/screens/ShopScreen';
 import useScores from './src/hooks/useScores';
 import usePlayer from './src/hooks/usePlayer';
+import billing from './src/services/billing';
 import economy from './src/services/economy';
 import integrity from './src/services/integrity';
 import audio from './src/audio/AudioManager';
@@ -51,6 +52,20 @@ function Root() {
   // precisa sair na hora. Sem modulo nativo ou sem projeto, nao faz nada.
   useEffect(() => {
     integrity.prepare();
+  }, []);
+
+  // Compra com dinheiro que ficou pelo caminho (app fechado no meio do
+  // pagamento, pagamento pendente que aprovou, app reinstalado): assim que a
+  // carteira chega, as compras que o Google guarda sobem para o servidor.
+  useEffect(() => {
+    let feito = false;
+    const confere = (estado) => {
+      if (feito || estado.status !== 'ready') return;
+      feito = true;
+      billing.syncPurchases().catch(() => {});
+    };
+    confere(economy.economyNow());
+    return economy.subscribeEconomy(confere);
   }, []);
 
   // Liga o AdMob. O primeiro video premiado so carrega quando o jogador existe

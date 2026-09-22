@@ -41,6 +41,28 @@ O código está pronto e desligado (`INTEGRITY_MODE=off`). Detalhes na
       selo e pararia de render moedas) e lembrar que **iPhone ainda não tem** a
       prova equivalente.
 
+### Compra com dinheiro — Google Play
+
+O código está pronto (Cometa só com dinheiro; os outros com moedas ou dinheiro).
+Passo a passo na [Parte 5 do server/README.md](server/README.md#parte-5--compra-com-dinheiro-google-play).
+
+- [ ] **Play Console:** criar o **perfil de pagamentos** (comerciante), com dados
+      fiscais e conta bancária.
+- [ ] **App:** build novo (`npm run aab`) numa faixa de teste — o Play Console só
+      libera produtos depois de receber um app com o módulo de compras.
+- [ ] **Play Console:** criar e ativar os produtos `bird_frost`, `bird_ember`,
+      `bird_toxic`, `bird_phantom` e `bird_comet`, com o preço em reais.
+- [ ] **Play Console:** dar à conta de serviço do servidor as permissões **Ver
+      dados financeiros...** e **Gerenciar pedidos e assinaturas**.
+- [ ] **Dokploy:** `GOOGLE_SERVICE_ACCOUNT` configurada (a mesma do Play
+      Integrity) — sem ela, a loja só vende por moedas.
+- [ ] **Play Console:** **Teste de licença** com as contas de teste, e uma compra
+      de teste de ponta a ponta.
+- [ ] **Play Console:** ficha **Segurança dos dados** com *Informações
+      financeiras → Histórico de compras*; publicar a política **v2.2**.
+- [ ] **Preços de teste em moedas** (Geada 10 ... Fantasma 18, escudo 5, nova
+      chance 5) estão em produção: decidir se voltam aos originais.
+
 ### Servidor no ar
 
 - [ ] **Domínio próprio com HTTPS** (Let's Encrypt pelo Dokploy). Hoje está em
@@ -66,7 +88,7 @@ O código está pronto e desligado (`INTEGRITY_MODE=off`). Detalhes na
       ([privacidade/index.html](privacidade/index.html), v2.1):
       `[PROVEDOR DE HOSPEDAGEM]`, `[PAÍS DO SERVIDOR]`, `[NOME COMPLETO OU RAZÃO
       SOCIAL]`, `[CPF/CNPJ]`, `[CIDADE / ESTADO]`.
-- [ ] Publicar a v2.1 no endereço que está na ficha do Google Play.
+- [ ] Publicar a v2.2 no endereço que está na ficha do Google Play.
 - [ ] Revisar a ficha **Segurança de Dados** do Play: a finalidade continua
       "prevenção de fraudes, segurança e conformidade", mas vale conferir que a
       declaração bate com a Seção 18 da política.

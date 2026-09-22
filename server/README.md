@@ -53,6 +53,13 @@ quem jogou do placar de um bot.
 13. [Pôr a chave da conta de serviço no servidor](#13-a-chave-no-servidor)
 14. [Número do projeto no app e a virada da chave](#14-o-app-e-a-virada-da-chave)
 
+**No Play Console: compra com dinheiro**
+
+15. [Perfil de pagamentos](#15-perfil-de-pagamentos)
+16. [Criar os produtos dos pássaros](#16-os-produtos)
+17. [Dar à conta de serviço acesso às compras](#17-a-conta-de-serviço-lê-as-compras)
+18. [Testar sem pagar](#18-testar-sem-pagar)
+
 ---
 
 # Parte 1 — o servidor no Dokploy
@@ -443,6 +450,93 @@ token na tela.
 
 ---
 
+# Parte 5 — compra com dinheiro (Google Play)
+
+Os pássaros da loja se compram com **moedas, com dinheiro ou dos dois jeitos**; o
+**Cometa é só com dinheiro**, porque o poder dele (moedas em dobro) pagaria
+qualquer outro pássaro rápido demais. Quem decide é o [catalog.go](catalog.go):
+`Price` é o preço em moedas (0 = não se compra com moedas) e `ProductID` é o
+produto no Play Console (vazio = não se compra com dinheiro).
+
+O **valor em reais não fica no código**: é o que você cadastrar em cada produto no
+Play Console, e o app mostra o preço que o Google Play informar.
+
+Quem entrega o pássaro é este servidor ([billing.go](billing.go)): o app manda o
+comprovante da compra, o servidor confere com o Google que ela foi paga, põe o
+pássaro na conta e confirma a compra no Google (compra não confirmada em 3 dias
+o Google devolve sozinho). Pagamento pendente, como boleto, espera aprovar.
+Compra estornada ou cancelada tira o pássaro da conta — o servidor confere a
+cada 6 horas. O app reinstalado recupera o que foi comprado com a mesma conta do
+Google, e o pássaro sai da conta antiga.
+
+## 15. Perfil de pagamentos
+
+No Play Console, na tela geral da conta (não a do app): **Configurações** →
+**Perfil de pagamentos** → criar (ou vincular) o perfil de **comerciante** do
+Google, com os dados fiscais e a conta bancária que recebe as vendas. Sem ele,
+o Play Console não deixa cobrar nada.
+
+## 16. Os produtos
+
+O Play Console só libera os produtos depois de receber um app que já tenha a
+permissão de cobrança — ela vem no módulo de compras (`expo-iap`). Então:
+
+1. Gere o build novo (`npm run aab`) e publique em qualquer faixa de teste.
+2. Play Console → Major Flyer → **Monetizar** → **Produtos** → **Produtos no
+   app** → **Criar produto**, um para cada pássaro, com **exatamente** estes ids:
+
+   | ID do produto | Pássaro |
+   | --- | --- |
+   | `bird_frost` | Geada |
+   | `bird_ember` | Brasa |
+   | `bird_toxic` | Toxina |
+   | `bird_phantom` | Fantasma |
+   | `bird_comet` | Cometa |
+
+3. Em cada um: nome, descrição e o **preço em reais** (o Google converte para os
+   outros países, dá para ajustar) → **Salvar** → **Ativar**.
+
+O id não muda depois de criado. Para trocar de produto, mude o `ProductID` no
+[catalog.go](catalog.go) e faça redeploy — sem build nova do app.
+
+## 17. A conta de serviço lê as compras
+
+É a mesma `GOOGLE_SERVICE_ACCOUNT` do [passo 13](#13-a-chave-no-servidor): com ela
+no Dokploy, a compra com dinheiro liga sozinha, e o log diz
+`compra com dinheiro ligada (Google Play)`. Falta dar a ela acesso às compras:
+
+1. Play Console (tela geral) → **Usuários e permissões** → a conta de serviço
+   (convide pelo e-mail dela, se ainda não estiver na lista).
+2. **Permissões do app** → Major Flyer → marque **Ver dados financeiros, pedidos
+   e respostas da pesquisa de cancelamento** e **Gerenciar pedidos e
+   assinaturas** → salvar.
+3. No Google Cloud, a **Google Play Android Developer API** tem que estar ativa no
+   projeto MajorFlyer — já está, por causa do envio automático do EAS.
+
+O Google pode levar algumas horas para liberar a permissão. Enquanto isso, a
+compra responde "Não deu para concluir sua compra agora" e o log mostra
+`androidpublisher: status 403`.
+
+## 18. Testar sem pagar
+
+Play Console (tela geral) → **Configurações** → **Teste de licença** → os e-mails
+das contas Google de teste, com a resposta **RESPOND_NORMALLY**. Essas contas
+compram com cartões de teste, sem cobrança. Instale o app pela faixa de teste e
+compre: a compra fica marcada como teste no banco.
+
+```sql
+-- as compras com dinheiro, mais recentes primeiro
+select created_at, bird_id, state, test, order_id, player_id
+  from bird_purchases
+ order by created_at desc limit 50;
+```
+
+Depois, revise a ficha **Segurança dos dados** do Play (o jogo passa a ter
+*Informações financeiras → Histórico de compras*) e publique a política de
+privacidade v2.2, que já descreve isso.
+
+---
+
 # Referência
 
 ## O que cada rota faz
@@ -463,7 +557,8 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals, flightMs}` — os números dos obstáculos das moedas pegas e o tempo voando de fato, em ms. Fechar de novo devolve o mesmo resultado. Partida que rendeu algo leva também o cabeçalho `X-Integrity-Token` ([passo 12](#12-o-projeto-no-google-cloud)). |
 | `POST /v1/runs/{id}/continue` | Nova chance. Corpo: `{method}` — `stock` (guardada) ou `coins`. |
 | `POST /v1/runs/{id}/shield` | Usa um escudo guardado na partida. |
-| `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `shield` ou `continue`. |
+| `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `shield` ou `continue`. Pássaro sem preço em moedas (o Cometa) responde `coins_not_accepted`. |
+| `POST /v1/shop/purchase` | Troca uma compra com dinheiro pelo pássaro. Corpo: `{birdId, purchaseToken}` — o token vem do Google Play. Confere com o Google; pagamento pendente responde **202**. Repetir é seguro, e é também o caminho da restauração ([parte 5](#parte-5--compra-com-dinheiro-google-play)). |
 | `POST /v1/me/bird` | Escolhe o pássaro das próximas partidas. Corpo: `{birdId}`. |
 | `POST /v1/ads/claim` | Troca um vídeo confirmado pelo prêmio. Corpo: `{kind}` — `lives`, `shield` ou `continue`. Sem confirmação ainda, responde **202**. |
 | `GET /v1/ads/ssv` | O aviso do Google (passo 7). Não é chamado pelo app. |
@@ -492,13 +587,16 @@ partida já foi usada"*); o código é o que o app usa para decidir o que fazer
 - Abrir partida **custa uma vida**, e só é possível com vida. Um jogador tem
   **uma partida aberta por vez**: abrir outra encerra a anterior sem render nada
   — senão daria para abrir dez e fechar só a melhor.
-- A posição de cada moeda sai de uma **semente sorteada aqui** na abertura. Ao
-  fechar, o app manda os números dos obstáculos das moedas que pegou, e o
-  servidor refaz a conta para cada um ([coins.go](coins.go)): só vale moeda que
-  existia naquele obstáculo, uma vez, e até o ponto aonde o jogador chegou. A
-  mesma conta está em [`src/game/coins.js`](../src/game/coins.js), e os dois
-  lados têm testes com os mesmos números de referência.
-- **Uma moeda a cada 3 obstáculos**, em média, e **+10 por fase fechada**.
+- Quais obstáculos têm moedas sai de uma **semente sorteada aqui** na abertura.
+  Cada um traz uma **letra de moedas**, na ordem de MAJOR FLYER, recomeçando do
+  M a cada fase — de 7 a 13 moedas, **cada uma valendo 1**. Ao fechar, o app
+  manda o número do obstáculo uma vez para cada moeda que pegou, e o servidor
+  refaz a conta ([coins.go](coins.go)): de cada obstáculo vale até o total de
+  moedas da letra dele, e só até o ponto aonde o jogador chegou. A mesma conta
+  está em [`src/game/coins.js`](../src/game/coins.js), e os dois lados têm testes
+  com os mesmos números de referência. (O app de antes das letras manda cada
+  obstáculo uma vez só, e continua valendo uma moeda, como sempre.)
+- **Uma letra a cada 3 obstáculos**, em média, e **+10 por fase fechada**.
 - O placar precisa **caber no tempo**: cada ponto exige pelo menos
   `MIN_SECONDS_PER_POINT` (padrão **1 s**) desde a abertura, medidos no relógio
   do banco. Em retrato, o obstáculo mais rápido do jogo (fase 5) leva ~1,3 s para
@@ -567,14 +665,14 @@ de cada pássaro. Tudo ali é redeploy deste servidor — **não** precisa de bu
 novo do app, que recebe o catálogo a cada abertura e os poderes junto com cada
 partida.
 
-| Pássaro | Preço | Poder | O que faz |
+| Pássaro | Compra | Poder | O que faz |
 | --- | --- | --- | --- |
 | Major | grátis | — | O de sempre, sem poder. |
-| Geada | 150 | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
-| Brasa | 320 | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
-| Toxina | 480 | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
-| Fantasma | 750 | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
-| Cometa | 1200 | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
+| Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
+| Brasa | moedas ou dinheiro | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
+| Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
+| Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
+| Cometa | **só dinheiro** | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
 
 - **Trocar o poder de um pássaro:** lista `Birds`, campo `Powers`.
 - **Mais de um poder no mesmo pássaro:** `Powers: []Power{PowerMagnet, PowerDoubleCoins}`.
@@ -605,7 +703,7 @@ Tudo por variável de ambiente, com padrão razoável. A lista comentada está e
 | `ADS_DEV_AUTOVERIFY` | `false` | **Só em desenvolvimento**: prêmio de anúncio sem o aviso do Google. |
 | `ADMOB_KEYS_URL` | chaves do Google | De onde vêm as chaves públicas do SSV. Não mexa. |
 | `INTEGRITY_MODE` | `off` | Prova de integridade das partidas: `off`, `log` ou `enforce` ([parte 4](#parte-4--a-prova-de-integridade-das-partidas)). |
-| `GOOGLE_SERVICE_ACCOUNT` | — | A chave da conta de serviço (JSON ou base64). Obrigatória fora do `off`. **Segredo.** |
+| `GOOGLE_SERVICE_ACCOUNT` | — | A chave da conta de serviço (JSON ou base64). Obrigatória fora do `off`, e liga sozinha a compra com dinheiro. **Segredo.** |
 | `PLAY_INTEGRITY_PACKAGE` | `com.aqblab.majorflyer` | O pacote do app conferido no selo. Só muda se o app mudar de nome. |
 | `RATE_PER_MINUTE` / `RATE_BURST` | `120` / `40` | Limite de pedidos por IP (o aviso do Google fica de fora). |
 
@@ -751,6 +849,8 @@ ligado se esse proxy existir.
 | Partidas de todo mundo recusadas como "rápidas demais" | `MIN_SECONDS_PER_POINT` alto demais para o jogo atual |
 | O servidor não sobe: `INTEGRITY_MODE=... precisa de uma GOOGLE_SERVICE_ACCOUNT valida` | a chave não foi colada inteira, ou não é a chave JSON da conta de serviço (passo 13) |
 | Depois do `enforce`, todo mundo ouve que a partida "não pôde ser validada" | app publicado antes do passo 14 (não manda selo), número do projeto vazio no app, ou o projeto do Cloud não foi vinculado no Play Console. Volte para `log` e olhe a coluna `integrity` |
+| Compra com dinheiro responde "Não deu para concluir sua compra agora", e o log mostra `androidpublisher: status 403` | a conta de serviço ainda sem as permissões de compras no Play Console, ou o Google ainda liberando (passo 17) |
+| O Play Console não deixa criar produto no app | falta publicar numa faixa de teste um build com o módulo de compras (passo 16) |
 | `verificacao de integridade indisponivel` no log | o Google não respondeu, ou a chave perdeu o acesso. Com `enforce`, a partida fica **aberta** e o app tenta de novo: ninguém perde moeda por isso |
 | Nenhum pedido no log ao mexer no app | o problema está no aplicativo, não aqui |
 | Todos os jogadores caem no limite de pedidos juntos | `TRUST_PROXY` não está `true`: o servidor vê só o IP do Traefik |

@@ -63,7 +63,7 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 	// Cada teste comeca com o banco limpo: saldo herdado de outro teste da
 	// falso positivo dos bons (passa por acaso).
 	if _, err := store.pool.Exec(ctx, `
-		truncate player_access, ad_views, ledger, game_sessions, owned_birds, wallets,
+		truncate player_access, ad_views, ledger, game_sessions, bird_purchases, owned_birds, wallets,
 		         runs, group_members, groups, players
 		restart identity cascade`); err != nil {
 		t.Fatalf("limpar: %v", err)
@@ -76,12 +76,17 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 	if err != nil {
 		t.Fatalf("verificacao de integridade: %v", err)
 	}
+	compras, err := NewPlayBilling(cfg)
+	if err != nil {
+		t.Fatalf("compra com dinheiro: %v", err)
+	}
 	api := &API{
 		store:     store,
 		cfg:       cfg,
 		log:       log,
 		ssv:       &SSVVerifier{keys: chavesFixas{keyID: &chave.PublicKey}},
 		integrity: integridade,
+		billing:   compras,
 		// Sem intervalo entre as idas ao banco: cada pedido do teste conta.
 		access: newAccessLog(store, log, 0),
 	}

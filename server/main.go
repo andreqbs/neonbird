@@ -35,6 +35,7 @@ type Config struct {
 	IntegrityMode        string
 	PlayIntegrityPackage string
 	PlayIntegrityURL     string
+	PlayBillingURL       string
 	GoogleServiceAccount string
 
 	RatePerMinute int
@@ -104,6 +105,9 @@ func loadConfig() Config {
 		IntegrityMode:        env("INTEGRITY_MODE", IntegrityOff),
 		PlayIntegrityPackage: env("PLAY_INTEGRITY_PACKAGE", DefaultPlayIntegrityPackage),
 		PlayIntegrityURL:     env("PLAY_INTEGRITY_URL", DefaultPlayIntegrityURL),
+		// Compra com dinheiro (billing.go): liga sozinha quando a conta de
+		// servico existe. So os testes trocam o endereco.
+		PlayBillingURL:       env("PLAY_BILLING_URL", DefaultPlayBillingURL),
 		GoogleServiceAccount: env("GOOGLE_SERVICE_ACCOUNT", ""),
 
 		RatePerMinute: envInt("RATE_PER_MINUTE", 120),
@@ -167,14 +171,29 @@ func main() {
 		log.Info("verificacao de integridade ligada", "modo", integrity.Mode(), "pacote", cfg.PlayIntegrityPackage)
 	}
 
+	billing, err := NewPlayBilling(cfg)
+	if err != nil {
+		log.Error("compra com dinheiro mal configurada (GOOGLE_SERVICE_ACCOUNT)", "erro", err)
+		os.Exit(1)
+	}
+	if billing.Enabled() {
+		log.Info("compra com dinheiro ligada (Google Play)", "pacote", cfg.PlayIntegrityPackage)
+	} else {
+		log.Warn("sem GOOGLE_SERVICE_ACCOUNT: os passaros so se compram com moedas")
+	}
+
 	api := &API{
 		store:     store,
 		cfg:       cfg,
 		log:       log,
 		ssv:       NewSSVVerifier(cfg.AdmobKeysURL),
 		integrity: integrity,
+		billing:   billing,
 		access:    newAccessLog(store, log, AccessWriteEvery),
 	}
+
+	// Compra estornada ou cancelada no Google: o passaro sai da conta (billing.go).
+	go billingVoidedLoop(ctx, store, billing, log)
 
 	// O registro de acesso com mais de 6 meses sai do banco (access.go).
 	go purgeAccessLoop(ctx, store, log)

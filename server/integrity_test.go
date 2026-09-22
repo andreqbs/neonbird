@@ -42,6 +42,17 @@ type googleFalso struct {
 
 	tokens  atomic.Int32 // pedidos de token de acesso
 	decodes atomic.Int32 // aberturas de token
+
+	// A loja do Google Play (billing_test.go): token da compra -> produto e
+	// estado; as compras confirmadas; e as anuladas (estorno).
+	compras     map[string]compraFalsa
+	confirmadas map[string]bool
+	anuladas    []string
+}
+
+type compraFalsa struct {
+	produto string
+	estado  int // 0 paga, 1 cancelada, 2 pendente
 }
 
 func novoGoogleFalso(t *testing.T) *googleFalso {
@@ -54,10 +65,16 @@ func novoGoogleFalso(t *testing.T) *googleFalso {
 		chaveDoGoogleFalso = chave
 	})
 
-	g := &googleFalso{chave: chaveDoGoogleFalso, payloads: map[string]map[string]any{}}
+	g := &googleFalso{
+		chave:       chaveDoGoogleFalso,
+		payloads:    map[string]map[string]any{},
+		compras:     map[string]compraFalsa{},
+		confirmadas: map[string]bool{},
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /token", g.token)
 	mux.HandleFunc("POST /v1/"+DefaultPlayIntegrityPackage+":decodeIntegrityToken", g.decode)
+	mux.HandleFunc("/androidpublisher/v3/", g.play)
 	g.srv = httptest.NewServer(mux)
 	t.Cleanup(g.srv.Close)
 
@@ -120,7 +137,7 @@ func (g *googleFalso) token(w http.ResponseWriter, r *http.Request) {
 	bruto, _ := base64.RawURLEncoding.DecodeString(partes[1])
 	var claims map[string]any
 	_ = json.Unmarshal(bruto, &claims)
-	if claims["scope"] != playIntegrityScope || claims["aud"] != g.srv.URL+"/token" {
+	if (claims["scope"] != playIntegrityScope && claims["scope"] != androidPublisherScope) || claims["aud"] != g.srv.URL+"/token" {
 		http.Error(w, "claims", http.StatusUnauthorized)
 		return
 	}
@@ -154,6 +171,85 @@ func (g *googleFalso) decode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tokenPayloadExternal": payload})
+}
+
+// play faz o papel da Google Play Developer API: consultar e confirmar uma
+// compra, e listar as anuladas.
+func (g *googleFalso) play(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") != "Bearer acesso-de-teste" {
+		http.Error(w, "sem credencial", http.StatusUnauthorized)
+		return
+	}
+	caminho := strings.TrimPrefix(r.URL.Path, "/androidpublisher/v3/applications/"+DefaultPlayIntegrityPackage+"/purchases/")
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if caminho == "voidedpurchases" && r.Method == http.MethodGet {
+		lista := []map[string]any{}
+		for _, t := range g.anuladas {
+			lista = append(lista, map[string]any{"purchaseToken": t, "voidedTimeMillis": "1700000000000"})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"voidedPurchases": lista})
+		return
+	}
+
+	// products/{produto}/tokens/{token}[:acknowledge]
+	partes := strings.Split(caminho, "/")
+	if len(partes) != 4 || partes[0] != "products" || partes[2] != "tokens" {
+		http.Error(w, "caminho", http.StatusNotFound)
+		return
+	}
+	produto, token := partes[1], partes[3]
+	confirmar := strings.HasSuffix(token, ":acknowledge")
+	token = strings.TrimSuffix(token, ":acknowledge")
+	compra, ok := g.compras[token]
+	if !ok || compra.produto != produto {
+		http.Error(w, "compra desconhecida", http.StatusBadRequest)
+		return
+	}
+	if confirmar && r.Method == http.MethodPost {
+		g.confirmadas[token] = true
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	confirmada := 0
+	if g.confirmadas[token] {
+		confirmada = 1
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"purchaseState":        compra.estado,
+		"acknowledgementState": confirmada,
+		"orderId":              "GPA.0000-" + token,
+		"purchaseTimeMillis":   "1700000000000",
+		"purchaseType":         0,
+	})
+}
+
+// vende registra uma compra na loja falsa.
+func (g *googleFalso) vende(token, produto string, estado int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.compras[token] = compraFalsa{produto: produto, estado: estado}
+}
+
+func (g *googleFalso) estorna(token string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.anuladas = append(g.anuladas, token)
+}
+
+func (g *googleFalso) foiConfirmada(token string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.confirmadas[token]
+}
+
+// configCompras liga a compra com dinheiro falando com este Google falso.
+func (g *googleFalso) configCompras() func(*Config) {
+	return func(c *Config) {
+		c.GoogleServiceAccount = g.conta
+		c.PlayBillingURL = g.srv.URL
+	}
 }
 
 // vereditoBom e o que o Google devolve para o app original num aparelho genuino.

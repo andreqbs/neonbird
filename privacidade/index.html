@@ -147,8 +147,8 @@
     <div class="meta">
       <span class="chip"><b>Aplicativo:</b> Major Flyer</span>
       <span class="chip"><b>ID:</b> com.aqblab.majorflyer</span>
-      <span class="chip"><b>Versão:</b> 2.1</span>
-      <span class="chip"><b>Vigência:</b> 15 de setembro de 2026</span>
+      <span class="chip"><b>Versão:</b> 2.2</span>
+      <span class="chip"><b>Vigência:</b> 21 de setembro de 2026</span>
     </div>
   </div>
 </header>
@@ -175,6 +175,7 @@
       <li>O jogo tem um <strong>servidor próprio</strong>, do Desenvolvedor, que guarda a sua conta de jogo: código, apelido, moedas, vidas, itens, pássaros, partidas, pontos no ranking, grupos e tempo de voo. É o que impede alguém de inventar moedas ou pontos.</li>
       <li>O servidor também guarda um <strong>registro de acesso</strong>: de qual <strong>endereço IP</strong> o seu código usou o jogo, com data e hora. Ele serve para segurança e prevenção de fraude e é <strong>apagado automaticamente após 6 meses</strong>.</li>
       <li>Para o ranking ser justo, ao fim de cada partida que rende moedas ou pontos o app pede ao <strong>Google Play</strong> uma verificação de que o jogo é o original, num aparelho comum e sem outro aplicativo controlando a tela. O servidor guarda só o <strong>resultado</strong> dessa verificação, junto da partida — e ela <strong>não identifica você</strong> nem lista os aplicativos do seu aparelho (<a href="#pt-4">Seção 4</a>).</li>
+      <li>Alguns pássaros podem ser comprados <strong>com dinheiro</strong>, pela loja do <strong>Google Play</strong>. O pagamento é feito e processado pelo Google: o Desenvolvedor <strong>não recebe cartão, conta bancária nem outro dado de pagamento</strong> — só a confirmação da compra (número do pedido, pássaro, data e situação), para entregar o pássaro na sua conta (<a href="#pt-4">Seção 4</a>).</li>
       <li>Recorde, histórico de partidas e preferências de som ficam <strong>apenas no seu aparelho</strong>.</li>
       <li>O jogo <strong>não usa câmera, microfone, contatos, GPS, fotos, arquivos, SMS ou lista de chamadas</strong>, nem cookies, analytics, rastreadores ou relatórios de erro.</li>
       <li><strong>Nada é vendido</strong> nem compartilhado para marketing. Seu apelido e seus pontos aparecem no <strong>ranking público</strong> do jogo — não use o seu nome real no apelido.</li>
@@ -269,6 +270,7 @@
           <tr><td><strong>Partidas</strong>: início, fim, pássaro usado, pontos, moedas pegas, novas chances usadas e <strong>tempo de voo</strong></td><td>Conferir o placar e as moedas antes de creditar; somar o tempo de voo mostrado na tela inicial</td><td>Você e o Desenvolvedor; os pontos entram no ranking público</td></tr>
           <tr><td><strong>Rodada, pontos e grupos</strong>: nome e emblema do grupo, líder e membros</td><td>Ranking individual e por grupo</td><td>Público, no ranking do jogo</td></tr>
           <tr><td><strong>Confirmações de vídeo premiado</strong> enviadas pelo Google: identificador da transação, bloco de anúncio e data</td><td>Liberar o prêmio só por vídeo realmente assistido, uma única vez</td><td>O Desenvolvedor</td></tr>
+          <tr><td><strong>Compras com dinheiro</strong> feitas pelo Google Play: número do pedido, identificador da compra, pássaro comprado, data e situação (paga, pendente, estornada)</td><td>Entregar o pássaro comprado, devolvê-lo à conta quando o aplicativo é reinstalado, e retirá-lo se a compra for estornada ou cancelada</td><td>Você e o Desenvolvedor</td></tr>
           <tr><td><strong>Resultado da verificação de integridade</strong> de cada partida que rendeu moedas ou pontos — aprovada, sem verificação, ou recusada com o motivo (por exemplo: aplicativo não reconhecido pela Play Store; aparelho modificado; havia aplicativo controlando a tela)</td><td>Impedir que moedas e pontos venham de um aplicativo modificado, de um emulador ou de um programa que joga sozinho</td><td>Você e o Desenvolvedor</td></tr>
           <tr><td><strong>Registro de acesso</strong>: endereço IP, data e hora do primeiro e do último pedido de cada visita ao jogo</td><td>Segurança, prevenção de fraude (por exemplo, muitas contas num mesmo IP) e cumprimento do art. 15 do Marco Civil da Internet</td><td>O Desenvolvedor, sob sigilo</td></tr>
         </tbody>
@@ -289,7 +291,7 @@
       <li><strong>Dados de identificação civil:</strong> nome real, data de nascimento, CPF, RG, passaporte, assinatura ou qualquer documento.</li>
       <li><strong>Dados de contato:</strong> e-mail, telefone ou endereço.</li>
       <li><strong>Credenciais:</strong> não há login com e-mail, senha escolhida por você ou conta de rede social.</li>
-      <li><strong>Dados financeiros:</strong> cartão, conta bancária, chave PIX ou histórico de pagamentos. <em>O jogo não vende nada por dinheiro: moedas, pássaros e itens existem só dentro do jogo.</em></li>
+      <li><strong>Dados de pagamento:</strong> cartão, conta bancária, chave PIX ou qualquer outro meio de pagamento. <em>O pagamento das compras com dinheiro é feito inteiramente no Google Play; o Desenvolvedor recebe apenas a confirmação descrita na Seção 4. Moedas, pássaros e itens existem só dentro do jogo e não podem ser trocados por dinheiro.</em></li>
       <li><strong>Localização precisa:</strong> GPS, Wi-Fi ou torre de celular. O Desenvolvedor não usa o endereço IP para descobrir onde o Usuário está.</li>
       <li><strong>Dados sensíveis</strong> (art. 5º, II, da LGPD): origem racial ou étnica, convicção religiosa, opinião política, filiação a sindicato ou a organização de caráter religioso, filosófico ou político, dados referentes à saúde ou à vida sexual, dado genético ou biométrico.</li>
       <li><strong>Conteúdo do aparelho:</strong> fotos, vídeos, áudios, documentos, downloads ou arquivos.</li>
@@ -397,6 +399,7 @@
     <p>O servidor do jogo e o seu banco de dados funcionam em um servidor virtual contratado pelo Desenvolvedor junto a <strong>[PROVEDOR DE HOSPEDAGEM]</strong>, localizado em <strong>[PAÍS DO SERVIDOR]</strong>. O provedor atua como <strong>operador</strong> (art. 5º, VII, da LGPD): fornece a infraestrutura, sem decidir sobre o uso dos dados e sem acesso a eles para finalidades próprias.</p>
     <h3>8.2 Google Play</h3>
     <p>A distribuição do Aplicativo — em produção ou em faixas de teste interno, fechado e aberto — é feita pelo Google Play, operado pelo Google. Download, instalação, atualizações e participação em programas de teste são <strong>relações estabelecidas diretamente entre o Usuário e o Google</strong>, regidas pelos <a href="https://play.google.com/intl/pt-BR/about/play-terms/" target="_blank" rel="noopener noreferrer">Termos de Serviço do Google Play</a> e pela Política de Privacidade do Google.</p>
+    <p><strong>Compras com dinheiro.</strong> A compra de pássaros com dinheiro é feita pelo <strong>Google Play Billing</strong>: a tela de pagamento, a cobrança, os meios de pagamento, os recibos, os reembolsos e as eventuais disputas são do Google, que atua como <strong>controlador independente</strong> desses dados, nos termos dos Termos de Serviço e da Política de Privacidade do Google. O servidor do jogo consulta o Google apenas para confirmar que a compra foi paga e para saber de estornos, e guarda só o que está na <a href="#pt-4">Seção 4</a>. Pedidos de reembolso seguem as regras do Google Play.</p>
     <p>Quando um Usuário é convidado para um <strong>teste interno ou fechado</strong>, o Google exige que o e-mail associado à conta Google do testador conste de uma lista de acesso no Play Console. Esse e-mail é fornecido <strong>voluntariamente pelo próprio testador</strong>, fora do Aplicativo; é usado <strong>exclusivamente</strong> para liberar o acesso à versão de teste; fica na infraestrutura do Google Play Console, e <strong>não no servidor do jogo</strong>; não é usado para marketing nem compartilhado; e é <strong>removido da lista ao término do programa</strong> ou a pedido do testador.</p>
     <h3>8.3 Verificação de integridade (Google Play Integrity API)</h3>
     <p>Para prevenir fraude no ranking e na economia do jogo, o Aplicativo utiliza a <strong>Play Integrity API</strong> do Google. Ao fim de partida que rendeu moedas ou pontos, o Google Play emite um atestado assinado sobre o aplicativo e o aparelho, que o servidor do jogo submete ao Google para leitura. Nesse fluxo, o <strong>Google atua como controlador independente</strong> quanto aos dados técnicos que coleta do aparelho, nos termos da sua própria Política de Privacidade; o Desenvolvedor recebe apenas os vereditos descritos na <a href="#pt-4">Seção 4</a>. O recurso pode ser desligado pelo Desenvolvedor no servidor, sem atualização do Aplicativo.</p>
@@ -443,6 +446,7 @@
           <tr><td>Registro de acesso: endereço IP, data e hora</td><td>Desenvolvedor</td><td>Cumprimento de obrigação legal (art. 7º, II, LGPD, c/c art. 15 da Lei nº 12.965/2014) e legítimo interesse na segurança do jogo (art. 7º, IX, LGPD; art. 6º(1)(c) e (f), GDPR)</td></tr>
           <tr><td>Gravação de recordes e preferências no aparelho</td><td>Aplicativo (local)</td><td>Execução de funcionalidade solicitada pelo titular (art. 7º, V, LGPD; art. 6º(1)(b), GDPR)</td></tr>
           <tr><td>Exibição de anúncios não personalizados</td><td>Google</td><td>Legítimo interesse e/ou consentimento obtido pelo próprio Google, conforme a jurisdição (art. 7º, IX, LGPD; art. 6º(1)(a) e (f), GDPR)</td></tr>
+          <tr><td>Compras com dinheiro: registro da compra, entrega e retirada do pássaro</td><td>Desenvolvedor (registro) / Google (pagamento)</td><td>Execução do contrato de compra solicitado pelo titular (art. 7º, V, LGPD; art. 6º(1)(b), GDPR) e cumprimento de obrigação legal de guarda de registros de consumo (art. 7º, II, LGPD; art. 6º(1)(c), GDPR)</td></tr>
           <tr><td>Distribuição e atualização pelo Google Play</td><td>Google</td><td>Execução de contrato entre o Usuário e o Google (art. 7º, V, LGPD; art. 6º(1)(b), GDPR)</td></tr>
           <tr><td>Lista de e-mails de testadores no Play Console</td><td>Google (armazenamento) / Desenvolvedor (indicação)</td><td>Consentimento livre e informado do próprio testador (art. 7º, I, LGPD; art. 6º(1)(a), GDPR)</td></tr>
         </tbody>
@@ -479,6 +483,7 @@
     <h2 id="pt-13"><span class="n">13</span>Retenção e eliminação</h2>
     <ul>
       <li><strong>Conta de jogo no servidor</strong> (código, apelido, moedas, vidas, itens, pássaros, partidas e seus vereditos de integridade, tempo de voo, ranking, grupos, livro-razão e confirmações de vídeo premiado): mantida enquanto o código de jogador for usado, e apagada a pedido do Usuário (<a href="#pt-12">Seção 12</a>). Contas sem uso por longo período podem ser apagadas pelo Desenvolvedor.</li>
+      <li><strong>Registros de compras com dinheiro</strong>: mantidos enquanto a conta de jogo existir e, depois da exclusão, pelo prazo exigido pela legislação de defesa do consumidor e fiscal — apenas para atender a reclamações, estornos e obrigações legais.</li>
       <li><strong>Registro de acesso</strong> (IP, data e hora): <strong>6 (seis) meses</strong> a contar do fim de cada visita, com eliminação automática pelo servidor.</li>
       <li><strong>Cópias de segurança do banco</strong>, quando existirem: substituídas periodicamente, de modo que os dados apagados deixam de existir também nelas ao fim do ciclo de cópias.</li>
       <li><strong>Dados no aparelho:</strong> retidos enquanto o Aplicativo estiver instalado e até que o Usuário os apague. O histórico de partidas é limitado às <strong>25 partidas mais recentes</strong>, com descarte automático das mais antigas.</li>
@@ -530,7 +535,7 @@
         <thead><tr><th>Item</th><th>Declaração</th></tr></thead>
         <tbody>
           <tr><td>O app coleta ou compartilha dados do usuário?</td><td><strong>Sim.</strong></td></tr>
-          <tr><td>Dados coletados</td><td><strong>Informações pessoais → Nome</strong> (apelido escolhido no jogo); <strong>Atividade no app → Outras ações</strong> (partidas, pontos, moedas, itens e tempo de voo); <strong>IDs do dispositivo ou outros IDs</strong> (código do jogador; identificador de publicidade, pelo SDK do Google).</td></tr>
+          <tr><td>Dados coletados</td><td><strong>Informações pessoais → Nome</strong> (apelido escolhido no jogo); <strong>Atividade no app → Outras ações</strong> (partidas, pontos, moedas, itens e tempo de voo); <strong>IDs do dispositivo ou outros IDs</strong> (código do jogador; identificador de publicidade, pelo SDK do Google); <strong>Informações financeiras → Histórico de compras</strong> (as compras de pássaros com dinheiro feitas pelo Google Play).</td></tr>
           <tr><td>Finalidades</td><td>Funcionalidade do app; prevenção de fraudes, segurança e conformidade; publicidade (somente pelo SDK do Google).</td></tr>
           <tr><td>Compartilhamento</td><td>Código do jogador com o Google, para confirmar vídeo premiado; dados técnicos processados pelo SDK de anúncios do Google.</td></tr>
           <tr><td>Verificação de integridade (Play Integrity)</td><td>Guarda-se apenas o <strong>veredito</strong> sobre o aplicativo e o aparelho, para prevenção de fraude; não identifica o Usuário nem lista aplicativos instalados (<a href="#pt-4">Seção 4</a>).</td></tr>
@@ -597,7 +602,7 @@
   <section class="lead">
     <h2><span class="n"></span>Declaração final</h2>
     <p>O Desenvolvedor declara que as informações constantes deste documento são <strong>verdadeiras, completas e verificáveis</strong>, e que o Aplicativo <strong>Major Flyer</strong> e o seu servidor foram projetados segundo os princípios de <em>privacy by design</em> e <em>privacy by default</em> (art. 46, §2º, da LGPD; art. 25 do GDPR): <strong>guardam apenas o necessário para o jogo funcionar e ser justo</strong>, pelo tempo necessário.</p>
-    <p style="margin-bottom:0"><strong>Documento versão 2.1 — vigente desde 15 de setembro de 2026.</strong></p>
+    <p style="margin-bottom:0"><strong>Documento versão 2.2 — vigente desde 21 de setembro de 2026.</strong></p>
   </section>
 
 </main>
@@ -613,8 +618,8 @@
     <div class="meta">
       <span class="chip"><b>Application:</b> Major Flyer</span>
       <span class="chip"><b>ID:</b> com.aqblab.majorflyer</span>
-      <span class="chip"><b>Version:</b> 2.1</span>
-      <span class="chip"><b>Effective:</b> September 15, 2026</span>
+      <span class="chip"><b>Version:</b> 2.2</span>
+      <span class="chip"><b>Effective:</b> September 21, 2026</span>
     </div>
   </div>
 </header>
@@ -629,6 +634,7 @@
       <li>The game has its <strong>own server</strong>, run by the Developer, which keeps your game account: code, nickname, coins, lives, items, birds, runs, leaderboard points, groups and flight time. This is what stops anyone from inventing coins or points.</li>
       <li>The server also keeps an <strong>access log</strong>: from which <strong>IP address</strong> your code used the game, with date and time. It is used for security and fraud prevention and is <strong>automatically deleted after 6 months</strong>.</li>
       <li>To keep the leaderboard fair, at the end of every run that earns coins or points the app asks <strong>Google Play</strong> to confirm that the game is the original one, on an ordinary device and with no other app controlling the screen. The server stores only the <strong>result</strong> of that check, alongside the run — it <strong>does not identify you</strong> and does not list the apps on your device (<a href="#en-4">Section 4</a>).</li>
+      <li>Some birds can be bought <strong>with money</strong>, through the <strong>Google Play</strong> store. Payment is made and processed by Google: the Developer <strong>does not receive card, bank account or any other payment data</strong> — only the purchase confirmation (order number, bird, date and status), to deliver the bird to your account (<a href="#en-4">Section 4</a>).</li>
       <li>Your best score, run history and sound settings stay <strong>only on your device</strong>.</li>
       <li>The game <strong>does not use the camera, microphone, contacts, GPS, photos, files, SMS or call logs</strong>, nor cookies, analytics, trackers or crash reporting.</li>
       <li><strong>Nothing is sold</strong> or shared for marketing. Your nickname and points appear on the game's <strong>public leaderboard</strong> — do not use your real name as your nickname.</li>
@@ -723,6 +729,7 @@
           <tr><td><strong>Runs</strong>: start, end, bird used, points, coins collected, extra chances used and <strong>flight time</strong></td><td>To check the score and coins before crediting them; to add up the flight time shown on the home screen</td><td>You and the Developer; points go to the public leaderboard</td></tr>
           <tr><td><strong>Season, points and groups</strong>: group name and crest, leader and members</td><td>Individual and group leaderboards</td><td>Public, on the game's leaderboard</td></tr>
           <tr><td><strong>Rewarded video confirmations</strong> sent by Google: transaction identifier, ad unit and date</td><td>To grant a reward only for a video actually watched, exactly once</td><td>The Developer</td></tr>
+          <tr><td><strong>Money purchases</strong> made through Google Play: order number, purchase identifier, bird bought, date and status (paid, pending, refunded)</td><td>To deliver the bird bought, return it to the account when the app is reinstalled, and remove it if the purchase is refunded or cancelled</td><td>You and the Developer</td></tr>
           <tr><td><strong>Integrity check result</strong> for every run that earned coins or points — passed, not checked, or refused with the reason (for example: app not recognised by the Play Store; modified device; an app was controlling the screen)</td><td>To stop coins and points coming from a modified app, an emulator or a program that plays by itself</td><td>You and the Developer</td></tr>
           <tr><td><strong>Access log</strong>: IP address, date and time of the first and last request of each visit to the game</td><td>Security, fraud prevention (for example, many accounts on the same IP) and compliance with art. 15 of the Brazilian Internet Civil Framework</td><td>The Developer, in confidence</td></tr>
         </tbody>
@@ -743,7 +750,7 @@
       <li><strong>Civil identification data:</strong> real name, date of birth, national ID, passport, signature or any document.</li>
       <li><strong>Contact data:</strong> e-mail, telephone or address.</li>
       <li><strong>Credentials:</strong> there is no login with an e-mail, a password of your choosing or a social network account.</li>
-      <li><strong>Financial data:</strong> card, bank account, digital wallet or payment history. <em>The game sells nothing for money: coins, birds and items exist only inside the game.</em></li>
+      <li><strong>Payment data:</strong> card, bank account, digital wallet or any other means of payment. <em>Payment for money purchases takes place entirely on Google Play; the Developer receives only the confirmation described in Section 4. Coins, birds and items exist only inside the game and cannot be exchanged for money.</em></li>
       <li><strong>Precise location:</strong> GPS, Wi-Fi or cell-tower location. The Developer does not use the IP address to find out where the User is.</li>
       <li><strong>Special category data</strong> (art. 9 GDPR; art. 5, II LGPD): racial or ethnic origin, religious belief, political opinion, trade union membership, health or sex life data, genetic or biometric data.</li>
       <li><strong>Device content:</strong> photos, videos, audio, documents, downloads or files.</li>
@@ -851,6 +858,7 @@
     <p>The game server and its database run on a virtual server rented by the Developer from <strong>[HOSTING PROVIDER]</strong>, located in <strong>[SERVER COUNTRY]</strong>. The provider acts as a <strong>processor</strong> (art. 5, VII LGPD; art. 4(8) GDPR): it supplies the infrastructure, without deciding how the data is used and without access to it for its own purposes.</p>
     <h3>8.2 Google Play</h3>
     <p>Distribution of the Application — in production or in the internal, closed and open testing tracks — is carried out by Google Play, operated by Google. Download, installation, updates and participation in testing programmes are <strong>relationships established directly between the User and Google</strong>, governed by the <a href="https://play.google.com/intl/en/about/play-terms/" target="_blank" rel="noopener noreferrer">Google Play Terms of Service</a> and the Google Privacy Policy.</p>
+    <p><strong>Money purchases.</strong> Buying birds with money goes through <strong>Google Play Billing</strong>: the payment screen, charging, means of payment, receipts, refunds and any disputes belong to Google, which acts as an <strong>independent controller</strong> of that data under Google's Terms of Service and Privacy Policy. The game server asks Google only to confirm that a purchase was paid and to learn of refunds, and keeps only what is listed in <a href="#en-4">Section 4</a>. Refund requests follow Google Play's rules.</p>
     <p>When a User is invited to <strong>internal or closed testing</strong>, Google requires the e-mail address of the tester's Google account to appear on an access list in the Play Console. That e-mail is provided <strong>voluntarily by the tester</strong>, outside the Application; it is used <strong>exclusively</strong> to grant access to the test build; it is stored in Google Play Console infrastructure, and <strong>not on the game server</strong>; it is not used for marketing or shared; and it is <strong>removed from the list at the end of the programme</strong> or at the tester's request.</p>
     <h3>8.3 Integrity checks (Google Play Integrity API)</h3>
     <p>To prevent fraud in the leaderboard and the in-game economy, the Application uses Google's <strong>Play Integrity API</strong>. At the end of a run that earned coins or points, Google Play issues a signed attestation about the app and the device, which the game server submits to Google to be read. In this flow, <strong>Google acts as an independent controller</strong> of the technical data it collects from the device, under its own Privacy Policy; the Developer receives only the verdicts described in <a href="#en-4">Section 4</a>. The Developer can switch the feature off on the server, with no update to the Application.</p>
@@ -897,6 +905,7 @@
           <tr><td>Access log: IP address, date and time</td><td>Developer</td><td>Compliance with a legal obligation (art. 7, II LGPD, together with art. 15 of Brazilian Law 12.965/2014) and legitimate interest in the game's security (art. 6(1)(c) and (f) GDPR; art. 7, IX LGPD)</td></tr>
           <tr><td>Storing scores and settings on the device</td><td>Application (local)</td><td>Performance of a function requested by the data subject (art. 6(1)(b) GDPR; art. 7, V LGPD)</td></tr>
           <tr><td>Serving non-personalised ads</td><td>Google</td><td>Legitimate interest and/or consent obtained by Google itself, depending on jurisdiction (art. 6(1)(a) and (f) GDPR; art. 7, IX LGPD)</td></tr>
+          <tr><td>Money purchases: recording the purchase, delivering and removing the bird</td><td>Developer (record) / Google (payment)</td><td>Performance of the purchase contract requested by the data subject (art. 6(1)(b) GDPR; art. 7, V LGPD) and compliance with legal obligations to keep consumer records (art. 6(1)(c) GDPR; art. 7, II LGPD)</td></tr>
           <tr><td>Distribution and updates via Google Play</td><td>Google</td><td>Performance of a contract between the User and Google (art. 6(1)(b) GDPR; art. 7, V LGPD)</td></tr>
           <tr><td>Tester e-mail list in the Play Console</td><td>Google (storage) / Developer (nomination)</td><td>Free and informed consent of the tester (art. 6(1)(a) GDPR; art. 7, I LGPD)</td></tr>
         </tbody>
@@ -933,6 +942,7 @@
     <h2 id="en-13"><span class="n">13</span>Retention and deletion</h2>
     <ul>
       <li><strong>Game account on the server</strong> (code, nickname, coins, lives, items, birds, runs and their integrity verdicts, flight time, leaderboard, groups, ledger and rewarded video confirmations): kept while the player code is in use, and deleted at the User's request (<a href="#en-12">Section 12</a>). Accounts unused for a long period may be deleted by the Developer.</li>
+      <li><strong>Records of money purchases</strong>: kept while the game account exists and, after deletion, for the period required by consumer protection and tax law — only to handle complaints, refunds and legal obligations.</li>
       <li><strong>Access log</strong> (IP, date and time): <strong>6 (six) months</strong> from the end of each visit, deleted automatically by the server.</li>
       <li><strong>Database backups</strong>, where they exist: replaced periodically, so that deleted data also ceases to exist in them at the end of the backup cycle.</li>
       <li><strong>Data on the device:</strong> retained while the Application is installed and until the User erases it. Run history is capped at the <strong>25 most recent runs</strong>, with older entries discarded automatically.</li>
@@ -984,7 +994,7 @@
         <thead><tr><th>Item</th><th>Declaration</th></tr></thead>
         <tbody>
           <tr><td>Does the app collect or share user data?</td><td><strong>Yes.</strong></td></tr>
-          <tr><td>Data collected</td><td><strong>Personal info → Name</strong> (the in-game nickname); <strong>App activity → Other actions</strong> (runs, points, coins, items and flight time); <strong>Device or other IDs</strong> (player code; advertising identifier, through Google's SDK).</td></tr>
+          <tr><td>Data collected</td><td><strong>Personal info → Name</strong> (the in-game nickname); <strong>App activity → Other actions</strong> (runs, points, coins, items and flight time); <strong>Device or other IDs</strong> (player code; advertising identifier, through Google's SDK); <strong>Financial info → Purchase history</strong> (birds bought with money through Google Play).</td></tr>
           <tr><td>Purposes</td><td>App functionality; fraud prevention, security and compliance; advertising (through Google's SDK only).</td></tr>
           <tr><td>Sharing</td><td>Player code with Google, to confirm rewarded videos; technical data processed by Google's ad SDK.</td></tr>
           <tr><td>Integrity check (Play Integrity)</td><td>Only the <strong>verdict</strong> about the app and the device is stored, for fraud prevention; it does not identify the User and does not list installed apps (<a href="#en-4">Section 4</a>).</td></tr>
@@ -1051,7 +1061,7 @@
   <section class="lead">
     <h2><span class="n"></span>Closing statement</h2>
     <p>The Developer declares that the information in this document is <strong>true, complete and verifiable</strong>, and that the <strong>Major Flyer</strong> application and its server were designed in accordance with the principles of <em>privacy by design</em> and <em>privacy by default</em> (art. 25 GDPR; art. 46, §2 LGPD): <strong>they keep only what the game needs to work and to stay fair</strong>, for no longer than necessary.</p>
-    <p style="margin-bottom:0"><strong>Document version 2.1 — effective from September 15, 2026.</strong></p>
+    <p style="margin-bottom:0"><strong>Document version 2.2 — effective from September 21, 2026.</strong></p>
   </section>
 
 </main>

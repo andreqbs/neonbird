@@ -4,18 +4,24 @@ import { Animated, View } from 'react-native';
 import { COIN_RADIUS } from '../coins';
 
 /**
- * A moeda no vao de um obstaculo.
+ * Uma moeda da letra de moedas de um obstaculo (CoinLetter).
  *
- * Uma por coluna, montada uma vez: quem muda a cada frame e so a posicao
- * (`x` e `y`, animados), o giro compartilhado por todas (`spin`) e se ela esta
- * a vista (`visible`, que so troca quando a coluna nasce ou a moeda e pega).
- * `dx` e o quanto o ima (poder do Toxina) tirou a moeda do lugar, na
- * horizontal. Nada disso passa pelo React durante o voo.
+ * Montada uma vez: `x` e `y` sao o lugar dela dentro da letra (mudam quando a
+ * coluna ganha letra nova, ou enquanto o ima a puxa) e `visible` so troca quando
+ * ela e pega. Nada disso passa pelo React durante o voo.
+ *
+ * `spin` e a fase do giro, de 0 a 1 em loop, rodando no lado NATIVO (GameScreen):
+ * a moeda vira duas vezes por volta. Ele fica numa View so dele, por dentro — o
+ * lado nativo nao aceita misturar, na mesma View, valor dele com valor que vem
+ * do JS, como a posicao.
  */
-export default function Coin({ layout, x, dx, y, visible, spin }) {
+export default function Coin({ layout, x, y, visible, spin }) {
   const r = layout.birdRadius * COIN_RADIUS;
   const d = r * 2;
-  const left = useMemo(() => (dx ? Animated.add(x, dx) : x), [x, dx]);
+  const scaleX = useMemo(
+    () => spin.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: [1, 0.3, 1, 0.3, 1] }),
+    [spin]
+  );
 
   return (
     <Animated.View
@@ -27,10 +33,12 @@ export default function Coin({ layout, x, dx, y, visible, spin }) {
         width: d,
         height: d,
         opacity: visible,
-        transform: [{ translateX: left }, { translateY: y }, { scaleX: spin }],
+        transform: [{ translateX: x }, { translateY: y }],
       }}
     >
-      <CoinFace size={d} />
+      <Animated.View style={{ width: d, height: d, transform: [{ scaleX }] }}>
+        <CoinFace size={d} />
+      </Animated.View>
     </Animated.View>
   );
 }

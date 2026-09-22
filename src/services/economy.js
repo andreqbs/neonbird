@@ -200,6 +200,20 @@ export async function buy(item, birdId) {
   return absorb(await requestRegistered('POST', '/v1/shop/buy', { body }));
 }
 
+/**
+ * Troca uma compra com dinheiro (Google Play) pelo passaro dela — quem confere o
+ * pagamento com o Google e o servidor (server/billing.go). Repetir e seguro: a
+ * mesma compra devolve a mesma carteira. Pagamento ainda pendente volta com
+ * `pending`.
+ */
+export async function claimBirdPurchase(birdId, purchaseToken) {
+  const r = absorb(
+    await requestRegistered('POST', '/v1/shop/purchase', { body: { birdId, purchaseToken }, retry: true })
+  );
+  if (r.ok && r.status === 202) return { ok: false, pending: true };
+  return r;
+}
+
 /** Escolhe o passaro das proximas partidas. */
 export async function equip(birdId) {
   return absorb(await requestRegistered('POST', '/v1/me/bird', { body: { birdId } }));
@@ -275,6 +289,7 @@ export default {
   continueRun,
   useShield,
   buy,
+  claimBirdPurchase,
   equip,
   claimAd,
 };

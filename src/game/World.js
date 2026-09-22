@@ -19,7 +19,14 @@ import {
   STAGE_LENGTH,
 } from './constants';
 import { STAGE_COUNT, stageAt, trapsAt } from './stages';
-import { COIN_RADIUS, COIN_SPREAD, coinOffset, hasCoin } from './coins';
+import {
+  COIN_RADIUS,
+  LETTER_PIECES,
+  LETTER_PITCH,
+  LETTER_ROW_COUNT,
+  coinLetterAt,
+  coinOffset,
+} from './coins';
 import { NO_POWERS, combinePowers } from './powers';
 import { capShape } from './caps';
 
@@ -36,11 +43,25 @@ const ABSORB_COOLDOWN = 8;
 // chega em poucos frames, sem parecer teleporte.
 const MAGNET_PULL = 0.25;
 
-// Alcance maximo do ima, em raios do passaro. Mesmo no espacamento mais curto
-// entre colunas (layout.js), 8 raios nao chegam a moeda de um obstaculo que o
-// passaro ainda nao tem como passar — e o servidor so aceita moeda ate o
-// obstaculo seguinte ao placar (server/coins.go).
+// Alcance maximo do ima, em raios do passaro — um teto para o numero que vem
+// do servidor. Quem garante que ele nao puxa moeda de obstaculo que o passaro
+// ainda nao tem como passar e a conta do placar em _pullCoins: o servidor so
+// aceita moeda ate o obstaculo seguinte ao placar (server/coins.go).
 export const MAGNET_MAX_REACH = 8;
+
+/**
+ * As moedas pegas, em pares [obstaculo, numero da moeda na letra], a partir da
+ * lista que vai para o servidor (um numero de obstaculo por moeda). Serve para o
+ * pacote que nao trouxe os pares: vale como se fossem as primeiras da letra.
+ */
+function piecesFromOrdinals(ordinals) {
+  const vistos = new Map();
+  return ordinals.map((o) => {
+    const i = vistos.get(o) || 0;
+    vistos.set(o, i + 1);
+    return [o, i];
+  });
+}
 
 /**
  * Mundo do jogo.
@@ -58,12 +79,20 @@ export const MAGNET_MAX_REACH = 8;
  *
  * MOEDAS: cada coluna tem um NUMERO na partida (1, 2, 3...) — o placar que o
  * jogador tera quando passar por ela. A semente que o servidor sorteou decide,
- * por esse numero, se ali tem moeda (coins.js). O mundo guarda os numeros das
- * moedas pegas, e e essa lista que o servidor confere ao fechar a partida.
+ * por esse numero, se ali tem moedas (coins.js): uma LETRA de moedas no vao, na
+ * ordem de MAJOR FLYER, recomecando do M a cada fase. Cada moeda da letra se pega
+ * separado; o mundo guarda o numero do obstaculo uma vez para cada moeda pega, e
+ * e essa lista que o servidor confere ao fechar a partida.
  */
 export default class World {
   constructor(layout) {
     this.layout = layout;
+
+    // As letras de moedas (coins.js), em px deste layout: o espaco entre duas
+    // moedas vizinhas e meia altura da letra, ja com o raio da moeda.
+    const raioMoeda = layout.birdRadius * COIN_RADIUS;
+    this._coinPitch = raioMoeda * LETTER_PITCH;
+    this._letterHalf = ((LETTER_ROW_COUNT - 1) / 2) * this._coinPitch + raioMoeda;
 
     this.engine = Matter.Engine.create({ enableSleeping: false });
     this.engine.gravity.x = 0;
@@ -156,9 +185,13 @@ export default class World {
 
     // Moedas da partida: quantas, de quais obstaculos, e um contador que so
     // cresce — a tela o observa para tocar o som de cada moeda.
+    // `coinOrdinals` tem o numero do obstaculo uma vez para cada moeda pega (e o
+    // que vai para o servidor); `coinPieces`, os pares [obstaculo, moeda da
+    // letra], para uma moeda pega nao voltar a aparecer.
     this.coins = 0;
     this.coinOrdinals = [];
-    this._takenOrdinals = new Set();
+    this.coinPieces = [];
+    this._takenPieces = new Set();
     this.coinPickups = 0;
     this.continuesUsed = 0;
     // Tempo de voo: frames em PLAYING, e so eles (ver `flightMs`).
@@ -280,13 +313,15 @@ export default class World {
     score = 0,
     coins,
     coinOrdinals = [],
+    coinPieces,
     continuesUsed = 0,
     shield = false,
     flightFrames = 0,
   } = {}) {
     this.score = score;
     this.coinOrdinals = coinOrdinals.slice();
-    this._takenOrdinals = new Set(this.coinOrdinals);
+    this.coinPieces = coinPieces ? coinPieces.map(([o, i]) => [o, i]) : piecesFromOrdinals(this.coinOrdinals);
+    this._takenPieces = new Set(this.coinPieces.map(([o, i]) => `${o}:${i}`));
     this.coins = Number.isFinite(coins) ? coins : this.coinOrdinals.length;
     this.coinPickups = this.coins;
     this.continuesUsed = continuesUsed;
@@ -559,30 +594,48 @@ export default class World {
 
   _rollCoin(p) {
     const { seed, coinEvery } = this.run;
-    if (!hasCoin(seed, p.ordinal, coinEvery)) {
+    const letra = coinLetterAt(seed, p.ordinal, coinEvery, STAGE_LENGTH);
+    if (!letra) {
       p.coin = null;
       return;
     }
+    const passo = this._coinPitch;
     p.coin = {
+      letter: letra,
       offset: coinOffset(seed, p.ordinal),
-      // Moeda ja pega nao volta: nem depois da nova chance, nem com a tela girada.
-      taken: this._takenOrdinals.has(p.ordinal),
-      // Deslocamento de quando o ima a puxa, em relacao ao lugar dela no vao.
-      dx: 0,
-      dy: 0,
-      pulled: false,
+      pieces: LETTER_PIECES[letra].map(({ col, row }, i) => ({
+        i,
+        // Lugar da moeda na letra, em px a partir do centro dela.
+        x: col * passo,
+        y: row * passo,
+        // Moeda ja pega nao volta: nem depois da nova chance, nem com a tela girada.
+        taken: this._takenPieces.has(`${p.ordinal}:${i}`),
+        // O quanto o ima a tirou do lugar, e se ele ja a fisgou.
+        dx: 0,
+        dy: 0,
+        pulled: false,
+      })),
     };
   }
 
-  /** Centro da moeda na horizontal: o da coluna, mais o que o ima puxou. */
-  coinX(p) {
-    return p.x + (p.coin ? p.coin.dx : 0);
+  /**
+   * Altura do centro da letra de moedas de uma coluna — acompanha o vao que
+   * desliza. A letra inteira cabe no vao mesmo com o gelo saindo de qualquer um
+   * dos canos, em qualquer fase; a folga que sobra e o quanto ela sobe ou desce.
+   */
+  letterY(p) {
+    const offset = p.coin ? p.coin.offset : 0.5;
+    const folga = Math.max(0, p.gap / 2 - p.gap * ICE_GAP_BITE - this._letterHalf);
+    return p.gapCenter + (offset - 0.5) * 2 * folga;
   }
 
-  /** Altura do centro da moeda — acompanha o vao que desliza, e o ima. */
-  coinY(p) {
-    const offset = p.coin ? p.coin.offset : 0.5;
-    return p.gapCenter + (offset - 0.5) * p.gap * COIN_SPREAD + (p.coin ? p.coin.dy : 0);
+  /** Centro de uma moeda da letra: o lugar dela na letra, mais o que o ima puxou. */
+  pieceX(p, piece) {
+    return p.x + piece.x + piece.dx;
+  }
+
+  pieceY(p, piece) {
+    return this.letterY(p) + piece.y + piece.dy;
   }
 
   /**
@@ -597,16 +650,20 @@ export default class World {
     const birdY = this.bird.position.y;
 
     for (const p of this.pillars) {
-      const coin = p.coin;
-      if (!coin || coin.taken) continue;
-      const dx = L.birdX - this.coinX(p);
-      const dy = birdY - this.coinY(p);
-      if (!coin.pulled) {
-        if (alcance <= 0 || dx * dx + dy * dy > alcance * alcance) continue;
-        coin.pulled = true;
+      // So de obstaculo ate o seguinte ao placar: o servidor nao aceita alem.
+      if (!p.coin || p.ordinal > this.score + 1) continue;
+      const cy = this.letterY(p);
+      for (const piece of p.coin.pieces) {
+        if (piece.taken) continue;
+        const dx = L.birdX - (p.x + piece.x + piece.dx);
+        const dy = birdY - (cy + piece.y + piece.dy);
+        if (!piece.pulled) {
+          if (alcance <= 0 || dx * dx + dy * dy > alcance * alcance) continue;
+          piece.pulled = true;
+        }
+        piece.dx += dx * MAGNET_PULL;
+        piece.dy += dy * MAGNET_PULL;
       }
-      coin.dx += dx * MAGNET_PULL;
-      coin.dy += dy * MAGNET_PULL;
     }
   }
 
@@ -624,9 +681,10 @@ export default class World {
   /**
    * Pega as moedas em que o passaro encostou neste frame.
    *
-   * A moeda e um circulo no vao da coluna; basta o corpo do passaro tocar nela.
-   * Guarda o NUMERO do obstaculo, e nao so a contagem: e essa lista que vai para
-   * o servidor, que confere moeda por moeda (server/coins.go).
+   * Cada moeda da letra e um circulo; basta o corpo do passaro tocar nela. Guarda
+   * o NUMERO do obstaculo uma vez por moeda, e nao so a contagem: e essa lista que
+   * vai para o servidor, que confere quantas moedas cada letra tinha
+   * (server/coins.go).
    */
   _collectCoins() {
     if (!this.run.coinEvery) return;
@@ -635,19 +693,23 @@ export default class World {
     const birdY = this.bird.position.y;
 
     for (const p of this.pillars) {
-      const coin = p.coin;
-      if (!coin || coin.taken) continue;
-      const dx = this.coinX(p) - L.birdX;
-      if (dx > reach || dx < -reach) continue;
-      const dy = this.coinY(p) - birdY;
-      if (dx * dx + dy * dy > reach * reach) continue;
+      if (!p.coin || p.ordinal > this.score + 1) continue;
+      const cy = this.letterY(p);
+      for (const piece of p.coin.pieces) {
+        if (piece.taken) continue;
+        const dx = p.x + piece.x + piece.dx - L.birdX;
+        if (dx > reach || dx < -reach) continue;
+        const dy = cy + piece.y + piece.dy - birdY;
+        if (dx * dx + dy * dy > reach * reach) continue;
 
-      coin.taken = true;
-      this._takenOrdinals.add(p.ordinal);
-      this.coinOrdinals.push(p.ordinal);
-      this.coins += 1;
-      this.coinPickups += 1;
-      this.powers.onCoin(this, p);
+        piece.taken = true;
+        this._takenPieces.add(`${p.ordinal}:${piece.i}`);
+        this.coinPieces.push([p.ordinal, piece.i]);
+        this.coinOrdinals.push(p.ordinal);
+        this.coins += 1;
+        this.coinPickups += 1;
+        this.powers.onCoin(this, p);
+      }
     }
   }
 

@@ -147,8 +147,9 @@ func TestCatalogoTrazOsPoderes(t *testing.T) {
 			}
 			continue
 		}
-		if len(poderes) == 0 || num(t, b["price"]) <= 0 {
-			t.Errorf("passaro da loja precisa de preco e de poder: %v", b)
+		// Da para comprar com moedas, com dinheiro (productId) ou dos dois jeitos.
+		if len(poderes) == 0 || (num(t, b["price"]) <= 0 && b["productId"] == nil) {
+			t.Errorf("passaro da loja precisa de um jeito de comprar e de poder: %v", b)
 		}
 		for _, x := range poderes {
 			pw, _ := x.(map[string]any)
@@ -230,10 +231,14 @@ func TestSoContaMoedaQueExistia(t *testing.T) {
 		}
 	}
 
-	// As verdadeiras, mais: uma repetida, uma de obstaculo sem moeda, e uma
-	// muito alem de onde o jogador chegou.
+	// As verdadeiras, mais: a primeira letra inteira e mais um tanto alem do
+	// tamanho dela, uma de obstaculo sem moeda, e uma muito alem de onde o
+	// jogador chegou.
 	lista := append([]int{}, boas...)
-	lista = append(lista, boas[0], semMoeda)
+	for i := 0; i < 20; i++ {
+		lista = append(lista, boas[0])
+	}
+	lista = append(lista, semMoeda)
 	for o := 60; o < 200; o++ {
 		if HasCoin(seed, o, CoinEvery) {
 			lista = append(lista, o)
@@ -245,12 +250,14 @@ func TestSoContaMoedaQueExistia(t *testing.T) {
 	if st != http.StatusOK {
 		t.Fatalf("fechar partida: status %d (%v)", st, body)
 	}
+	// Uma moeda de cada letra, e a primeira letra inteira — nem uma a mais.
+	quer := len(boas) - 1 + letterCoins[CoinLetterAt(seed, boas[0], CoinEvery)]
 	res, _ := body["result"].(map[string]any)
-	if got := num(t, res["coins"]); got != len(boas) {
-		t.Errorf("moedas creditadas: %d, esperava %d (so as que existiam)", got, len(boas))
+	if got := num(t, res["coins"]); got != quer {
+		t.Errorf("moedas creditadas: %d, esperava %d (so as que existiam)", got, quer)
 	}
-	if got := num(t, carteira(t, body)["coins"]); got != len(boas) {
-		t.Errorf("saldo: %d, esperava %d", got, len(boas))
+	if got := num(t, carteira(t, body)["coins"]); got != quer {
+		t.Errorf("saldo: %d, esperava %d", got, quer)
 	}
 }
 
@@ -572,15 +579,19 @@ func TestEscudoSoComEstoque(t *testing.T) {
 func TestLojaDePassaros(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
-	a.daMoedas(t, ana, 200)
+	// Da para a Geada, e sobra uma moeda a menos do que a Brasa custa: o teste
+	// vale com qualquer preco do catalogo (catalog.go).
+	geada, _ := birdByID("frost")
+	brasa, _ := birdByID("ember")
+	a.daMoedas(t, ana, geada.Price+brasa.Price-1)
 
 	st, body := a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": "frost"})
 	if st != http.StatusOK {
 		t.Fatalf("comprar Geada: status %d (%v)", st, body)
 	}
 	w := carteira(t, body)
-	if num(t, w["coins"]) != 50 {
-		t.Errorf("saldo depois da compra: %v, esperava 50", w["coins"])
+	if num(t, w["coins"]) != brasa.Price-1 {
+		t.Errorf("saldo depois da compra: %v, esperava %d", w["coins"], brasa.Price-1)
 	}
 
 	st, body = a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": "frost"})

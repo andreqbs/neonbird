@@ -22,6 +22,7 @@ export const EMPTY_SESSION = {
   score: 0,
   coins: 0,
   coinOrdinals: [],
+  coinPieces: [],
   continuesUsed: 0,
   flightFrames: 0,
   shield: false,
@@ -35,6 +36,9 @@ export function captureSession(world) {
     score: world.score,
     coins: world.coins,
     coinOrdinals: world.coinOrdinals.slice(),
+    // Quais moedas de cada letra ja foram pegas: sem isso, a letra voltaria
+    // inteira no mundo novo.
+    coinPieces: world.coinPieces.map(([o, i]) => [o, i]),
     continuesUsed: world.continuesUsed,
     flightFrames: world.flightFrames,
     // Escudo inteiro atravessa a virada: ele foi pago no servidor. O que ja

@@ -166,14 +166,24 @@ func segundos(v float64) string { return numero(v) + " s" }
 // ==================================================================== PASSAROS
 
 type BirdOffer struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	Tagline string  `json:"tagline"`
-	Price   int     `json:"price"`
-	Powers  []Power `json:"powers"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Tagline string `json:"tagline"`
+	// Preco em moedas. 0 = nao se compra com moedas (o de sempre ja vem de graca).
+	Price int `json:"price"`
+	// O produto no Play Console, para a compra com dinheiro. Vazio = nao se
+	// compra com dinheiro. O VALOR em reais e o que estiver cadastrado la: o app
+	// mostra o preco que o Google Play informar.
+	ProductID string  `json:"productId,omitempty"`
+	Powers    []Power `json:"powers"`
 }
 
 // ----------------------------------------------------------------------------
+// COMO SE COMPRA: `Price` e o preco em moedas (0 = so com dinheiro) e
+// `ProductID` e o produto no Play Console (vazio = so com moedas). Com os dois,
+// o jogador escolhe. O produto tem que existir no Play Console com EXATAMENTE
+// este id (Monetizar > Produtos > Produtos no app) — ver server/README.md.
+//
 // QUEM TEM QUAL PODER: a lista `Powers` de cada passaro. Trocar o poder de um
 // passaro e trocar o nome entre as chaves; dar mais de um e separar por
 // virgula — por exemplo `Powers: []Power{PowerMagnet, PowerDoubleCoins}`.
@@ -181,16 +191,16 @@ type BirdOffer struct {
 // ----------------------------------------------------------------------------
 var Birds = []BirdOffer{
 	{ID: DefaultBird, Name: "Major", Tagline: "O piloto de sempre.", Price: 0},
-	{ID: "frost", Name: "Geada", Tagline: "Cristais no topete, asa de neve.", Price: 10, Powers: []Power{PowerSlow}},
-// 	{ID: "frost", Name: "Geada", Tagline: "Cristais no topete, asa de neve.", Price: 150, Powers: []Power{PowerSlow}},
-	{ID: "ember", Name: "Brasa", Tagline: "Topete em chamas, humor idem.", Price: 12, Powers: []Power{PowerSecondChance}},
-// 	{ID: "ember", Name: "Brasa", Tagline: "Topete em chamas, humor idem.", Price: 320, Powers: []Power{PowerSecondChance}},
-	{ID: "toxic", Name: "Toxina", Tagline: "Máscara roxa, antena ligada.", Price: 16, Powers: []Power{PowerMagnet}},
-// 	{ID: "toxic", Name: "Toxina", Tagline: "Máscara roxa, antena ligada.", Price: 480, Powers: []Power{PowerMagnet}},
-	{ID: "phantom", Name: "Fantasma", Tagline: "Meio transparente, todo visor.", Price: 18, Powers: []Power{PowerGhost}},
-// 	{ID: "phantom", Name: "Fantasma", Tagline: "Meio transparente, todo visor.", Price: 750, Powers: []Power{PowerGhost}},
-	{ID: "comet", Name: "Cometa", Tagline: "Deixa um rastro por onde passa.", Price: 20, Powers: []Power{PowerDoubleCoins}},
-// 	{ID: "comet", Name: "Cometa", Tagline: "Deixa um rastro por onde passa.", Price: 1200, Powers: []Power{PowerDoubleCoins}},
+	{ID: "frost", Name: "Geada", Tagline: "Cristais no topete, asa de neve.", Price: 10, ProductID: "bird_frost", Powers: []Power{PowerSlow}},
+// 	{ID: "frost", Name: "Geada", Tagline: "Cristais no topete, asa de neve.", Price: 150, ProductID: "bird_frost", Powers: []Power{PowerSlow}},
+	{ID: "ember", Name: "Brasa", Tagline: "Topete em chamas, humor idem.", Price: 12, ProductID: "bird_ember", Powers: []Power{PowerSecondChance}},
+// 	{ID: "ember", Name: "Brasa", Tagline: "Topete em chamas, humor idem.", Price: 320, ProductID: "bird_ember", Powers: []Power{PowerSecondChance}},
+	{ID: "toxic", Name: "Toxina", Tagline: "Máscara roxa, antena ligada.", Price: 16, ProductID: "bird_toxic", Powers: []Power{PowerMagnet}},
+// 	{ID: "toxic", Name: "Toxina", Tagline: "Máscara roxa, antena ligada.", Price: 480, ProductID: "bird_toxic", Powers: []Power{PowerMagnet}},
+	{ID: "phantom", Name: "Fantasma", Tagline: "Meio transparente, todo visor.", Price: 18, ProductID: "bird_phantom", Powers: []Power{PowerGhost}},
+// 	{ID: "phantom", Name: "Fantasma", Tagline: "Meio transparente, todo visor.", Price: 750, ProductID: "bird_phantom", Powers: []Power{PowerGhost}},
+	{ID: "comet", Name: "Cometa", Tagline: "Deixa um rastro por onde passa.", Price: 0, ProductID: "bird_comet", Powers: []Power{PowerDoubleCoins}},
+// 	{ID: "comet", Name: "Cometa", Tagline: "Deixa um rastro por onde passa.", Price: 0, ProductID: "bird_comet", Powers: []Power{PowerDoubleCoins}},
 }
 
 func birdByID(id string) (BirdOffer, bool) {

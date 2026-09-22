@@ -141,6 +141,29 @@ create table if not exists ledger (
 
 create index if not exists ledger_player on ledger (player_id, created_at desc);
 
+-- Compras com dinheiro (Google Play), uma linha por compra, pelo token que o
+-- Google da a ela (billing.go). `state`: granted (o passaro esta na conta) ou
+-- voided (estornada ou cancelada: o passaro saiu). `test` marca compra feita
+-- com licenca de teste do Play Console, que nao cobra ninguem.
+create table if not exists bird_purchases (
+  purchase_token text        primary key,
+  player_id      uuid        not null references players (id),
+  bird_id        text        not null,
+  order_id       text        not null default '',
+  state          text        not null default 'granted' check (state in ('granted', 'voided')),
+  test           boolean     not null default false,
+  purchased_at   timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+create index if not exists bird_purchases_player on bird_purchases (player_id);
+
+-- O passaro comprado com dinheiro guarda o token da compra: e ele que diz qual
+-- passaro sai num estorno ou quando a compra muda de conta. Comprado com moedas,
+-- fica vazio.
+alter table owned_birds add column if not exists purchase_token text;
+
 -- Video premiado confirmado pelo GOOGLE (SSV). Uma linha por transacao: a chave
 -- primaria faz o mesmo aviso repetido — o Google tenta de novo quando nao
 -- recebe resposta — valer uma vez so. O app troca cada linha por um premio

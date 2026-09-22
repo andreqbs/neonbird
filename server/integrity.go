@@ -3,16 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/subtle"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -130,10 +124,7 @@ type IntegrityVerifier struct {
 	account *serviceAccount
 	client  *http.Client
 	now     func() time.Time
-
-	bearerMu  sync.Mutex
-	bearer    string
-	bearerExp time.Time
+	token   *googleToken // o acesso ao Google, reaproveitado ate vencer (google.go)
 
 	cacheMu sync.Mutex
 	cache   map[string]cachedVerdict
@@ -181,6 +172,7 @@ func NewIntegrityVerifier(cfg Config) (*IntegrityVerifier, error) {
 		return nil, fmt.Errorf("INTEGRITY_MODE=%s precisa de uma GOOGLE_SERVICE_ACCOUNT valida: %w", mode, err)
 	}
 	v.account = conta
+	v.token = newGoogleToken(conta, playIntegrityScope, v.client, v.now)
 	return v, nil
 }
 
@@ -308,7 +300,7 @@ var errTokenRejected = errors.New("o Google recusou o token")
 
 // decode abre o token no Google.
 func (v *IntegrityVerifier) decode(ctx context.Context, token string) (tokenPayload, error) {
-	bearer, err := v.accessToken(ctx)
+	bearer, err := v.token.get(ctx)
 	if err != nil {
 		return tokenPayload{}, fmt.Errorf("credencial do Google: %w", err)
 	}
@@ -337,7 +329,7 @@ func (v *IntegrityVerifier) decode(ctx context.Context, token string) (tokenPayl
 		// Token torto, vencido ou ja usado: repetir nao muda nada.
 		return tokenPayload{}, errTokenRejected
 	case res.StatusCode == http.StatusUnauthorized:
-		v.forgetBearer()
+		v.token.forget()
 		return tokenPayload{}, fmt.Errorf("decodeIntegrityToken: status %d", res.StatusCode)
 	case res.StatusCode != http.StatusOK:
 		return tokenPayload{}, fmt.Errorf("decodeIntegrityToken: status %d: %s", res.StatusCode, snippet(bruto))
@@ -350,134 +342,6 @@ func (v *IntegrityVerifier) decode(ctx context.Context, token string) (tokenPayl
 		return tokenPayload{}, fmt.Errorf("resposta do Google ilegivel: %w", err)
 	}
 	return resposta.TokenPayloadExternal, nil
-}
-
-// serviceAccount e a chave JSON da conta de servico do Google Cloud.
-type serviceAccount struct {
-	ClientEmail string `json:"client_email"`
-	PrivateKey  string `json:"private_key"`
-	TokenURI    string `json:"token_uri"`
-	key         *rsa.PrivateKey
-}
-
-// parseServiceAccount le a chave do jeito que o Google Cloud baixa (JSON) ou em
-// base64, que e mais facil de colar numa variavel de ambiente do Dokploy.
-func parseServiceAccount(raw string) (*serviceAccount, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, errors.New("esta vazia")
-	}
-	bruto := []byte(raw)
-	if !strings.HasPrefix(raw, "{") {
-		decodificado, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(raw), ""))
-		if err != nil {
-			return nil, errors.New("nao e JSON nem base64")
-		}
-		bruto = decodificado
-	}
-
-	var conta serviceAccount
-	if err := json.Unmarshal(bruto, &conta); err != nil {
-		return nil, fmt.Errorf("JSON invalido: %w", err)
-	}
-	if conta.ClientEmail == "" || conta.PrivateKey == "" {
-		return nil, errors.New("faltam client_email ou private_key")
-	}
-	if conta.TokenURI == "" {
-		conta.TokenURI = "https://oauth2.googleapis.com/token"
-	}
-
-	bloco, _ := pem.Decode([]byte(conta.PrivateKey))
-	if bloco == nil {
-		return nil, errors.New("private_key nao esta em PEM")
-	}
-	chave, err := x509.ParsePKCS8PrivateKey(bloco.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("private_key: %w", err)
-	}
-	rsaKey, ok := chave.(*rsa.PrivateKey)
-	if !ok {
-		return nil, errors.New("private_key nao e RSA")
-	}
-	conta.key = rsaKey
-	return &conta, nil
-}
-
-// assertion e o JWT assinado com a chave da conta, trocado por um token de acesso.
-func (c *serviceAccount) assertion(now time.Time) (string, error) {
-	cabecalho := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
-	claims, err := json.Marshal(map[string]any{
-		"iss":   c.ClientEmail,
-		"scope": playIntegrityScope,
-		"aud":   c.TokenURI,
-		"iat":   now.Unix(),
-		"exp":   now.Add(time.Hour).Unix(),
-	})
-	if err != nil {
-		return "", err
-	}
-	assinado := cabecalho + "." + base64.RawURLEncoding.EncodeToString(claims)
-	soma := sha256.Sum256([]byte(assinado))
-	assinatura, err := rsa.SignPKCS1v15(rand.Reader, c.key, crypto.SHA256, soma[:])
-	if err != nil {
-		return "", err
-	}
-	return assinado + "." + base64.RawURLEncoding.EncodeToString(assinatura), nil
-}
-
-// accessToken devolve um token de acesso valido, pedindo outro ao Google so
-// quando o atual esta para vencer (eles duram uma hora).
-func (v *IntegrityVerifier) accessToken(ctx context.Context) (string, error) {
-	v.bearerMu.Lock()
-	defer v.bearerMu.Unlock()
-	if v.bearer != "" && v.now().Before(v.bearerExp) {
-		return v.bearer, nil
-	}
-
-	assertion, err := v.account.assertion(v.now())
-	if err != nil {
-		return "", err
-	}
-	form := url.Values{
-		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
-		"assertion":  {assertion},
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.account.TokenURI, strings.NewReader(form.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	res, err := v.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	bruto, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status %d: %s", res.StatusCode, snippet(bruto))
-	}
-
-	var resposta struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-	if err := json.Unmarshal(bruto, &resposta); err != nil || resposta.AccessToken == "" {
-		return "", errors.New("resposta sem access_token")
-	}
-	validade := time.Duration(resposta.ExpiresIn) * time.Second
-	if validade <= 2*time.Minute {
-		validade = time.Hour
-	}
-	v.bearer = resposta.AccessToken
-	v.bearerExp = v.now().Add(validade - time.Minute)
-	return v.bearer, nil
-}
-
-func (v *IntegrityVerifier) forgetBearer() {
-	v.bearerMu.Lock()
-	defer v.bearerMu.Unlock()
-	v.bearer = ""
 }
 
 func (v *IntegrityVerifier) cached(id string) (IntegrityVerdict, bool) {
@@ -504,12 +368,4 @@ func (v *IntegrityVerifier) remember(id string, verdict IntegrityVerdict) {
 		v.limpeza = agora
 	}
 	v.cache[id] = cachedVerdict{verdict: verdict, until: agora.Add(integrityCacheTTL)}
-}
-
-func snippet(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > 200 {
-		s = s[:200] + "..."
-	}
-	return s
 }

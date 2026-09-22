@@ -181,9 +181,18 @@ moedas compram, na **Loja**:
 
 | Item | O que é | Como se consegue |
 |---|---|---|
-| **5 pássaros** | Geada, Brasa, Toxina, Fantasma e Cometa — só visual por enquanto | moedas (150 a 1.200, preços de teste) |
+| **5 pássaros** | Geada, Brasa, Toxina, Fantasma e Cometa, cada um com um poder | moedas **ou dinheiro** (Google Play); o **Cometa, só dinheiro** |
 | **Escudo** | o anel que perdoa as batidas enquanto se dissipa | moedas ou vídeo premiado |
 | **Nova chance** | ao cair, continuar do mesmo ponto — uma por partida | moedas ou vídeo premiado |
+
+A compra com dinheiro é pelo **Google Play** ([billing.js](src/services/billing.js)):
+o app abre o pagamento do Google, e quem entrega o pássaro é o servidor, depois
+de conferir a compra com o Google ([server/billing.go](server/billing.go)). O
+preço em reais é o cadastrado no Play Console; o app mostra o que o Google
+informar. Compra que ficou pelo caminho (app fechado no meio, sem internet,
+pagamento pendente) sobe na abertura seguinte, e o app reinstalado recupera o
+que foi comprado com a mesma conta do Google. No iPhone e na web, só moedas.
+Como ligar: [server/README.md](server/README.md#parte-5--compra-com-dinheiro-google-play).
 
 Escudo e nova chance comprados **ficam guardados** e são usados na hora certa: o
 escudo, num botão antes do primeiro toque de cada fase (e no painel de fim de
@@ -201,13 +210,22 @@ abertura pergunta de novo.
 Como uma partida vira moedas:
 
 1. **Jogar** abre a partida no servidor. Ele desconta a vida e sorteia a
-   **semente** que decide onde cada moeda aparece ([coins.js](src/game/coins.js)).
-2. O jogo guarda o **número do obstáculo** de cada moeda pega — não só a
-   contagem.
-3. Ao fechar, o servidor refaz a conta com a semente e só credita moeda que
-   existia naquele obstáculo, uma vez, até onde o jogador chegou; e recusa placar
-   feito mais rápido do que o jogo permite. É a mesma função em Go e em JS, com
-   os mesmos números de referência nos testes dos dois lados.
+   **semente** que decide quais obstáculos têm moedas ([coins.js](src/game/coins.js)).
+2. Cada obstáculo com moedas traz uma **letra feita de moedas**, na ordem de
+   **M A J O R F L Y E R** — e de novo do M. **Cada fase recomeça do M.** As
+   letras têm de 7 (J, Y) a 13 moedas (M, E), e **cada moeda vale 1**: pegar o M
+   inteiro rende 13.
+3. O jogo guarda o **número do obstáculo** uma vez para cada moeda pega — não só
+   a contagem.
+4. Ao fechar, o servidor refaz a conta com a semente e só credita, de cada
+   obstáculo, até o total de moedas da letra dele, e só até onde o jogador
+   chegou; e recusa placar feito mais rápido do que o jogo permite. É a mesma
+   conta em Go e em JS — a ordem das letras e o desenho de cada uma —, com os
+   mesmos números de referência nos testes dos dois lados.
+
+O desenho das letras fica em `LETTER_ROWS` ([coins.js](src/game/coins.js)), e
+uma cópia em `letterRows` ([server/coins.go](server/coins.go)): mexeu em uma,
+mexe na outra — os testes dos dois lados avisam se só uma mudar.
 
 Prêmio de vídeo só sai com o **aviso assinado do Google** ao servidor (SSV do
 AdMob): o anúncio carrega com o código do jogador, e o app troca o vídeo
@@ -274,14 +292,14 @@ acessório: cristais, chamas, antena e máscara, visor, rastro) e é feito por
 [BirdFigure.js](src/game/render/BirdFigure.js) — o mesmo na loja e no voo, só com
 Views. **Nome, preço e poderes vêm do servidor** ([catalog.go](server/catalog.go)).
 
-| Pássaro | Preço | Poder | O que faz |
+| Pássaro | Compra | Poder | O que faz |
 | --- | --- | --- | --- |
 | Major | grátis | — | O de sempre, sem poder. |
-| Geada | 150 | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
-| Brasa | 320 | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
-| Toxina | 480 | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
-| Fantasma | 750 | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
-| Cometa | 1200 | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
+| Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
+| Brasa | moedas ou dinheiro | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
+| Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
+| Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
+| Cometa | **só dinheiro** | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
 
 Os três poderes com relógio (câmera lenta, ímã, invisível) **ligam sozinhos, em
 ciclo**: a partida começa recarregando, o poder liga, recarrega de novo. O relógio

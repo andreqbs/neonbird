@@ -525,8 +525,12 @@ func (s *Store) Buy(ctx context.Context, playerID, item, birdID string) (Wallet,
 		switch item {
 		case "bird":
 			b, ok := birdByID(birdID)
-			if !ok || b.Price <= 0 {
+			if !ok || b.ID == DefaultBird {
 				return ruleCode(404, "bird_not_found", "pássaro não encontrado")
+			}
+			// Passaro sem preco em moedas so se compra com dinheiro (billing.go).
+			if b.Price <= 0 {
+				return ruleCode(409, "coins_not_accepted", "este pássaro não se compra com moedas")
 			}
 			tem, err := ownsBird(ctx, tx, playerID, b.ID)
 			if err != nil {

@@ -5,6 +5,7 @@ import { describePower } from '../game/powers';
 import { CoinFace } from '../game/render/Coin';
 import useAds from '../hooks/useAds';
 import useEconomy from '../hooks/useEconomy';
+import billing from '../services/billing';
 import economy from '../services/economy';
 import AdCover from '../ui/AdCover';
 import BirdAvatar from '../ui/BirdAvatar';
@@ -25,6 +26,9 @@ const CONFIRM_MS = 3500;
  * Compra em moedas pede DOIS toques: o primeiro arma o botao ("Confirmar"), o
  * segundo compra. Dedo esbarrando num passaro de 1.200 moedas nao pode virar
  * compra — e e mais honesto que um dialogo, que na web nem aparece.
+ *
+ * Compra com dinheiro (billing.js) e um toque so: quem pede a confirmacao e a
+ * tela de pagamento do Google Play. O preco escrito ("R$ 4,99") vem de la.
  */
 export default function ShopScreen({ onBack }) {
   const eco = useEconomy();
@@ -34,14 +38,25 @@ export default function ShopScreen({ onBack }) {
   const [message, setMessage] = useState(null); // { error, text }
   const armTimer = useRef(null);
   const mounted = useRef(true);
+  // Os precos em dinheiro chegam do Google Play depois: so redesenha.
+  const [, setPrecos] = useState(0);
 
   useEffect(() => {
     economy.refresh();
+    const sai = billing.subscribeBilling(() => {
+      if (mounted.current) setPrecos((n) => n + 1);
+    });
     return () => {
       mounted.current = false;
       clearTimeout(armTimer.current);
+      sai();
     };
   }, []);
+
+  const birds = eco.catalog && eco.catalog.birds;
+  useEffect(() => {
+    if (birds) billing.loadPrices(birds);
+  }, [birds]);
 
   const arm = useCallback((id) => {
     setArmed(id);
@@ -82,6 +97,23 @@ export default function ShopScreen({ onBack }) {
       act(id, action, successText);
     },
     [act, arm, armed]
+  );
+
+  /** Compra com dinheiro: o Google Play pede a confirmacao, o servidor entrega. */
+  const buyWithMoney = useCallback(
+    async (bird) => {
+      if (busy) return;
+      setBusy(`money:${bird.id}`);
+      setArmed(null);
+      setMessage(null);
+      const r = await billing.buyBird(bird);
+      if (!mounted.current) return;
+      setBusy(null);
+      if (r.ok) setMessage({ error: false, text: `${bird.name} é seu! Toque em Usar para voar com ele.` });
+      else if (r.pending) setMessage({ error: false, text: r.error });
+      else if (!r.cancelled && r.error) setMessage({ error: true, text: r.error });
+    },
+    [busy]
   );
 
   const wallet = eco.wallet;
@@ -144,6 +176,10 @@ export default function ShopScreen({ onBack }) {
                 coins={wallet.coins}
                 armed={armed === id}
                 busy={busy === id}
+                moneyPrice={billing.priceOf(bird.productId)}
+                moneyReady={billing.isAvailable()}
+                moneyBusy={busy === `money:${bird.id}`}
+                onBuyMoney={() => buyWithMoney(bird)}
                 last={i === catalog.birds.length - 1}
                 onBuy={() =>
                   purchase(
@@ -226,7 +262,21 @@ function WalletBar({ wallet }) {
   );
 }
 
-function BirdRow({ bird, owned, equipped, coins, armed, busy, last, onBuy, onEquip }) {
+function BirdRow({
+  bird,
+  owned,
+  equipped,
+  coins,
+  armed,
+  busy,
+  moneyPrice,
+  moneyReady,
+  moneyBusy,
+  last,
+  onBuy,
+  onBuyMoney,
+  onEquip,
+}) {
   let action;
   if (equipped) {
     action = <Text style={styles.inUse}>EM USO</Text>;
@@ -237,14 +287,22 @@ function BirdRow({ bird, owned, equipped, coins, armed, busy, last, onBuy, onEqu
       <Button title="Usar" variant="ghost" compact onPress={onEquip} />
     );
   } else {
+    // Moedas, dinheiro ou os dois — o catalogo do servidor diz (price e
+    // productId). O Cometa, por exemplo, e so com dinheiro.
+    const comMoedas = bird.price > 0;
+    const comDinheiro = Boolean(bird.productId && moneyPrice);
+    const esperandoPreco = Boolean(bird.productId && moneyReady && !moneyPrice);
     action = (
-      <PriceButton
-        price={bird.price}
-        armed={armed}
-        busy={busy}
-        short={coins < bird.price}
-        onPress={onBuy}
-      />
+      <View style={styles.buyOptions}>
+        {comMoedas ? (
+          <PriceButton price={bird.price} armed={armed} busy={busy} short={coins < bird.price} onPress={onBuy} />
+        ) : null}
+        {comDinheiro ? <MoneyButton price={moneyPrice} busy={moneyBusy} onPress={onBuyMoney} /> : null}
+        {!comDinheiro && esperandoPreco ? <ActivityIndicator size="small" color={theme.pillar} /> : null}
+        {!comMoedas && !comDinheiro && !esperandoPreco ? (
+          <Text style={styles.unavailable}>Indisponível{'\n'}neste aparelho</Text>
+        ) : null}
+      </View>
     );
   }
 
@@ -292,6 +350,18 @@ function ItemRow({ icon, title, description, stock, price, coins, armed, busy, c
         ) : null}
       </View>
     </View>
+  );
+}
+
+/** Botao da compra com dinheiro: o preco que o Google Play informou. */
+function MoneyButton({ price, busy, onPress }) {
+  return (
+    <Pressable
+      onPress={busy ? undefined : onPress}
+      style={({ pressed }) => [styles.price, styles.money, pressed && { opacity: 0.75 }]}
+    >
+      {busy ? <ActivityIndicator size="small" color={theme.pillar} /> : <Text style={styles.moneyText}>{price}</Text>}
+    </Pressable>
   );
 }
 
@@ -430,6 +500,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,213,74,0.55)',
   },
   priceArmed: { backgroundColor: theme.bird, borderColor: '#FFF0B8' },
+  money: { backgroundColor: 'rgba(46,230,197,0.12)', borderColor: 'rgba(46,230,197,0.6)' },
+  moneyText: { color: theme.pillar, fontSize: 14, fontWeight: '900' },
+  buyOptions: { alignItems: 'flex-end', gap: 6 },
+  unavailable: { color: theme.textDim, fontSize: 11, textAlign: 'right', lineHeight: 15 },
   priceShort: { opacity: 0.45 },
   priceText: { color: theme.bird, fontSize: 14, fontWeight: '900' },
   priceArmedText: { color: '#1A1330', fontSize: 13, fontWeight: '900' },

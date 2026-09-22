@@ -34,6 +34,7 @@ const MODULES = [
   'src/services/identity.js',
   'src/services/cloud.js',
   'src/services/economy.js',
+  'src/services/billing.js',
   'src/ui/flightTime.js',
 ];
 
@@ -109,6 +110,7 @@ const economy = require(path.join(BUILD, 'src/services/economy.js'));
 const coins = require(path.join(BUILD, 'src/game/coins.js'));
 const { sha256Hex } = require(path.join(BUILD, 'src/services/sha256.js'));
 const integrity = require(path.join(BUILD, 'src/services/integrity.js'));
+const billing = require(path.join(BUILD, 'src/services/billing.js'));
 
 let failures = 0;
 function check(name, ok, extra = '') {
@@ -1124,52 +1126,42 @@ section('Poderes dos passaros');
     parado.destroy();
   }
 
-  // ---- ima: a moeda no alcance voa ate o passaro
+  // ---- ima: as moedas no alcance voam ate o passaro
   {
-    // O ima e do mundo: aqui ele e ligado na mao, sem esperar o relogio.
-    const puxa = (alcance) => {
+    // O ima e do mundo: aqui ele e ligado na mao, sem esperar o relogio, e as
+    // colunas ficam paradas — so o ima mexe nas moedas.
+    const puxa = (alcance, ordinal = 1) => {
       const w = new World(L);
-      w.setRun({ seed: 7, coinEvery: 1 }); // moeda em todo obstaculo
+      w.setRun({ seed: 7, coinEvery: 1 }); // letra em todo obstaculo
       w.flap();
       semColunas(w);
-      const p = w.pillars[0];
-      // Passaro dentro do vao, 3,4 raios ABAIXO da moeda: longe demais para
-      // encostar nela, perto o bastante para o ima.
-      p.x = L.birdX;
-      p.gapCenter = w.bird.position.y - R * 3.4;
+      w.speedFactor = 0;
+      const p = w.pillars.find((q) => q.ordinal === ordinal);
+      // Letra na altura do passaro, com a moeda mais perto a 3,4 raios dele:
+      // longe demais para encostar, perto o bastante para o ima.
       p.coin.offset = 0.5;
+      p.gapCenter = w.bird.position.y;
+      const perto = (x) => Math.min(...p.coin.pieces.map((q) => Math.hypot(x + q.x - L.birdX, q.y)));
+      p.x = L.birdX;
+      while (perto(p.x) < R * 3.4) p.x += 0.5;
       w._syncPillar(p);
       w.magnetReach = alcance;
       for (let f = 0; f < 30 && w.phase === PHASE.PLAYING; f++) {
         Matter.Body.setVelocity(w.bird, { x: 0, y: 0 }); // o passaro fica parado
         w.update();
       }
-      const pegou = w.coinOrdinals.includes(p.ordinal) && w.phase === PHASE.PLAYING;
+      const pegas = w.coinOrdinals.filter((o) => o === p.ordinal).length;
+      const voando = w.phase === PHASE.PLAYING;
       w.destroy();
-      return pegou;
+      return voando ? pegas : -1;
     };
-    check('sem ima, a moeda fora do alcance do passaro fica la', puxa(0) === false);
-    check('com o ima ligado, ela voa ate o passaro e conta', puxa(R * 5) === true);
+    check('sem ima, a letra fora do alcance do passaro fica la', puxa(0) === 0);
+    const comIma = puxa(R * 5);
+    check('com o ima ligado, as moedas da letra voam ate o passaro e contam', comIma > 0, `${comIma} moedas`);
 
-    // O servidor so aceita moeda ate o obstaculo seguinte ao placar. O maior
-    // alcance possivel do ima nunca chega na moeda do obstaculo depois desse,
-    // em nenhum formato de tela.
-    const telas = [
-      [390, 844],
-      [360, 640],
-      [412, 915],
-      [768, 1024],
-      [1280, 720],
-    ];
-    const folgas = telas.map(([largura, altura]) => {
-      const T = computeLayout(largura, altura);
-      return T.spacing - T.pillarWidth / 2 - T.birdRadius - MAGNET_MAX_REACH * T.birdRadius;
-    });
-    check(
-      'o alcance maximo do ima nunca chega a moeda de dois obstaculos a frente',
-      folgas.every((f) => f > 0),
-      folgas.map((f) => f.toFixed(0)).join(' / ')
-    );
+    // O servidor so aceita moeda ate o obstaculo seguinte ao placar: o ima nao
+    // puxa a letra do obstaculo depois desse, por mais perto que ela esteja.
+    check('o ima nao puxa a letra de dois obstaculos a frente', puxa(R * MAGNET_MAX_REACH, 2) === 0);
   }
 
   // ---- invisivel: atravessa, e nao some com o passaro dentro do cano
@@ -1331,6 +1323,33 @@ function coinsSection() {
   );
   check('sem semente (treino) nao ha moeda', !coins.hasCoin(null, 2, 3) && !coins.hasCoin(undefined, 9, 3));
 
+  // As letras: a mesma ordem, o mesmo recomeco a cada fase e o mesmo tamanho de
+  // cada uma que o servidor (server/coins_test.go).
+  const tamanhos = Object.fromEntries(Object.entries(coins.LETTER_PIECES).map(([l, p]) => [l, p.length]));
+  check(
+    'cada letra tem as mesmas moedas que o servidor conta',
+    JSON.stringify(tamanhos) === JSON.stringify({ M: 13, A: 12, J: 7, O: 10, R: 12, F: 10, L: 8, Y: 7, E: 13 }),
+    JSON.stringify(tamanhos)
+  );
+  const letras = (de, ate) => {
+    const lista = [];
+    for (let o = de; o <= ate; o++) {
+      const l = coins.coinLetterAt(12345, o, 3, STAGE_LENGTH);
+      if (l) lista.push(`${o}:${l}`);
+    }
+    return lista.join(' ');
+  };
+  check(
+    'as letras seguem MAJOR FLYER, como o servidor ve',
+    letras(1, 40) === '2:M 9:A 10:J 13:O 17:R 18:F 19:L 24:Y 26:E 33:R 34:M 37:A 40:J',
+    letras(1, 40)
+  );
+  check(
+    '...e cada fase recomeca do M',
+    letras(101, 125) === '105:M 107:A 108:J 109:O 110:R 113:F 117:L 120:Y 122:E 124:R',
+    letras(101, 125)
+  );
+
   const L = computeLayout(390, 844);
   const RUN = { seed: 12345, coinEvery: 3 };
 
@@ -1350,28 +1369,59 @@ function coinsSection() {
     const w = new World(L);
     w.setRun(RUN);
     const p = w.pillars.find((q) => q.coin);
-    check('com a semente do servidor, a fila ja nasce com moeda', Boolean(p));
+    check(
+      'com a semente do servidor, a fila ja nasce com uma letra de moedas',
+      Boolean(p) && p.coin.pieces.length >= 7
+    );
     if (p) {
-      const y = w.coinY(p);
-      const raio = L.birdRadius * coins.COIN_RADIUS;
-      // Folga do tamanho do gelo (15% do vao) dos dois lados: a moeda nunca fica
-      // dentro do bloco que sai do cano.
-      check(
-        'a moeda fica no vao, longe do gelo dos canos',
-        y - raio > w.topEdgeOf(p) + p.gap * 0.15 && y + raio < w.bottomEdgeOf(p) - p.gap * 0.15,
-        `${(y - p.gapCenter).toFixed(1)}px do centro do vao`
-      );
+      // A letra inteira cabe no vao sem entrar no gelo (15% do vao, de qualquer
+      // lado) — em todas as fases, nas duas pontas do sorteio de altura e em
+      // mais de um formato de tela.
+      let pior = Infinity;
+      for (const T of [L, computeLayout(360, 640), computeLayout(1280, 720)]) {
+        const t = new World(T);
+        t.setRun(RUN);
+        const q = t.pillars.find((c) => c.coin);
+        const raio = T.birdRadius * coins.COIN_RADIUS;
+        for (let fase = 0; fase < STAGE_COUNT; fase++) {
+          t.stage = fase;
+          t.applyStage();
+          for (const offset of [0, 1]) {
+            q.coin.offset = offset;
+            for (const peca of q.coin.pieces) {
+              const y = t.pieceY(q, peca);
+              pior = Math.min(
+                pior,
+                y - raio - (t.topEdgeOf(q) + q.gap * 0.15),
+                t.bottomEdgeOf(q) - q.gap * 0.15 - (y + raio)
+              );
+            }
+          }
+        }
+        t.destroy();
+      }
+      check('a letra inteira cabe no vao sem entrar no gelo, em qualquer fase', pior > -0.001, `folga minima ${Math.max(0, pior).toFixed(1)} px`);
 
-      p.x = L.birdX;
-      w.bird.position.y = y;
+      // Encostar numa moeda da letra pega ela — e as vizinhas que o corpo do
+      // passaro cobre. O passaro ja esta chegando a esse obstaculo: letra de
+      // obstaculo alem do seguinte ao placar nao se pega (o servidor recusaria).
+      w.score = p.ordinal - 1;
+      const peca = p.coin.pieces[0];
+      p.x = L.birdX - peca.x;
+      w.bird.position.y = w.pieceY(p, peca);
       w._collectCoins();
-      check('encostar na moeda pega a moeda', w.coins === 1 && p.coin.taken === true, `${w.coins}`);
+      const pegas = p.coin.pieces.filter((q) => q.taken).length;
       check(
-        'e guarda o numero do obstaculo, que e o que vai para o servidor',
-        w.coinOrdinals[0] === p.ordinal
+        'encostar numa moeda da letra pega a moeda',
+        peca.taken && w.coins === pegas && pegas >= 1 && pegas < p.coin.pieces.length,
+        `${pegas} de ${p.coin.pieces.length}`
+      );
+      check(
+        'e guarda o numero do obstaculo uma vez por moeda, que e o que vai para o servidor',
+        w.coinOrdinals.length === pegas && w.coinOrdinals.every((o) => o === p.ordinal)
       );
       w._collectCoins();
-      check('a mesma moeda nao conta duas vezes', w.coins === 1 && w.coinOrdinals.length === 1);
+      check('a mesma moeda nao conta duas vezes', w.coins === pegas && w.coinOrdinals.length === pegas);
     }
     w.destroy();
   }
@@ -1407,7 +1457,23 @@ function coinsSection() {
       'toda moeda pega e de obstaculo que tinha moeda',
       w.coinOrdinals.every((o) => coins.hasCoin(RUN.seed, o, RUN.coinEvery))
     );
-    check('nenhuma moeda repetida na lista', new Set(w.coinOrdinals).size === w.coinOrdinals.length);
+    const porObstaculo = new Map();
+    for (const o of w.coinOrdinals) porObstaculo.set(o, (porObstaculo.get(o) || 0) + 1);
+    check(
+      'nenhum obstaculo com mais moedas do que a letra dele tem',
+      [...porObstaculo].every(
+        ([o, n]) => n <= coins.LETTER_PIECES[coins.coinLetterAt(RUN.seed, o, RUN.coinEvery, STAGE_LENGTH)].length
+      )
+    );
+    check(
+      'nenhuma moeda da letra contada duas vezes',
+      new Set(w.coinPieces.map(([o, i]) => `${o}:${i}`)).size === w.coinPieces.length
+    );
+    check(
+      'voando pelas letras, o passaro pega mais de uma moeda de cada',
+      w.coins > porObstaculo.size,
+      `${w.coins} moedas em ${porObstaculo.size} letras`
+    );
     check('nenhuma alem de onde o passaro chegou', w.coinOrdinals.every((o) => o <= w.score + 1));
     check('o contador bate com a lista', w.coins === w.coinOrdinals.length, `${w.coins} moedas`);
     w.destroy();
@@ -1434,19 +1500,22 @@ function coinsSection() {
     w.setRun(RUN);
     w.flap();
     for (let f = 0; f < 10; f++) w.update();
-    // Como se ja tivesse passado sete obstaculos: a fila vem numerada do 8.
-    w.score = 7;
+    // Como se ja tivesse passado oito obstaculos: a fila vem numerada do 9.
+    w.score = 8;
     w._layPillars();
 
     // Uma moeda pega a mao numa coluna que ainda estava por vir, para o teste
     // nao depender da mira do bot. Guarda-se o NUMERO: depois da nova chance a
     // mesma coluna e renumerada, e o que importa e o obstaculo, nao o objeto.
-    const alvo = w.pillars.find((q) => q.coin && !q.coin.taken);
+    const alvo = w.pillars.find((q) => q.coin && q.ordinal <= w.score + 1);
     const numeroDoAlvo = alvo ? alvo.ordinal : null;
+    let pegasDoAlvo = [];
     if (alvo) {
-      alvo.x = L.birdX;
-      w.bird.position.y = w.coinY(alvo);
+      const peca = alvo.coin.pieces[0];
+      alvo.x = L.birdX - peca.x;
+      w.bird.position.y = w.pieceY(alvo, peca);
       w._collectCoins();
+      pegasDoAlvo = alvo.coin.pieces.filter((q) => q.taken).map((q) => q.i);
     }
     const placar = w.score;
     const moedas = w.coinOrdinals.slice();
@@ -1470,10 +1539,13 @@ function coinsSection() {
     check('a nova chance fica contada', w.continuesUsed === 1);
     if (numeroDoAlvo !== null) {
       const mesma = w.pillars.find((q) => q.ordinal === numeroDoAlvo);
+      const pegas = mesma && mesma.coin ? mesma.coin.pieces.filter((q) => q.taken).map((q) => q.i) : [];
       check(
-        'moeda pega antes da queda nao reaparece',
-        Boolean(mesma) && mesma.coin !== null && mesma.coin.taken === true,
-        mesma ? `obstaculo ${numeroDoAlvo}` : 'a coluna nao voltou para a fila'
+        'moeda pega antes da queda nao reaparece, e o resto da letra continua la',
+        pegasDoAlvo.length > 0 &&
+          JSON.stringify(pegas) === JSON.stringify(pegasDoAlvo) &&
+          pegas.length < mesma.coin.pieces.length,
+        mesma ? `obstaculo ${numeroDoAlvo}: ${pegas.length} moedas pegas` : 'a coluna nao voltou para a fila'
       );
     }
     check('e nao ha segunda nova chance sem cair de novo', w.revive() === false);
@@ -1489,10 +1561,11 @@ function coinsSection() {
     w.flap();
     for (let f = 0; f < 10; f++) w.update();
     w.score = 5;
-    const alvo = w.pillars.find((q) => q.coin && !q.coin.taken);
+    const alvo = w.pillars.find((q) => q.coin && q.ordinal <= w.score + 1);
     if (alvo) {
-      alvo.x = P.birdX;
-      w.bird.position.y = w.coinY(alvo);
+      const peca = alvo.coin.pieces[0];
+      alvo.x = P.birdX - peca.x;
+      w.bird.position.y = w.pieceY(alvo, peca);
       w._collectCoins();
     }
     w.grantShield();
@@ -1505,8 +1578,10 @@ function coinsSection() {
     check('a partida volta', como === 'live', String(como));
     check(
       'com as mesmas moedas',
-      girado.coins === pacote.coins &&
-        JSON.stringify(girado.coinOrdinals) === JSON.stringify(pacote.coinOrdinals),
+      pacote.coins > 0 &&
+        girado.coins === pacote.coins &&
+        JSON.stringify(girado.coinOrdinals) === JSON.stringify(pacote.coinOrdinals) &&
+        JSON.stringify(girado.coinPieces) === JSON.stringify(pacote.coinPieces),
       `${girado.coins}`
     );
     check('com o escudo que ja estava pago', girado.shield === true);
@@ -2141,6 +2216,184 @@ async function integritySection() {
   }
 }
 
+// ------------------------------------------------- 11. compra com dinheiro
+
+/**
+ * A compra com dinheiro dos passaros (billing.js). O Google Play e um dublê; o
+ * servidor, um `fetch` de mentira. O que se confere e a ordem das coisas: o
+ * passaro so chega pela resposta do servidor, a compra so e fechada no aparelho
+ * DEPOIS disso, e compra que ficou pelo caminho sobe na abertura seguinte.
+ */
+async function billingSection() {
+  section('Compra com dinheiro');
+
+  const pedidos = [];
+  let responder = () => ({ status: 200, body: {} });
+  const fetchOriginal = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    const pedido = {
+      path: String(url).replace(FAKE_API, ''),
+      corpo: options.body ? JSON.parse(options.body) : null,
+    };
+    pedidos.push(pedido);
+    const r = responder(pedido);
+    if (r.falha) throw Object.assign(new Error('sem rede'), { name: r.falha });
+    return {
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      text: async () => JSON.stringify(r.body ?? {}),
+    };
+  };
+
+  const catalogo = {
+    birds: [
+      { id: 'classic', name: 'Major', price: 0, powers: [] },
+      { id: 'frost', name: 'Geada', price: 150, productId: 'bird_frost', powers: [] },
+      { id: 'comet', name: 'Cometa', price: 0, productId: 'bird_comet', powers: [] },
+    ],
+    items: { shield: { price: 60 }, continue: { price: 100 } },
+    rules: { maxLives: 5, coinEvery: 3, stageLength: 100, stageBonus: 10, maxContinuesPerRun: 1 },
+  };
+  let donos = ['classic'];
+  const carteira = () => ({
+    coins: 0, lives: 5, maxLives: 5, shields: 0, continues: 0, flightMs: 0,
+    equippedBird: 'classic', ownedBirds: donos.slice(),
+  });
+
+  // O dublê do Google Play: guarda quem escuta, e responde como a loja.
+  let aoComprar = null;
+  let aoErrar = null;
+  let proxima = { purchaseState: 'purchased' }; // o que a proxima compra devolve
+  const pedidosAoGoogle = [];
+  const fechadas = [];
+  let guardadas = [];
+  const google = {
+    initConnection: async () => true,
+    purchaseUpdatedListener: (cb) => (aoComprar = cb),
+    purchaseErrorListener: (cb) => (aoErrar = cb),
+    fetchProducts: async ({ skus }) =>
+      skus.map((id) => ({ id, displayPrice: id === 'bird_comet' ? 'R$ 19,90' : 'R$ 4,99' })),
+    requestPurchase: async (args) => {
+      pedidosAoGoogle.push(args);
+      const sku = args.request.google.skus[0];
+      setTimeout(() => {
+        if (proxima.cancelar) aoErrar({ code: 'user-cancelled' });
+        else aoComprar({ productId: sku, purchaseToken: `tok-${sku}`, ...proxima });
+      }, 0);
+      return null;
+    },
+    finishTransaction: async ({ purchase }) => {
+      fechadas.push(purchase.purchaseToken);
+    },
+    getAvailablePurchases: async () => guardadas,
+    isUserCancelledError: (e) => Boolean(e && e.code === 'user-cancelled'),
+  };
+
+  try {
+    identity.resetPlayerState();
+    economy.resetEconomyState();
+    disk.clear();
+    const jogador = await identity.initPlayer();
+    billing.__setIap(google);
+    responder = (p) => {
+      if (p.path === '/v1/catalog') return { status: 200, body: catalogo };
+      if (p.path === '/v1/me/wallet') return { status: 200, body: { wallet: carteira() } };
+      if (p.path === '/v1/shop/purchase') {
+        donos = [...new Set([...donos, p.corpo.birdId])];
+        return { status: 200, body: { wallet: carteira(), birdId: p.corpo.birdId } };
+      }
+      return { status: 404, body: {} };
+    };
+    await economy.refresh();
+
+    // ---- precos: vem do Google Play
+    await billing.loadPrices(catalogo.birds);
+    check(
+      'o preco em reais vem do Google Play',
+      billing.priceOf('bird_comet') === 'R$ 19,90' && billing.priceOf('bird_frost') === 'R$ 4,99'
+    );
+
+    // ---- compra paga: o servidor entrega, e so depois ela fecha no aparelho
+    pedidos.length = 0;
+    const cometa = catalogo.birds[2];
+    const paga = await billing.buyBird(cometa);
+    const aoServidor = pedidos.find((p) => p.path === '/v1/shop/purchase');
+    check('compra paga: o passaro chega pela resposta do servidor', paga.ok === true && economy.economyNow().wallet.ownedBirds.includes('comet'));
+    check(
+      '...que recebe o passaro e o token da compra',
+      aoServidor && aoServidor.corpo.birdId === 'comet' && aoServidor.corpo.purchaseToken === 'tok-bird_comet'
+    );
+    check('...e so entao a compra e fechada no aparelho', fechadas.includes('tok-bird_comet'));
+    check(
+      'a compra vai amarrada ao resumo do codigo do jogador, nunca ao codigo',
+      pedidosAoGoogle[0].request.google.obfuscatedAccountId === sha256Hex(jogador.id)
+    );
+
+    // ---- sem rede na hora de entregar: nao fecha, sobe na proxima abertura
+    responder = (p) => (p.path === '/v1/shop/purchase' ? { falha: 'TypeError' } : { status: 200, body: { wallet: carteira() } });
+    const semRede = await billing.buyBird(catalogo.birds[1]);
+    check(
+      'pagou sem rede: o jogador le que o passaro chega quando a internet voltar',
+      !semRede.ok && semRede.error === billing.BILLING_MESSAGES.later
+    );
+    check('...e a compra NAO fecha no aparelho sem o servidor ter entregue', !fechadas.includes('tok-bird_frost'));
+
+    // ---- pagamento pendente (boleto): nem vai ao servidor, nem fecha
+    pedidos.length = 0;
+    proxima = { purchaseState: 'pending' };
+    const pendente = await billing.buyBird(catalogo.birds[1]);
+    check(
+      'pagamento pendente: avisa sem entregar nem fechar nada',
+      pendente.pending === true && !pedidos.some((p) => p.path === '/v1/shop/purchase') && !fechadas.includes('tok-bird_frost')
+    );
+
+    // ---- desistiu na tela do Google
+    proxima = { cancelar: true };
+    const desistiu = await billing.buyBird(catalogo.birds[1]);
+    check('desistir na tela de pagamento nao vira erro nem compra', desistiu.cancelled === true && !desistiu.error);
+
+    // ---- abertura seguinte: a compra que ficou pelo caminho sobe
+    proxima = { purchaseState: 'purchased' };
+    responder = (p) => {
+      if (p.path === '/v1/shop/purchase') {
+        donos = [...new Set([...donos, p.corpo.birdId])];
+        return { status: 200, body: { wallet: carteira(), birdId: p.corpo.birdId } };
+      }
+      return { status: 200, body: { wallet: carteira() } };
+    };
+    guardadas = [
+      { productId: 'bird_frost', purchaseToken: 'tok-bird_frost', purchaseState: 'purchased', isAcknowledgedAndroid: false },
+      { productId: 'bird_comet', purchaseToken: 'tok-bird_comet', purchaseState: 'purchased', isAcknowledgedAndroid: true },
+    ];
+    pedidos.length = 0;
+    const chegaram = await billing.syncPurchases();
+    const subiram = pedidos.filter((p) => p.path === '/v1/shop/purchase').map((p) => p.corpo.birdId);
+    check(
+      'na abertura seguinte, a compra que ficou pelo caminho chega',
+      chegaram === 1 && JSON.stringify(subiram) === JSON.stringify(['frost']) && fechadas.includes('tok-bird_frost'),
+      JSON.stringify(subiram)
+    );
+    check('...e a que ja estava na conta e fechada nem vai ao servidor', !subiram.includes('comet'));
+
+    // ---- sem o modulo do Google (web, iPhone, build antiga)
+    billing.__setIap(null);
+    const semModulo = await billing.buyBird(cometa);
+    check(
+      'sem o Google Play no aparelho, a compra com dinheiro nem aparece',
+      billing.isAvailable() === false && !semModulo.ok && semModulo.error === billing.BILLING_MESSAGES.unavailable
+    );
+    check(
+      '...e o texto nao fala de bastidor (Google, servidor)',
+      Object.values(billing.BILLING_MESSAGES).every((t) => !/google|servidor/i.test(t))
+    );
+  } finally {
+    global.fetch = fetchOriginal;
+    billing.__setIap(undefined);
+    economy.resetEconomyState();
+    identity.resetPlayerState();
+  }
+}
+
 seasonSection();
 identitySection();
 coinsSection();
@@ -2148,6 +2401,7 @@ coinsSection();
 economySection()
   .then(cloudSection)
   .then(integritySection)
+  .then(billingSection)
   .catch((e) => {
     failures++;
     console.log(`  FALHOU  uma secao assincrona quebrou  (${e.message})`);

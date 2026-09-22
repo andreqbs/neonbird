@@ -57,7 +57,8 @@
           }
         }
       ],
-      "./plugins/withGameCategory"
+      "./plugins/withGameCategory",
+      "expo-iap"
     ],
     "extra": {
       "eas": {

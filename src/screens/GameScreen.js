@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Easing,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -36,7 +38,9 @@ import { powersOfRun } from '../game/powers';
 import { DEFAULT_BIRD, lookFor } from '../game/birds';
 import Backdrop from '../game/render/Backdrop';
 import Bird from '../game/render/Bird';
-import Coin, { CoinFace } from '../game/render/Coin';
+import { CoinFace } from '../game/render/Coin';
+import CoinLetter from '../game/render/CoinLetter';
+import { MAX_LETTER_COINS } from '../game/coins';
 import GravityWarning from '../game/render/GravityWarning';
 import Ground, { GROUND_TILE } from '../game/render/Ground';
 import PillarPair from '../game/render/PillarPair';
@@ -173,8 +177,9 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
       // canto nos dois segundos que vem antes dela.
       heavy: new Animated.Value(0),
       heavyWarn: new Animated.Value(0),
-      // O giro das moedas: um valor so para todas.
-      coinSpin: new Animated.Value(1),
+      // O giro das moedas, um valor so para todas: roda sozinho, em loop, no
+      // lado nativo (ver o efeito logo abaixo).
+      coinSpin: new Animated.Value(0),
       // Poderes (powers.js): o passaro some no invisivel, a tela esfria no mais
       // lento, e cada poder com relogio tem a sua barra no HUD.
       ghost: new Animated.Value(world.ghost ? 1 : 0),
@@ -201,11 +206,15 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
         warnBottom: new Animated.Value(0),
         // Brilho de quando o par esta deslizando na vertical.
         driftGlow: new Animated.Value(0),
-        // A moeda do vao: altura e se esta a vista.
-        coinY: new Animated.Value(p.coin ? world.coinY(p) : 0),
-        coinOn: new Animated.Value(p.coin && !p.coin.taken ? 1 : 0),
-        // Quanto o ima tirou a moeda do lugar, na horizontal.
-        coinDx: new Animated.Value(0),
+        // A letra de moedas do vao: a altura do centro dela e, para cada moeda,
+        // o lugar na letra e se ainda esta a vista (ver CoinLetter).
+        letterY: new Animated.Value(p.coin ? world.letterY(p) : 0),
+        pieces: Array.from({ length: MAX_LETTER_COINS }, () => ({
+          x: new Animated.Value(0),
+          y: new Animated.Value(0),
+          on: new Animated.Value(0),
+          last: { x: NaN, y: NaN, on: -1 },
+        })),
         // Ultimo valor enviado de cada um (ver `sync`).
         last: {
           iceTop: 0,
@@ -213,14 +222,28 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           warnTop: 0,
           warnBottom: 0,
           driftGlow: 0,
-          coinOn: -1,
-          coinY: NaN,
-          coinDx: 0,
+          letterY: NaN,
         },
       })),
     };
   }
   const a = anim.current;
+
+  // O giro das moedas roda no lado nativo, em loop: com letras de ate 13 moedas
+  // por obstaculo, mandar o giro de cada uma pelo JS a cada frame custaria caro.
+  // Na web nao ha lado nativo, e o proprio Animated anima pelo JS.
+  useEffect(() => {
+    const giro = Animated.loop(
+      Animated.timing(a.coinSpin, {
+        toValue: 1,
+        duration: 1250,
+        easing: Easing.linear,
+        useNativeDriver: Platform.OS !== 'web',
+      })
+    );
+    giro.start();
+    return () => giro.stop();
+  }, [a]);
 
   const [phase, setPhase] = useState(world.phase);
   const [paused, setPaused] = useState(false);
@@ -264,7 +287,6 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   const burstTimerRef = useRef(null);
   const lastHeavyRef = useRef(0);
   const lastHeavyWarnRef = useRef(0);
-  const lastSpinRef = useRef(1);
   const busyRef = useRef(null);
   const mountedRef = useRef(true);
   const onScoreRef = useRef(onScore);
@@ -307,14 +329,6 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
       a.heavyWarn.setValue(warn);
       lastHeavyWarnRef.current = warn;
     }
-    if (world.run.coinEvery) {
-      const spin = 0.3 + 0.7 * Math.abs(Math.cos(world.frame / 12));
-      if (spin !== lastSpinRef.current) {
-        a.coinSpin.setValue(spin);
-        lastSpinRef.current = spin;
-      }
-    }
-
     // Poderes: o que eles mudam na tela, e a barra de cada um no HUD. A barra
     // anda em degraus de 2% — suave o bastante, e sem mensagem a cada frame.
     const fx = a.lastFx;
@@ -366,21 +380,34 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
         }
       }
 
-      const on = p.coin && !p.coin.taken ? 1 : 0;
-      if (on !== t.last.coinOn) {
-        t.coinOn.setValue(on);
-        t.last.coinOn = on;
-      }
-      if (on) {
-        const cy = world.coinY(p);
-        if (cy !== t.last.coinY) {
-          t.coinY.setValue(cy);
-          t.last.coinY = cy;
+      // A letra de moedas: o centro dela, e cada moeda so quando muda — ganhou
+      // letra nova, foi pega, ou o ima esta puxando.
+      const coin = p.coin;
+      if (coin) {
+        const ly = world.letterY(p);
+        if (ly !== t.last.letterY) {
+          t.letterY.setValue(ly);
+          t.last.letterY = ly;
         }
-        const cdx = p.coin.dx;
-        if (cdx !== t.last.coinDx) {
-          t.coinDx.setValue(cdx);
-          t.last.coinDx = cdx;
+      }
+      for (let k = 0; k < t.pieces.length; k++) {
+        const slot = t.pieces[k];
+        const piece = coin ? coin.pieces[k] : undefined;
+        const on = piece && !piece.taken ? 1 : 0;
+        if (on !== slot.last.on) {
+          slot.on.setValue(on);
+          slot.last.on = on;
+        }
+        if (!on) continue;
+        const px = piece.x + piece.dx;
+        const py = piece.y + piece.dy;
+        if (px !== slot.last.x) {
+          slot.x.setValue(px);
+          slot.last.x = px;
+        }
+        if (py !== slot.last.y) {
+          slot.y.setValue(py);
+          slot.last.y = py;
         }
       }
     }
@@ -994,13 +1021,12 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
         ))}
         {!training &&
           a.pillars.map((t, i) => (
-            <Coin
-              key={`moeda-${i}`}
+            <CoinLetter
+              key={`letra-${i}`}
               layout={layout}
               x={t.x}
-              y={t.coinY}
-              dx={t.coinDx}
-              visible={t.coinOn}
+              y={t.letterY}
+              pieces={t.pieces}
               spin={a.coinSpin}
             />
           ))}
