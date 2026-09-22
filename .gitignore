@@ -23,3 +23,4 @@ credentials.json
 .env
 .env.*
 !.env.example
+majorflyer-service-account-eas.json

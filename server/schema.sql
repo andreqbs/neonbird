@@ -105,6 +105,7 @@ create table if not exists game_sessions (
   ranked         boolean     not null default false,
   flight_ms      bigint      not null default 0,
   integrity      text        not null default '',
+  bird           text        not null default 'classic',
   continues_used integer     not null default 0
 );
 
@@ -113,10 +114,12 @@ create table if not exists game_sessions (
 -- colunas aqui. `flight_ms` e o tempo voando de fato nesta partida: medido no
 -- aparelho e limitado pelo servidor ao tempo desde a abertura. `integrity` e o
 -- resultado da verificacao de integridade no fechamento (integrity.go): ok,
--- off, skipped, missing, failed:<motivo> ou error:<motivo>.
+-- off, skipped, missing, failed:<motivo> ou error:<motivo>. `bird` e o passaro
+-- escolhido na abertura: os poderes dele (catalog.go) valem a partida inteira.
 alter table game_sessions add column if not exists ranked boolean not null default false;
 alter table game_sessions add column if not exists flight_ms bigint not null default 0;
 alter table game_sessions add column if not exists integrity text not null default '';
+alter table game_sessions add column if not exists bird text not null default 'classic';
 
 create index if not exists game_sessions_open on game_sessions (player_id) where status = 'open';
 

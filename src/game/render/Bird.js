@@ -22,7 +22,7 @@ import BirdFigure from './BirdFigure';
  *    uma caixa com folga, entao nenhuma plataforma as recorta.
  * Resultado: o mesmo desenho na web, no Android e no iOS.
  */
-export default function Bird({ layout, y, rotation, wing, shield, shieldLevel, look = lookFor() }) {
+export default function Bird({ layout, y, rotation, wing, shield, shieldLevel, ghost, look = lookFor() }) {
   const s = layout.birdRadius * 2; // diametro do corpo
   const pad = s * 0.42; // folga para halo, cauda, bico e acessorios
   const box = s + pad * 2;
@@ -55,6 +55,11 @@ export default function Bird({ layout, y, rotation, wing, shield, shieldLevel, l
     outputRange: [0, 0.85, 0.3, 0.85, 0.4, 0.9],
     extrapolate: 'clamp',
   });
+  // Invisivel (poder do Fantasma): o passaro vira um vulto enquanto dura.
+  const figureOpacity = ghost
+    ? ghost.interpolate({ inputRange: [0, 1], outputRange: [1, 0.32], extrapolate: 'clamp' })
+    : 1;
+
   // Dissipar tambem e abrir: o anel cresce um pouco enquanto perde a cor.
   const shieldScale = shieldLevel.interpolate({
     inputRange: [0, 1],
@@ -74,27 +79,38 @@ export default function Bird({ layout, y, rotation, wing, shield, shieldLevel, l
         transform: [{ translateY: y }, { rotate }],
       }}
     >
-      {/* brilho: circulos concentricos no lugar de sombra */}
-      {HALO.map((ring, i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            left: (box - ring.size) / 2,
-            top: (box - ring.size) / 2,
-            width: ring.size,
-            height: ring.size,
-            borderRadius: ring.size / 2,
-            backgroundColor: look.glow,
-            opacity: ring.opacity,
-          }}
-        />
-      ))}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: box,
+          height: box,
+          opacity: figureOpacity,
+        }}
+      >
+        {/* brilho: circulos concentricos no lugar de sombra */}
+        {HALO.map((ring, i) => (
+          <View
+            key={i}
+            style={{
+              position: 'absolute',
+              left: (box - ring.size) / 2,
+              top: (box - ring.size) / 2,
+              width: ring.size,
+              height: ring.size,
+              borderRadius: ring.size / 2,
+              backgroundColor: look.glow,
+              opacity: ring.opacity,
+            }}
+          />
+        ))}
 
-      {/* corpo do passaro, centrado na caixa */}
-      <View style={{ position: 'absolute', left: pad, top: pad, width: s, height: s }}>
-        <BirdFigure s={s} look={look} wingRotate={wingRotate} />
-      </View>
+        {/* corpo do passaro, centrado na caixa */}
+        <View style={{ position: 'absolute', left: pad, top: pad, width: s, height: s }}>
+          <BirdFigure s={s} look={look} wingRotate={wingRotate} />
+        </View>
+      </Animated.View>
 
       {/* Escudo: um anel em volta do passaro. A primeira batida nao o apaga —
           ela comeca a dissipacao, e enquanto sobrar anel na tela toda colisao

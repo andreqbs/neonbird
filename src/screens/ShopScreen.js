@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { describePower } from '../game/powers';
 import { CoinFace } from '../game/render/Coin';
 import useAds from '../hooks/useAds';
 import useEconomy from '../hooks/useEconomy';
@@ -253,9 +254,15 @@ function BirdRow({ bird, owned, equipped, coins, armed, busy, last, onBuy, onEqu
       <View style={styles.rowTexts}>
         <Text style={styles.rowTitle}>{bird.name}</Text>
         <Text style={styles.rowDesc}>{bird.tagline}</Text>
-        <Text style={styles.ability}>
-          {bird.ability ? 'Habilidade: em breve' : 'Sem habilidade'}
-        </Text>
+        {bird.powers && bird.powers.length > 0 ? (
+          bird.powers.map((p) => (
+            <Text key={p.id} style={styles.ability}>
+              {describePower(p)}
+            </Text>
+          ))
+        ) : (
+          <Text style={[styles.ability, styles.noPower]}>Sem poder</Text>
+        )}
       </View>
       {action}
     </View>
@@ -392,7 +399,8 @@ const styles = StyleSheet.create({
   rowTexts: { flex: 1 },
   rowTitle: { color: theme.text, fontSize: 15, fontWeight: '800' },
   rowDesc: { color: theme.textDim, fontSize: 12, lineHeight: 17, marginTop: 2 },
-  ability: { color: 'rgba(46,230,197,0.8)', fontSize: 11, marginTop: 3, fontWeight: '700' },
+  ability: { color: 'rgba(46,230,197,0.85)', fontSize: 11, marginTop: 3, fontWeight: '700', lineHeight: 15 },
+  noPower: { color: 'rgba(150,161,206,0.7)' },
   inUse: { color: theme.pillar, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
 
   item: {

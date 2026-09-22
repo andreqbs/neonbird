@@ -15,11 +15,12 @@ você acessa.
 O código está pronto e desligado (`INTEGRITY_MODE=off`). Detalhes na
 [Parte 4 do server/README.md](server/README.md#parte-4--a-prova-de-integridade-das-partidas).
 
-- [ ] **Google Cloud:** criar (ou escolher) o projeto e **anotar o número do
-      projeto** — só dígitos.
-- [ ] **Google Cloud:** *APIs e serviços* → ativar a **Play Integrity API**.
-- [ ] **Play Console:** Major Flyer → **Proteção do app** → aba *Play Integrity
-      API* → **Vincular projeto do Cloud**.
+- [x] **Google Cloud:** criar (ou escolher) o projeto e **anotar o número do
+      projeto** — `MajorFlyer`, nº `943404852239`.
+- [ ] **Google Cloud:** *APIs e serviços* → conferir que a **Play Integrity API**
+      está ativada (o vínculo pelo Play Console costuma ativar sozinho).
+- [x] **Play Console:** Major Flyer → **Proteção do app** → aba *Play Integrity
+      API* → **Vincular projeto do Cloud**. Licença, app e dispositivo já ativados.
 - [ ] **Play Console:** na mesma tela, marcar o **risco de acesso ao app**
       (*app access risk*) — é o que faz o Google avisar quando havia aplicativo
       controlando a tela durante a partida.
@@ -30,10 +31,10 @@ O código está pronto e desligado (`INTEGRITY_MODE=off`). Detalhes na
       `verificacao de integridade ligada`.
 - [ ] **Dokploy:** se `MIN_SECONDS_PER_POINT` estiver fixado em `0.6`, trocar
       para `1.0` (o padrão do código já é 1.0).
-- [ ] **App:** escrever o número do projeto em `DEFAULT_CLOUD_PROJECT_NUMBER`
-      ([src/services/integrity.js](src/services/integrity.js)), gerar **build
-      novo** (`npm run aab` — entrou módulo nativo) e publicar no **teste
-      interno**.
+- [x] **App:** número do projeto em `DEFAULT_CLOUD_PROJECT_NUMBER`
+      ([src/services/integrity.js](src/services/integrity.js)).
+- [ ] **App:** gerar **build novo** (`npm run aab` — entrou módulo nativo) e
+      publicar no **teste interno**.
 - [ ] Depois de alguns dias em `log`, conferir a coluna `game_sessions.integrity`
       (SQL no README) e, se quase tudo for `ok`, virar para `enforce`.
       **Antes de virar:** esperar a versão nova se espalhar (app antigo não manda
@@ -51,6 +52,13 @@ O código está pronto e desligado (`INTEGRITY_MODE=off`). Detalhes na
       antes do build da loja — o EAS não leva o `.env`.
 - [ ] Apagar do banco de produção os jogadores de teste criados em
       desenvolvimento.
+
+### Jogo
+
+- [ ] **Jogar com cada pássaro no celular**, no build novo: os testes
+      automáticos cobrem os poderes, mas o ritmo (5 s de ímã, 2 s de invisível,
+      20% mais lento) só se sente jogando. Ajustar é em
+      [server/catalog.go](server/catalog.go), sem build nova.
 
 ### Loja e documentos
 
@@ -76,10 +84,8 @@ Nada aqui bloqueia o jogo; são caminhos abertos, à espera de uma decisão sua.
       prêmio, nova chance e escudo. Hoje esses pedidos **não repetem sozinhos**
       de propósito: a primeira tentativa pode ter chegado e só a resposta ter se
       perdido. Com a chave, eles poderiam repetir com segurança.
-- [ ] **Habilidades dos pássaros.** A vaga está pronta dos dois lados
-      ([abilities.js](src/game/abilities.js) e o catálogo do servidor); falta
-      definir o que cada uma faz. Se mexer em moeda ou pontuação, a regra precisa
-      entrar no servidor junto.
+- [x] **Poderes dos pássaros.** Um poder por pássaro da loja; trocar ou somar
+      poderes é em [server/catalog.go](server/catalog.go) (ver README).
 - [ ] **Conferir o voo no servidor** (refazer a partida a partir da semente).
       Fecharia o que sobra da fresta do app adulterado, mas exige a física do
       jogo reescrita em Go, idêntica à do celular. Descartado por ora — a prova

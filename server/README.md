@@ -459,7 +459,7 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | `POST /v1/players` | Cadastra o aparelho ou troca o apelido. Corpo: `{id, secret, name}`. |
 | `GET /v1/catalog` | Pássaros, preços e regras. Público. |
 | `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros e tempo de voo (`flightMs`) do jogador. |
-| `POST /v1/runs/start` | Abre uma partida: desconta uma vida e devolve a semente das moedas. |
+| `POST /v1/runs/start` | Abre uma partida: desconta uma vida e devolve a semente das moedas, o pássaro (`bird`), os poderes dele (`powers`) e quantas novas chances cabem (`maxContinues`). |
 | `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals, flightMs}` — os números dos obstáculos das moedas pegas e o tempo voando de fato, em ms. Fechar de novo devolve o mesmo resultado. Partida que rendeu algo leva também o cabeçalho `X-Integrity-Token` ([passo 12](#12-o-projeto-no-google-cloud)). |
 | `POST /v1/runs/{id}/continue` | Nova chance. Corpo: `{method}` — `stock` (guardada) ou `coins`. |
 | `POST /v1/runs/{id}/shield` | Usa um escudo guardado na partida. |
@@ -522,7 +522,11 @@ partida já foi usada"*); o código é o que o app usa para decidir o que fazer
 
 **Itens e loja**
 
-- **Nova chance**: uma por partida, paga com uma guardada ou com moedas.
+- **Nova chance**: uma por partida — duas com o poder da Brasa —, paga com uma
+  guardada ou com moedas.
+- **Poderes que mexem na economia** (moedas multiplicadas, chance extra) valem
+  pelo pássaro registrado na **abertura** da partida (`game_sessions.bird`), não
+  pelo que estiver escolhido na hora de fechar.
 - **Escudo**: gasta um guardado, dentro de uma partida aberta.
 - Pássaro, escudo e nova chance se compram **só com moedas**, e pássaro não se
   compra duas vezes. Só dá para usar pássaro comprado.
@@ -556,18 +560,33 @@ o reconhece mais; quem deixa um app clicando na tela aparece no veredito. Sobra
 o jogador de verdade — e o livro-razão, para quando for preciso investigar
 alguém.
 
-## Pássaros e habilidades
+## Pássaros e poderes
 
-O catálogo mora em [catalog.go](catalog.go): nome, frase, preço e a vaga da
-habilidade de cada um. Mudar um preço é editar esse arquivo e fazer redeploy —
-**não** precisa de build novo do app, que lê o catálogo a cada abertura.
+O catálogo mora em [catalog.go](catalog.go): nome, frase, preço e os **poderes**
+de cada pássaro. Tudo ali é redeploy deste servidor — **não** precisa de build
+novo do app, que recebe o catálogo a cada abertura e os poderes junto com cada
+partida.
 
-As habilidades ainda não existem: cada pássaro novo nasce com
-`ability: {id, status: "soon"}` (o de sempre vem com `null`), e o app mostra
-*"em breve"*. Quando uma for definida, ela ganha comportamento no app
-([abilities.js](../src/game/abilities.js)) — e, **se mexer em moeda ou
-pontuação**, a regra correspondente precisa entrar aqui também, senão a
-conferência da partida recusa o que a habilidade legitimamente rendeu.
+| Pássaro | Preço | Poder | O que faz |
+| --- | --- | --- | --- |
+| Major | grátis | — | O de sempre, sem poder. |
+| Geada | 150 | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
+| Brasa | 320 | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
+| Toxina | 480 | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
+| Fantasma | 750 | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
+| Cometa | 1200 | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
+
+- **Trocar o poder de um pássaro:** lista `Birds`, campo `Powers`.
+- **Mais de um poder no mesmo pássaro:** `Powers: []Power{PowerMagnet, PowerDoubleCoins}`.
+- **Os números** (segundos ligado, recarga, alcance, porcentagem, chances,
+  multiplicador): bloco `OS NUMEROS DE CADA PODER`. A frase da loja acompanha.
+- **Poder novo:** comportamento no app ([powers.js](../src/game/powers.js)) com o
+  mesmo `id` — e, se mexer em moeda ou nova chance, a regra aqui
+  ([economy.go](economy.go)). O app ignora poder que não conhece.
+
+O ímã nunca alcança mais que 8 raios do pássaro (o app limita): assim ele não
+chega à moeda de um obstáculo que o jogador ainda não passou, que este servidor
+recusaria.
 
 ## Configuração
 

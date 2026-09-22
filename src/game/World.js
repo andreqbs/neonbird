@@ -20,7 +20,7 @@ import {
 } from './constants';
 import { STAGE_COUNT, stageAt, trapsAt } from './stages';
 import { COIN_RADIUS, COIN_SPREAD, coinOffset, hasCoin } from './coins';
-import { NO_ABILITY } from './abilities';
+import { NO_POWERS, combinePowers } from './powers';
 import { capShape } from './caps';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -31,6 +31,16 @@ const randInt = ([a, b]) => Math.round(randRange(a, b));
 // rende varios 'collisionStart' seguidos. Duas absorcoes a menos de 8 frames
 // contam como a mesma batida para efeito de som e estilhaco.
 const ABSORB_COOLDOWN = 8;
+
+// Ima: quanto do caminho ate o passaro a moeda puxada anda por passo. Um quarto
+// chega em poucos frames, sem parecer teleporte.
+const MAGNET_PULL = 0.25;
+
+// Alcance maximo do ima, em raios do passaro. Mesmo no espacamento mais curto
+// entre colunas (layout.js), 8 raios nao chegam a moeda de um obstaculo que o
+// passaro ainda nao tem como passar — e o servidor so aceita moeda ate o
+// obstaculo seguinte ao placar (server/coins.go).
+export const MAGNET_MAX_REACH = 8;
 
 /**
  * Mundo do jogo.
@@ -105,10 +115,10 @@ export default class World {
     }
     Matter.Composite.add(this.engine.world, bodies);
 
-    // A economia da partida (ver setRun) e a habilidade do passaro (ver
-    // setAbility). Sem semente e treino: o voo e o mesmo, sem moeda nenhuma.
+    // A economia da partida (ver setRun) e os poderes do passaro (ver
+    // setPowers). Sem semente e treino: o voo e o mesmo, sem moeda nenhuma.
     this.run = { seed: null, coinEvery: 0 };
-    this.ability = NO_ABILITY;
+    this.powers = NO_POWERS;
 
     this._hit = false;
     this._onCollision = () => {
@@ -154,11 +164,19 @@ export default class World {
     // Tempo de voo: frames em PLAYING, e so eles (ver `flightMs`).
     this.flightFrames = 0;
 
+    // O que os poderes mexem no voo (powers.js) — cada um liga o seu:
+    //   speedFactor  1 = velocidade da fase; 0.8 = 20% mais lento
+    //   ghost        atravessa os obstaculos
+    //   magnetReach  alcance do ima, em px (0 = desligado)
+    this.speedFactor = 1;
+    this.ghost = false;
+    this.magnetReach = 0;
+
     Matter.Body.setPosition(this.bird, { x: L.birdX, y: L.playHeight / 2 });
     Matter.Body.setVelocity(this.bird, { x: 0, y: 0 });
 
     this._layPillars();
-    this.ability.onRunStart?.(this);
+    this.powers.onRunStart(this);
   }
 
   /**
@@ -173,9 +191,18 @@ export default class World {
     for (const p of this.pillars) this._rollCoin(p);
   }
 
-  /** Ganchos da habilidade do passaro escolhido (abilities.js). */
-  setAbility(ability) {
-    this.ability = ability || NO_ABILITY;
+  /**
+   * Os poderes do passaro desta partida (powers.js): a lista que o servidor
+   * mandou junto com ela. Lista vazia = passaro sem poder.
+   */
+  setPowers(list) {
+    this.powers = combinePowers(list);
+    this.powers.onRunStart(this);
+  }
+
+  /** Os poderes com relogio, para o HUD: [{ id, name, active, level }]. */
+  get powerStatus() {
+    return this.powers.status();
   }
 
   /**
@@ -296,7 +323,7 @@ export default class World {
     this.stage += 1;
     this.applyStage();
     this._backToReady();
-    this.ability.onStageStart?.(this);
+    this.powers.onStageStart(this);
   }
 
   /**
@@ -314,7 +341,7 @@ export default class World {
     this.continuesUsed += 1;
     this._clearShield();
     this._backToReady();
-    this.ability.onRevive?.(this);
+    this.powers.onRevive(this);
     return true;
   }
 
@@ -398,10 +425,12 @@ export default class World {
     // dele, e o tempo de voo conta o passo inteiro (ver o chao, mais abaixo).
     const jogando = this.phase === PHASE.PLAYING;
 
-    // Velocidade e vao sao da fase (ver applyStage), nao do placar.
+    // Velocidade e vao sao da fase (ver applyStage), nao do placar. O poder
+    // "mais lento" reduz a velocidade da fase atual por alguns segundos.
     if (this.phase === PHASE.PLAYING) {
+      const passo = this.speed * this.speedFactor;
       for (const p of this.pillars) {
-        p.x -= this.speed;
+        p.x -= passo;
         p.gap = this.gap;
 
         // O ponto vale no instante em que o passaro EMERGE do outro lado da
@@ -434,12 +463,13 @@ export default class World {
         this._syncPillar(p);
       }
 
-      this.groundOffset += this.speed;
-      this.skyOffset += this.speed * 0.12;
+      this.groundOffset += passo;
+      this.skyOffset += passo * 0.12;
       this.wing = Math.sin(this.frame / 4.5);
       this._decayShield();
       this._updateHeavy();
-      this.ability.onFrame?.(this);
+      this.powers.onFrame(this);
+      this._pullCoins();
     }
 
     // --- fisica ---
@@ -459,12 +489,13 @@ export default class World {
       if (this.bird.velocity.y < 0) Matter.Body.setVelocity(this.bird, { x: 0, y: 0 });
     }
 
-    // Colisao com coluna, detectada pelo proprio matter-js.
+    // Colisao com coluna, detectada pelo proprio matter-js. Invisivel (poder
+    // do Fantasma), o passaro atravessa — e nem gasta o escudo.
     if (this._hit) {
       this._hit = false;
-      if (this.phase === PHASE.PLAYING) {
+      if (this.phase === PHASE.PLAYING && !this.ghost) {
         if (this.shield) this._absorbHit();
-        else if (!this.ability.onHit?.(this, 'pillar')) this.phase = PHASE.OVER;
+        else if (!this.powers.onHit(this)) this.phase = PHASE.OVER;
       }
     }
 
@@ -536,13 +567,58 @@ export default class World {
       offset: coinOffset(seed, p.ordinal),
       // Moeda ja pega nao volta: nem depois da nova chance, nem com a tela girada.
       taken: this._takenOrdinals.has(p.ordinal),
+      // Deslocamento de quando o ima a puxa, em relacao ao lugar dela no vao.
+      dx: 0,
+      dy: 0,
+      pulled: false,
     };
   }
 
-  /** Altura do centro da moeda de uma coluna — acompanha o vao que desliza. */
+  /** Centro da moeda na horizontal: o da coluna, mais o que o ima puxou. */
+  coinX(p) {
+    return p.x + (p.coin ? p.coin.dx : 0);
+  }
+
+  /** Altura do centro da moeda — acompanha o vao que desliza, e o ima. */
   coinY(p) {
     const offset = p.coin ? p.coin.offset : 0.5;
-    return p.gapCenter + (offset - 0.5) * p.gap * COIN_SPREAD;
+    return p.gapCenter + (offset - 0.5) * p.gap * COIN_SPREAD + (p.coin ? p.coin.dy : 0);
+  }
+
+  /**
+   * O ima: a moeda que entra no alcance voa ate o passaro. Uma vez puxada, ela
+   * vem ate o fim, mesmo que o ima desligue no caminho — moeda parada no meio do
+   * ar, fora do vao, nao faria sentido.
+   */
+  _pullCoins() {
+    if (!this.run.coinEvery) return;
+    const L = this.layout;
+    const alcance = Math.min(this.magnetReach, L.birdRadius * MAGNET_MAX_REACH);
+    const birdY = this.bird.position.y;
+
+    for (const p of this.pillars) {
+      const coin = p.coin;
+      if (!coin || coin.taken) continue;
+      const dx = L.birdX - this.coinX(p);
+      const dy = birdY - this.coinY(p);
+      if (!coin.pulled) {
+        if (alcance <= 0 || dx * dx + dy * dy > alcance * alcance) continue;
+        coin.pulled = true;
+      }
+      coin.dx += dx * MAGNET_PULL;
+      coin.dy += dy * MAGNET_PULL;
+    }
+  }
+
+  /**
+   * O passaro esta encostando em algum obstaculo agora? O invisivel pergunta
+   * antes de desligar: acabar o tempo com o passaro dentro do cano nao pode
+   * virar batida.
+   */
+  overlapsObstacle() {
+    const corpos = [];
+    for (const p of this.pillars) corpos.push(p.top, p.bottom, p.topCap, p.bottomCap);
+    return Matter.Query.collides(this.bird, corpos).length > 0;
   }
 
   /**
@@ -561,7 +637,7 @@ export default class World {
     for (const p of this.pillars) {
       const coin = p.coin;
       if (!coin || coin.taken) continue;
-      const dx = p.x - L.birdX;
+      const dx = this.coinX(p) - L.birdX;
       if (dx > reach || dx < -reach) continue;
       const dy = this.coinY(p) - birdY;
       if (dx * dx + dy * dy > reach * reach) continue;
@@ -571,7 +647,7 @@ export default class World {
       this.coinOrdinals.push(p.ordinal);
       this.coins += 1;
       this.coinPickups += 1;
-      this.ability.onCoin?.(this, p);
+      this.powers.onCoin(this, p);
     }
   }
 

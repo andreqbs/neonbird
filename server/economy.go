@@ -44,6 +44,10 @@ type RunSession struct {
 	MaxContinues  int       `json:"maxContinues"`
 	ContinuesUsed int       `json:"continuesUsed"`
 	StartedAt     time.Time `json:"startedAt"`
+	// O passaro da partida e os poderes dele (catalog.go): e com eles que o app
+	// voa, e e por eles que o fechamento e a nova chance sao conferidos.
+	Bird   string  `json:"bird"`
+	Powers []Power `json:"powers"`
 }
 
 // RunRules sao os limites da conferencia de uma partida (vem da configuracao).
@@ -62,6 +66,9 @@ type FinishResult struct {
 	StageBonus int   `json:"stageBonus"`
 	Ranked     bool  `json:"ranked"`
 	FlightMs   int64 `json:"flightMs"`
+	// Por quanto as moedas do voo foram multiplicadas (poder do passaro); o
+	// `Coins` acima ja vem multiplicado.
+	CoinMultiplier int `json:"coinMultiplier"`
 }
 
 // AdViewTTL: quanto tempo um video confirmado espera o app troca-lo por premio.
@@ -175,6 +182,7 @@ func applyDelta(ctx context.Context, tx pgx.Tx, playerID, kind, ref string, d de
 
 type runRow struct {
 	seed          uint32
+	bird          string // o passaro registrado na abertura
 	status        string
 	continuesUsed int
 	elapsed       float64      // segundos desde a abertura, no relogio do banco
@@ -188,11 +196,11 @@ func lockRun(ctx context.Context, tx pgx.Tx, playerID, runID string) (runRow, er
 	var seed int64
 	var r runRow
 	err := tx.QueryRow(ctx, `
-		select player_id::text, seed, status, continues_used,
+		select player_id::text, seed, bird, status, continues_used,
 		       extract(epoch from now() - started_at)::float8,
 		       coalesce(points, 0), coalesce(coins, 0), coalesce(stage_bonus, 0), ranked, flight_ms
 		  from game_sessions where id = $1 for update`, runID).
-		Scan(&dono, &seed, &r.status, &r.continuesUsed, &r.elapsed,
+		Scan(&dono, &seed, &r.bird, &r.status, &r.continuesUsed, &r.elapsed,
 			&r.result.Points, &r.result.Coins, &r.result.StageBonus, &r.result.Ranked, &r.result.FlightMs)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && dono != playerID) {
 		return runRow{}, ruleCode(404, "run_not_found", "partida não encontrada")
@@ -201,6 +209,7 @@ func lockRun(ctx context.Context, tx pgx.Tx, playerID, runID string) (runRow, er
 		return runRow{}, err
 	}
 	r.seed = uint32(seed)
+	r.result.CoinMultiplier = birdOrDefault(r.bird).coinMultiplier()
 	return r, nil
 }
 
@@ -227,6 +236,9 @@ func markRun(ctx context.Context, tx pgx.Tx, runID, status string) error {
 // A partida anterior que tenha ficado aberta vira "abandoned" e nao rende nada.
 // Um jogador tem uma partida aberta por vez — sem isso daria para abrir dez e
 // fechar so a que foi melhor.
+//
+// O passaro escolhido fica gravado na partida: os poderes dele (catalog.go)
+// valem ate o fim dela, mesmo que o jogador troque de passaro no meio.
 func (s *Store) StartRun(ctx context.Context, playerID string) (RunSession, Wallet, error) {
 	var run RunSession
 	var wallet Wallet
@@ -245,10 +257,18 @@ func (s *Store) StartRun(ctx context.Context, playerID string) (RunSession, Wall
 			return err
 		}
 
-		run = RunSession{ID: newUUID(), Seed: newSeed(), CoinEvery: CoinEvery, MaxContinues: MaxContinuesPerRun}
+		bird := birdOrDefault(w.EquippedBird)
+		run = RunSession{
+			ID:           newUUID(),
+			Seed:         newSeed(),
+			CoinEvery:    CoinEvery,
+			MaxContinues: MaxContinuesPerRun + bird.extraContinues(),
+			Bird:         bird.ID,
+			Powers:       bird.powerList(),
+		}
 		if err := tx.QueryRow(ctx, `
-			insert into game_sessions (id, player_id, seed) values ($1, $2, $3)
-			returning started_at`, run.ID, playerID, int64(run.Seed)).Scan(&run.StartedAt); err != nil {
+			insert into game_sessions (id, player_id, seed, bird) values ($1, $2, $3, $4)
+			returning started_at`, run.ID, playerID, int64(run.Seed), bird.ID).Scan(&run.StartedAt); err != nil {
 			return err
 		}
 		if err := applyDelta(ctx, tx, playerID, "run_start", run.ID, delta{lives: -1}); err != nil {
@@ -352,10 +372,13 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 			return markRun(ctx, tx, runID, "rejected")
 		}
 
+		// Moedas multiplicadas sao poder do passaro da ABERTURA da partida.
+		vezes := birdOrDefault(r.bird).coinMultiplier()
 		res = FinishResult{
-			Points:     points,
-			Coins:      ValidCoins(r.seed, points, ordinals, CoinEvery),
-			StageBonus: (points / StageLength) * StageBonus,
+			Points:         points,
+			Coins:          ValidCoins(r.seed, points, ordinals, CoinEvery) * vezes,
+			CoinMultiplier: vezes,
+			StageBonus:     (points / StageLength) * StageBonus,
 			// Pontos entram no ranking so com a rodada aberta. Na apuracao
 			// (domingo 18h-20h) a partida ainda rende moedas, mas nao mexe no
 			// placar da semana.
@@ -421,7 +444,12 @@ func (s *Store) ContinueRun(ctx context.Context, playerID, runID, method string,
 		if err != nil {
 			return err
 		}
-		if r.continuesUsed >= MaxContinuesPerRun {
+		// Uma por partida — mais as que o poder do passaro da abertura der.
+		limite := MaxContinuesPerRun + birdOrDefault(r.bird).extraContinues()
+		if r.continuesUsed >= limite {
+			if limite > 1 {
+				return ruleCode(409, "continue_limit", "as novas chances desta partida já foram usadas")
+			}
 			return ruleCode(409, "continue_limit", "a nova chance desta partida já foi usada")
 		}
 		w, err := lockWallet(ctx, tx, playerID)

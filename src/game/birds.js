@@ -3,7 +3,7 @@ import { theme } from '../ui/theme';
 /**
  * A aparencia de cada passaro.
  *
- * So o DESENHO mora aqui: nome, preco e habilidade vem do servidor
+ * So o DESENHO mora aqui: nome, preco e poderes vem do servidor
  * (server/catalog.go). Passaro que o servidor mande e o app ainda nao conheca
  * aparece com a cara do de sempre — a loja nunca quebra por causa disso.
  *

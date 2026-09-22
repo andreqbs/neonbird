@@ -32,7 +32,7 @@ import { STAGE_COUNT, stageAt, stageNumber } from '../game/stages';
 import { computeLayout } from '../game/layout';
 import World from '../game/World';
 import { captureSession, EMPTY_SESSION, restoreSession } from '../game/session';
-import { abilityFor } from '../game/abilities';
+import { powersOfRun } from '../game/powers';
 import { DEFAULT_BIRD, lookFor } from '../game/birds';
 import Backdrop from '../game/render/Backdrop';
 import Bird from '../game/render/Bird';
@@ -50,6 +50,7 @@ import economy from '../services/economy';
 import AdCover from '../ui/AdCover';
 import Button from '../ui/Button';
 import LifeBirds from '../ui/LifeBirds';
+import PowerHud from '../ui/PowerHud';
 import { theme } from '../ui/theme';
 
 const RESTART_DELAY = 650; // ms de carencia para nao reiniciar sem querer
@@ -118,10 +119,15 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   const wallet = eco.wallet;
   const [, redraw] = useReducer((n) => n + 1, 0);
 
-  // O passaro escolhido na loja: visual e habilidade, lidos uma vez por
-  // montagem. Trocar de passaro e coisa da loja, nunca do meio do voo.
+  // O passaro da partida: visual e poderes, lidos uma vez por montagem. E o
+  // que o servidor registrou ao abrir a partida — e e dele que valem os
+  // poderes. Sem partida (treino), o escolhido na loja. Trocar de passaro e
+  // coisa da loja, nunca do meio do voo.
   const birdIdRef = useRef(null);
-  if (birdIdRef.current === null) birdIdRef.current = (wallet && wallet.equippedBird) || DEFAULT_BIRD;
+  if (birdIdRef.current === null) {
+    const run = runRef.current.run;
+    birdIdRef.current = (run && run.bird) || (wallet && wallet.equippedBird) || DEFAULT_BIRD;
+  }
   const look = useMemo(() => lookFor(birdIdRef.current), []);
 
   // --- mundo (matter-js) ---
@@ -129,11 +135,11 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   const restoredRef = useRef(null);
   if (worldRef.current === null) {
     const w = new World(layout);
-    w.setAbility(abilityFor(economy.birdById(birdIdRef.current)));
+    // Os poderes sao os que o servidor mandou junto com a partida (powers.js).
+    w.setPowers(powersOfRun(runRef.current.run));
     w.setRun(runRef.current.run);
     // Veio de uma rotacao? Mantem o progresso (ver session.js).
     restoredRef.current = restoreSession(w, carry.current);
-    if (!restoredRef.current) w.ability.onRunStart?.(w);
 
     // A nova chance ou o escudo podem ter sido pagos enquanto a tela girava: o
     // servidor ja aceitou, entao o mundo novo aplica.
@@ -169,6 +175,21 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
       heavyWarn: new Animated.Value(0),
       // O giro das moedas: um valor so para todas.
       coinSpin: new Animated.Value(1),
+      // Poderes (powers.js): o passaro some no invisivel, a tela esfria no mais
+      // lento, e cada poder com relogio tem a sua barra no HUD.
+      ghost: new Animated.Value(world.ghost ? 1 : 0),
+      slow: new Animated.Value(world.speedFactor < 1 ? 1 : 0),
+      lastFx: { ghost: world.ghost ? 1 : 0, slow: world.speedFactor < 1 ? 1 : 0 },
+      powers: Object.fromEntries(
+        world.powerStatus.map((st) => [
+          st.id,
+          {
+            level: new Animated.Value(st.level),
+            active: new Animated.Value(st.active ? 1 : 0),
+            last: { level: st.level, active: st.active },
+          },
+        ])
+      ),
       pillars: world.pillars.map((p) => ({
         x: new Animated.Value(p.x),
         top: new Animated.Value(p.gapCenter - p.gap / 2),
@@ -183,8 +204,19 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
         // A moeda do vao: altura e se esta a vista.
         coinY: new Animated.Value(p.coin ? world.coinY(p) : 0),
         coinOn: new Animated.Value(p.coin && !p.coin.taken ? 1 : 0),
+        // Quanto o ima tirou a moeda do lugar, na horizontal.
+        coinDx: new Animated.Value(0),
         // Ultimo valor enviado de cada um (ver `sync`).
-        last: { iceTop: 0, iceBottom: 0, warnTop: 0, warnBottom: 0, driftGlow: 0, coinOn: -1, coinY: NaN },
+        last: {
+          iceTop: 0,
+          iceBottom: 0,
+          warnTop: 0,
+          warnBottom: 0,
+          driftGlow: 0,
+          coinOn: -1,
+          coinY: NaN,
+          coinDx: 0,
+        },
       })),
     };
   }
@@ -283,6 +315,33 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
       }
     }
 
+    // Poderes: o que eles mudam na tela, e a barra de cada um no HUD. A barra
+    // anda em degraus de 2% — suave o bastante, e sem mensagem a cada frame.
+    const fx = a.lastFx;
+    const ghost = world.ghost ? 1 : 0;
+    if (ghost !== fx.ghost) {
+      a.ghost.setValue(ghost);
+      fx.ghost = ghost;
+    }
+    const slow = world.speedFactor < 1 ? 1 : 0;
+    if (slow !== fx.slow) {
+      a.slow.setValue(slow);
+      fx.slow = slow;
+    }
+    for (const st of world.powerStatus) {
+      const v = a.powers[st.id];
+      if (!v) continue;
+      const level = Math.round(st.level * 50) / 50;
+      if (level !== v.last.level) {
+        v.level.setValue(level);
+        v.last.level = level;
+      }
+      if (st.active !== v.last.active) {
+        v.active.setValue(st.active ? 1 : 0);
+        v.last.active = st.active;
+      }
+    }
+
     for (let i = 0; i < world.pillars.length; i++) {
       const p = world.pillars[i];
       const t = a.pillars[i];
@@ -317,6 +376,11 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
         if (cy !== t.last.coinY) {
           t.coinY.setValue(cy);
           t.last.coinY = cy;
+        }
+        const cdx = p.coin.dx;
+        if (cdx !== t.last.coinDx) {
+          t.coinDx.setValue(cdx);
+          t.last.coinDx = cdx;
         }
       }
     }
@@ -403,6 +467,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     const rs = runRef.current;
     if (training || !rs.run) return false;
     if (world.continuesUsed >= (rs.run.maxContinues || 0)) return false;
+    if (extraChanceNeedsVideo(world)) return ads.canShow('rewarded');
     const w = economy.economyNow().wallet;
     const price = economy.priceOf('continue');
     const guardadas = (w && w.continues) || 0;
@@ -445,7 +510,12 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     } else {
       const r = await economy.finishRun(rs.run.id, { points: score, coinOrdinals, flightMs });
       result = r.ok
-        ? { coins: r.result.coins, stageBonus: r.result.stageBonus, collected }
+        ? {
+            coins: r.result.coins,
+            stageBonus: r.result.stageBonus,
+            coinMultiplier: r.result.coinMultiplier || 1,
+            collected,
+          }
         : {
             collected,
             error: r.offline
@@ -473,6 +543,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   const beginRun = useCallback(
     (run) => {
       runRef.current = { run, result: null, finishing: false, revivePaid: false, shieldPaid: false };
+      world.setPowers(powersOfRun(run));
       world.setRun(run);
       world.reset();
       phaseRef.current = world.phase;
@@ -838,16 +909,25 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   if (phase === PHASE.OVER) overMode = rs.result ? 'result' : rs.finishing ? 'finishing' : 'chance';
   const overKey = overMode === 'chance' ? 'chance' : overMode === 'finishing' ? 'busy' : 'over';
 
+  // A chance extra de um poder (a Brasa tem duas por partida) pode ser so em
+  // troca de video: ai as outras formas de pagar nem aparecem.
+  const chanceExtra = overMode === 'chance' && extraChanceNeedsVideo(world);
+  const chancesPorPartida = (rs.run && rs.run.maxContinues) || 1;
   const chanceOptions = [];
   if (overMode === 'chance') {
-    if (continuesInStock > 0) {
+    if (!chanceExtra && continuesInStock > 0) {
       chanceOptions.push({ key: 'stock', title: `Usar nova chance (${continuesInStock})` });
     }
-    if (online && continuePrice !== null && coinsInWallet >= continuePrice) {
+    if (!chanceExtra && online && continuePrice !== null && coinsInWallet >= continuePrice) {
       chanceOptions.push({ key: 'coins', title: `Continuar por ${continuePrice} moedas` });
     }
     if (online && canWatch) chanceOptions.push({ key: 'ad', title: 'Assistir e continuar' });
   }
+  const chanceLine = chanceExtra
+    ? 'Seu pássaro ainda tem uma chance extra: assista a um vídeo e volte deste ponto.'
+    : chancesPorPartida > 1
+      ? `A nova chance volta deste ponto — ${chancesPorPartida} por partida com este pássaro.`
+      : 'A nova chance volta deste ponto — uma por partida.';
 
   const result = rs.result;
   const showShieldOffer =
@@ -919,6 +999,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
               layout={layout}
               x={t.x}
               y={t.coinY}
+              dx={t.coinDx}
               visible={t.coinOn}
               spin={a.coinSpin}
             />
@@ -930,12 +1011,27 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           wing={a.wing}
           shield={shield}
           shieldLevel={a.shieldLevel}
+          ghost={a.ghost}
           look={look}
         />
         {burst > 0 && <ShieldBurst key={burst} layout={layout} y={a.birdY} />}
       </View>
 
       <Ground layout={layout} offset={a.ground} stage={look_} />
+
+      {/* Mais lento (poder do Geada): a tela esfria enquanto dura. */}
+      <Animated.View
+        style={{
+          pointerEvents: 'none',
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: layout.width,
+          height: layout.height,
+          backgroundColor: 'rgba(143,247,255,0.14)',
+          opacity: a.slow,
+        }}
+      />
 
       {/* Gravidade aumentada: enquanto dura, o topo da tela pisca em vermelho.
           A seta do canto (abaixo) e o que anuncia, dois segundos antes. */}
@@ -983,6 +1079,15 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
 
       {!training && phase !== PHASE.OVER && (
         <CoinHud ref={coinHudRef} value={world.coins} top={hudTop + 50} left={insets.left + hudSide} />
+      )}
+
+      {!training && phase !== PHASE.OVER && (
+        <PowerHud
+          powers={world.powers.list}
+          values={a.powers}
+          top={hudTop + 86}
+          left={insets.left + hudSide}
+        />
       )}
 
       <View
@@ -1140,7 +1245,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>Continuar daqui?</Text>
               <Text style={styles.panelText}>
-                {`Você caiu com ${s(world.score, 'ponto', 'pontos')}${world.coins ? ` e ${s(world.coins, 'moeda', 'moedas')}` : ''}. A nova chance volta deste ponto — uma por partida.`}
+                {`Você caiu com ${s(world.score, 'ponto', 'pontos')}${world.coins ? ` e ${s(world.coins, 'moeda', 'moedas')}` : ''}. ${chanceLine}`}
               </Text>
               <View style={styles.stageButtons}>
                 {chanceOptions.map((opt, i) => (
@@ -1184,12 +1289,10 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
                     <CoinFace size={20} />
                     <Text style={styles.earnText}>{`+${result.coins + result.stageBonus} moedas`}</Text>
                   </View>
-                  {result.stageBonus > 0 ? (
-                    <Text style={styles.earnDim}>
-                      {`${result.coins} no voo + ${result.stageBonus} de fase fechada`}
-                    </Text>
+                  {result.stageBonus > 0 || result.coinMultiplier > 1 ? (
+                    <Text style={styles.earnDim}>{earnDetail(result)}</Text>
                   ) : null}
-                  {result.coins < result.collected ? (
+                  {result.coins < result.collected * (result.coinMultiplier || 1) ? (
                     <Text style={styles.earnDim}>Algumas moedas não foram aceitas pelo servidor.</Text>
                   ) : null}
                 </View>
@@ -1248,6 +1351,22 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
  * As props `world` e `stageLabel` valem so para o primeiro desenho e para a
  * troca de fase, que sao os momentos em que a tela renderiza de qualquer jeito.
  */
+/**
+ * A nova chance da vez e a EXTRA de um poder (powers.js) que so aceita video?
+ * A primeira chance de toda partida continua com as tres formas de pagar.
+ */
+function extraChanceNeedsVideo(world) {
+  const rules = economy.economyNow().catalog?.rules;
+  const normais = (rules && rules.maxContinuesPerRun) || 1;
+  return world.continuesUsed >= normais && Boolean(world.powers.param('extraChance', 'videoOnly'));
+}
+
+/** De onde vieram as moedas: "6 no voo ×2 + 10 de fase fechada". */
+function earnDetail({ coins, stageBonus, coinMultiplier = 1 }) {
+  const voo = coinMultiplier > 1 ? `${coins / coinMultiplier} no voo ×${coinMultiplier}` : `${coins} no voo`;
+  return stageBonus > 0 ? `${voo} + ${stageBonus} de fase fechada` : voo;
+}
+
 const ScoreHud = forwardRef(function ScoreHud({ world, stageLabel, scoreTop, stageTop }, ref) {
   const scoreRef = useRef(null);
   const progressRef = useRef(null);

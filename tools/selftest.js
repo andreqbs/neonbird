@@ -24,7 +24,7 @@ const MODULES = [
   'src/game/stages.js',
   'src/game/layout.js',
   'src/game/coins.js',
-  'src/game/abilities.js',
+  'src/game/powers.js',
   'src/game/caps.js',
   'src/game/World.js',
   'src/game/session.js',
@@ -56,6 +56,8 @@ build();
 const { computeLayout, GAP_TO_BIRD, PORTRAIT_ZOOM } = require(path.join(BUILD, 'src/game/layout.js'));
 const { formatFlightTime } = require(path.join(BUILD, 'src/ui/flightTime.js'));
 const World = require(path.join(BUILD, 'src/game/World.js')).default;
+const { MAGNET_MAX_REACH } = require(path.join(BUILD, 'src/game/World.js'));
+const { combinePowers, powersOfRun } = require(path.join(BUILD, 'src/game/powers.js'));
 const { PHASE, SHIELD_FADE_FRAMES, STAGE_LENGTH } = require(path.join(
   BUILD,
   'src/game/constants.js'
@@ -1064,6 +1066,210 @@ section('Tempo de voo');
   );
 }
 
+// ------------------------------------------------------------ 3c. poderes
+
+/**
+ * Os poderes dos passaros (powers.js), rodando no mundo de verdade. Os numeros
+ * sao os do catalogo do servidor (server/catalog.go) — la e que se decide quem
+ * tem qual poder e quanto ele faz; aqui se confere o que cada um faz no voo.
+ */
+section('Poderes dos passaros');
+{
+  const Matter = require('matter-js');
+  const { FIXED_DT } = require(path.join(BUILD, 'src/game/constants.js'));
+  const FPS = Math.round(1000 / FIXED_DT); // 1000 / (1000 / 60) nao da 60 exato
+  const L = computeLayout(390, 844);
+  const R = L.birdRadius;
+
+  const IMA = { id: 'magnet', name: 'Ímã', params: { activeSeconds: 5, cooldownSeconds: 10, reach: 5 } };
+  const INVISIVEL = { id: 'ghost', name: 'Invisível', params: { activeSeconds: 2, cooldownSeconds: 10 } };
+  const LENTO = { id: 'slow', name: 'Câmera lenta', params: { activeSeconds: 2, cooldownSeconds: 10, percent: 20 } };
+
+  const semColunas = (w) => {
+    for (const p of w.pillars) {
+      p.x = L.width * 20;
+      w._syncPillar(p);
+    }
+  };
+  const voando = (poderes) => {
+    const w = new World(L);
+    w.setPowers(poderes);
+    w.flap();
+    semColunas(w);
+    return w;
+  };
+
+  // ---- o relogio: comeca recarregando, liga, recarrega de novo
+  {
+    const w = voando([IMA]);
+    let ligou = -1;
+    let desligou = -1;
+    for (let f = 1; f <= 20 * FPS && desligou < 0; f++) {
+      w.update();
+      const ligado = w.magnetReach > 0;
+      if (ligado && ligou < 0) ligou = f;
+      if (!ligado && ligou > 0) desligou = f;
+    }
+    check('ima: recarrega 10 s antes de ligar pela primeira vez', Math.abs(ligou - 10 * FPS) <= 1, `ligou no frame ${ligou}`);
+    check('...e fica ligado 5 s', Math.abs(desligou - ligou - 5 * FPS) <= 1, `${desligou - ligou} frames`);
+    const [st] = w.powerStatus;
+    check('o HUD recebe o poder recarregando do zero', st && st.id === 'magnet' && !st.active && st.level < 0.05);
+    w.destroy();
+
+    // Pausa, painel e anuncio nao gastam o relogio: so conta voando.
+    const parado = new World(L);
+    parado.setPowers([IMA]);
+    for (let f = 0; f < 15 * FPS; f++) parado.update(); // esperando o primeiro toque
+    check('esperando o toque, o relogio do poder nao anda', parado.powerStatus[0].level === 0);
+    parado.destroy();
+  }
+
+  // ---- ima: a moeda no alcance voa ate o passaro
+  {
+    // O ima e do mundo: aqui ele e ligado na mao, sem esperar o relogio.
+    const puxa = (alcance) => {
+      const w = new World(L);
+      w.setRun({ seed: 7, coinEvery: 1 }); // moeda em todo obstaculo
+      w.flap();
+      semColunas(w);
+      const p = w.pillars[0];
+      // Passaro dentro do vao, 3,4 raios ABAIXO da moeda: longe demais para
+      // encostar nela, perto o bastante para o ima.
+      p.x = L.birdX;
+      p.gapCenter = w.bird.position.y - R * 3.4;
+      p.coin.offset = 0.5;
+      w._syncPillar(p);
+      w.magnetReach = alcance;
+      for (let f = 0; f < 30 && w.phase === PHASE.PLAYING; f++) {
+        Matter.Body.setVelocity(w.bird, { x: 0, y: 0 }); // o passaro fica parado
+        w.update();
+      }
+      const pegou = w.coinOrdinals.includes(p.ordinal) && w.phase === PHASE.PLAYING;
+      w.destroy();
+      return pegou;
+    };
+    check('sem ima, a moeda fora do alcance do passaro fica la', puxa(0) === false);
+    check('com o ima ligado, ela voa ate o passaro e conta', puxa(R * 5) === true);
+
+    // O servidor so aceita moeda ate o obstaculo seguinte ao placar. O maior
+    // alcance possivel do ima nunca chega na moeda do obstaculo depois desse,
+    // em nenhum formato de tela.
+    const telas = [
+      [390, 844],
+      [360, 640],
+      [412, 915],
+      [768, 1024],
+      [1280, 720],
+    ];
+    const folgas = telas.map(([largura, altura]) => {
+      const T = computeLayout(largura, altura);
+      return T.spacing - T.pillarWidth / 2 - T.birdRadius - MAGNET_MAX_REACH * T.birdRadius;
+    });
+    check(
+      'o alcance maximo do ima nunca chega a moeda de dois obstaculos a frente',
+      folgas.every((f) => f > 0),
+      folgas.map((f) => f.toFixed(0)).join(' / ')
+    );
+  }
+
+  // ---- invisivel: atravessa, e nao some com o passaro dentro do cano
+  {
+    const w = voando([INVISIVEL]);
+    const ligaEm = 10 * FPS;
+    const apagaEm = ligaEm + 2 * FPS;
+    for (let f = 1; f <= apagaEm - 2; f++) w.update();
+    const ligado = w.ghost;
+
+    // Faltando 2 frames para o fim, um cano engole o passaro.
+    const p = w.pillars[0];
+    p.x = L.birdX;
+    p.gapCenter = L.playHeight / 2 - L.gap; // o passaro fica dentro do cano de baixo
+    w._syncPillar(p);
+
+    let dentroDepoisDoTempo = false;
+    let apagou = -1;
+    for (let f = 1; f <= 120 && w.phase === PHASE.PLAYING; f++) {
+      w.update();
+      if (f > 2 && w.ghost && w.overlapsObstacle()) dentroDepoisDoTempo = true;
+      if (!w.ghost && apagou < 0) apagou = f;
+    }
+    check('invisivel: liga sozinho depois de 10 s recarregando', ligado === true);
+    check('...atravessa o cano sem encerrar a partida', w.phase === PHASE.PLAYING);
+    check('...e passado o tempo, espera o passaro sair do cano para desligar', dentroDepoisDoTempo && apagou > 2, `desligou ${apagou} frames depois`);
+
+    // Desligado, o cano volta a derrubar.
+    p.x = L.birdX;
+    w._syncPillar(p);
+    w.update();
+    check('...e desligado, o cano volta a derrubar', w.phase === PHASE.OVER);
+    w.destroy();
+
+    // Invisivel atravessa sem gastar o escudo.
+    const e = new World(L);
+    e.flap();
+    semColunas(e);
+    e.grantShield();
+    e.ghost = true;
+    const q = e.pillars[0];
+    q.x = L.birdX;
+    q.gapCenter = L.playHeight / 2 - L.gap;
+    e._syncPillar(q);
+    e.update();
+    check('invisivel atravessa sem gastar o escudo', e.phase === PHASE.PLAYING && e.shieldHits === 0 && !e.shieldFading);
+    e.destroy();
+  }
+
+  // ---- mais lento: a fase atual anda 20% mais devagar
+  {
+    const w = voando([LENTO]);
+    for (let f = 1; f <= 10 * FPS; f++) w.update(); // liga no ultimo destes
+    const p = w.pillars[0];
+    const antes = p.x;
+    w.update();
+    const passoLento = antes - p.x;
+    for (let f = 0; f < 2 * FPS; f++) w.update(); // passou o tempo ligado
+    const depois = p.x;
+    w.update();
+    const passoNormal = depois - p.x;
+    check(
+      'mais lento: a fase anda 20% mais devagar enquanto dura',
+      Math.abs(passoLento - w.speed * 0.8) < 1e-9,
+      `${passoLento.toFixed(3)} px por frame, velocidade da fase ${w.speed.toFixed(3)}`
+    );
+    check('...e volta a velocidade da fase depois', Math.abs(passoNormal - w.speed) < 1e-9);
+    w.destroy();
+
+    // A conta e sobre a velocidade da fase ATUAL, que ja tem o aumento dela.
+    const f3 = voando([LENTO]);
+    f3.stage = 2;
+    f3.applyStage();
+    for (let f = 1; f <= 10 * FPS; f++) f3.update();
+    const q = f3.pillars[0];
+    const x0 = q.x;
+    f3.update();
+    check('...sobre a velocidade da fase atual (fase 3 ja acelerada)', Math.abs(x0 - q.x - f3.speed * 0.8) < 1e-9 && f3.speed > L.speed);
+    f3.destroy();
+  }
+
+  // ---- varios poderes no mesmo passaro
+  {
+    const w = voando([IMA, LENTO]);
+    for (let f = 1; f <= 10 * FPS; f++) w.update();
+    check('dois poderes no mesmo passaro funcionam juntos', w.magnetReach > 0 && w.speedFactor < 1);
+    check('...e cada um aparece no HUD', w.powerStatus.length === 2);
+    w.destroy();
+
+    const estranho = combinePowers([{ id: 'teletransporte', name: '???' }, IMA]);
+    check('poder que o app nao conhece e ignorado (servidor mais novo)', estranho.list.length === 1 && estranho.has('magnet'));
+    check(
+      'os poderes da partida sao os que o servidor mandou com ela',
+      powersOfRun({ powers: [LENTO] })[0] === LENTO && powersOfRun(null).length === 0
+    );
+    const brasa = combinePowers([{ id: 'extraChance', name: 'Segunda chance', params: { extra: 1, videoOnly: 1 } }]);
+    check('a chance extra diz para a tela que e so com video', brasa.param('extraChance', 'videoOnly') === 1);
+  }
+}
+
 // ------------------------------------------------------------- 4. reset
 
 section('Reinicio de partida');
@@ -1440,8 +1646,13 @@ async function economySection() {
   });
   const catalogo = {
     birds: [
-      { id: 'classic', name: 'Major', price: 0, ability: null },
-      { id: 'frost', name: 'Geada', price: 150, ability: { id: 'frost', status: 'soon' } },
+      { id: 'classic', name: 'Major', price: 0, powers: [] },
+      {
+        id: 'frost',
+        name: 'Geada',
+        price: 150,
+        powers: [{ id: 'slow', name: 'Câmera lenta', params: { activeSeconds: 2, cooldownSeconds: 10, percent: 20 } }],
+      },
     ],
     items: { shield: { price: 60 }, continue: { price: 100 } },
     rules: { maxLives: 5, coinEvery: 3, stageLength: 100, stageBonus: 10 },

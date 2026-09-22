@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -45,6 +46,27 @@ func (a *ambiente) daMoedas(t *testing.T, quem jogador, moedas int) {
 	if _, err := a.store.pool.Exec(ctx,
 		`update wallets set coins = $2 where player_id = $1`, quem.id, moedas); err != nil {
 		t.Fatalf("dar moedas: %v", err)
+	}
+}
+
+// daPassaro poe o passaro na conta e ja o escolhe — atalho para testar o poder
+// dele sem juntar moedas e passar pela loja.
+func (a *ambiente) daPassaro(t *testing.T, quem jogador, birdID string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := ensureWallet(ctx, a.store.pool, quem.id); err != nil {
+		t.Fatalf("carteira: %v", err)
+	}
+	if birdID != DefaultBird {
+		if _, err := a.store.pool.Exec(ctx,
+			`insert into owned_birds (player_id, bird_id) values ($1, $2) on conflict do nothing`,
+			quem.id, birdID); err != nil {
+			t.Fatalf("dar passaro: %v", err)
+		}
+	}
+	if _, err := a.store.pool.Exec(ctx,
+		`update wallets set equipped_bird = $2 where player_id = $1`, quem.id, birdID); err != nil {
+		t.Fatalf("escolher passaro: %v", err)
 	}
 }
 
@@ -96,29 +118,73 @@ func TestCarteiraNovaComecaComCincoVidas(t *testing.T) {
 	}
 }
 
-func TestCatalogoEPublicoEAsHabilidadesTemVaga(t *testing.T) {
+func TestCatalogoTrazOsPoderes(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	st, body := a.chama(t, nil, "GET", "/v1/catalog", nil)
 	if st != http.StatusOK {
 		t.Fatalf("catalogo: status %d", st)
 	}
 
+	// Os poderes que o app sabe executar (src/game/powers.js).
+	conhecidos := map[string]bool{
+		PowerIDMagnet: true, PowerIDGhost: true, PowerIDSlow: true,
+		PowerIDExtraChance: true, PowerIDCoinMultiplier: true,
+	}
 	passaros, _ := body["birds"].([]any)
 	if len(passaros) != 6 {
-		t.Fatalf("esperava o de sempre + 5 novos, vieram %d", len(passaros))
+		t.Fatalf("esperava o de sempre + 5 da loja, vieram %d", len(passaros))
 	}
 	for _, p := range passaros {
 		b, _ := p.(map[string]any)
+		poderes, ok := b["powers"].([]any)
+		if !ok {
+			t.Errorf("%v: os poderes vem como lista, veio %T", b["id"], b["powers"])
+			continue
+		}
 		if b["id"] == DefaultBird {
-			if b["ability"] != nil || num(t, b["price"]) != 0 {
-				t.Errorf("o passaro de sempre e de graca e sem habilidade: %v", b)
+			if len(poderes) != 0 || num(t, b["price"]) != 0 {
+				t.Errorf("o passaro de sempre e de graca e sem poder: %v", b)
 			}
 			continue
 		}
-		hab, _ := b["ability"].(map[string]any)
-		if hab == nil || hab["status"] != "soon" || num(t, b["price"]) <= 0 {
-			t.Errorf("passaro novo precisa de preco e da vaga da habilidade: %v", b)
+		if len(poderes) == 0 || num(t, b["price"]) <= 0 {
+			t.Errorf("passaro da loja precisa de preco e de poder: %v", b)
 		}
+		for _, x := range poderes {
+			pw, _ := x.(map[string]any)
+			id, _ := pw["id"].(string)
+			if !conhecidos[id] {
+				t.Errorf("%v tem um poder que o app nao conhece: %q", b["id"], id)
+			}
+			if pw["name"] == "" || pw["description"] == "" {
+				t.Errorf("poder sem nome ou sem frase para a loja: %v", pw)
+			}
+		}
+	}
+}
+
+// Quem ajusta um poder mexe so no numero (catalog.go): a frase da loja tem que
+// acompanhar sozinha, com virgula decimal.
+func TestFraseDoPoderAcompanhaOsNumeros(t *testing.T) {
+	casos := []struct {
+		poder Power
+		tem   []string
+	}{
+		{magnetPower(6, 12, 5), []string{"6 s ligado", "12 s recarregando"}},
+		{ghostPower(2.5, 10), []string{"2,5 s invisível"}},
+		{slowPower(1.5, 8, 25), []string{"25% mais devagar", "1,5 s", "8 s"}},
+		{extraChancePower(2, false), []string{"2 novas chances"}},
+		{coinMultiplierPower(3), []string{"3 vezes"}},
+	}
+	for _, c := range casos {
+		for _, trecho := range c.tem {
+			if !strings.Contains(c.poder.Description, trecho) {
+				t.Errorf("%s: a frase %q deveria ter %q", c.poder.ID, c.poder.Description, trecho)
+			}
+		}
+	}
+	if extraChancePower(1, true).Params["videoOnly"] != 1 || coinMultiplierPower(3).Params["multiplier"] != 3 {
+		t.Error("os numeros do poder tem que ir para o app nos params")
 	}
 }
 
@@ -334,6 +400,111 @@ func TestPlacarRapidoDemaisNaoRendeNada(t *testing.T) {
 	st, _ = a.chama(t, nil, "GET", "/v1/rankings/players", nil)
 	if st != http.StatusOK {
 		t.Fatalf("ranking: status %d", st)
+	}
+}
+
+// ------------------------------------------------------------------ poderes
+
+// Cometa: as moedas pegas no voo valem o dobro. O bonus de fase fechada, nao.
+func TestCometaDobraAsMoedasDoVoo(t *testing.T) {
+	a := novoAmbiente(t, nil)
+	ana := a.registra(t, "Ana")
+	a.daPassaro(t, ana, "comet")
+
+	id, seed := a.abrePartida(t, ana)
+	moedas := moedasDe(seed, 250)
+	st, body := a.fechaPartida(t, ana, id, 250, moedas)
+	if st != http.StatusOK {
+		t.Fatalf("fechar: status %d (%v)", st, body)
+	}
+	res, _ := body["result"].(map[string]any)
+	if got := num(t, res["coins"]); got != 2*len(moedas) {
+		t.Errorf("moedas do voo: %d, esperava %d (o dobro de %d)", got, 2*len(moedas), len(moedas))
+	}
+	if got := num(t, res["coinMultiplier"]); got != 2 {
+		t.Errorf("multiplicador: %d, esperava 2", got)
+	}
+	if got := num(t, res["stageBonus"]); got != 2*StageBonus {
+		t.Errorf("bonus de fase: %d, esperava %d (nao dobra)", got, 2*StageBonus)
+	}
+	saldo := num(t, carteira(t, body)["coins"])
+	if saldo != 2*len(moedas)+2*StageBonus {
+		t.Errorf("saldo: %d, esperava %d", saldo, 2*len(moedas)+2*StageBonus)
+	}
+
+	// Fechar de novo devolve o mesmo resultado — sem dobrar outra vez.
+	st, body = a.fechaPartida(t, ana, id, 250, moedas)
+	if st != http.StatusOK || num(t, carteira(t, body)["coins"]) != saldo {
+		t.Errorf("repeticao: status %d, saldo %v (esperava %d)", st, carteira(t, body)["coins"], saldo)
+	}
+	res, _ = body["result"].(map[string]any)
+	if num(t, res["coinMultiplier"]) != 2 {
+		t.Errorf("a repeticao perdeu o multiplicador: %v", res)
+	}
+}
+
+// Brasa: duas novas chances por partida no lugar de uma.
+func TestBrasaTemDuasNovasChances(t *testing.T) {
+	a := novoAmbiente(t, nil)
+	ana := a.registra(t, "Ana")
+	a.daMoedas(t, ana, 1000)
+	a.daPassaro(t, ana, "ember")
+
+	st, body := a.chama(t, &ana, "POST", "/v1/runs/start", nil)
+	if st != http.StatusOK {
+		t.Fatalf("abrir: status %d (%v)", st, body)
+	}
+	run, _ := body["run"].(map[string]any)
+	if got := num(t, run["maxContinues"]); got != 2 {
+		t.Errorf("novas chances da Brasa: %d, esperava 2", got)
+	}
+	if run["bird"] != "ember" {
+		t.Errorf("a partida deveria saber o passaro: %v", run["bird"])
+	}
+	id, _ := run["id"].(string)
+
+	for i := 1; i <= 2; i++ {
+		if st, body := a.chama(t, &ana, "POST", "/v1/runs/"+id+"/continue", map[string]any{"method": "coins"}); st != http.StatusOK {
+			t.Fatalf("nova chance %d: status %d (%v)", i, st, body)
+		}
+	}
+	st, body = a.chama(t, &ana, "POST", "/v1/runs/"+id+"/continue", map[string]any{"method": "coins"})
+	if st != http.StatusConflict || codigoDe(body) != "continue_limit" {
+		t.Errorf("terceira nova chance: status %d (%v), esperava 409 continue_limit", st, body)
+	}
+}
+
+// O poder e do passaro da ABERTURA da partida: trocar de passaro no meio nao
+// muda o que ela rende — nem para mais, nem para menos.
+func TestPoderValeDoPassaroDaAbertura(t *testing.T) {
+	a := novoAmbiente(t, nil)
+	ana := a.registra(t, "Ana")
+	a.daPassaro(t, ana, "comet")
+
+	id, seed := a.abrePartida(t, ana)
+	if st, body := a.chama(t, &ana, "POST", "/v1/me/bird", map[string]any{"birdId": DefaultBird}); st != http.StatusOK {
+		t.Fatalf("trocar para o de sempre: status %d (%v)", st, body)
+	}
+	moedas := moedasDe(seed, 60)
+	_, body := a.fechaPartida(t, ana, id, 60, moedas)
+	res, _ := body["result"].(map[string]any)
+	if got := num(t, res["coins"]); got != 2*len(moedas) {
+		t.Errorf("aberta com o Cometa: %d moedas, esperava %d", got, 2*len(moedas))
+	}
+
+	// Aberta com o de sempre, trocar para o Cometa no meio nao dobra nada.
+	id, seed = a.abrePartida(t, ana)
+	if st, body := a.chama(t, &ana, "POST", "/v1/me/bird", map[string]any{"birdId": "comet"}); st != http.StatusOK {
+		t.Fatalf("trocar para o Cometa: status %d (%v)", st, body)
+	}
+	moedas = moedasDe(seed, 60)
+	_, body = a.fechaPartida(t, ana, id, 60, moedas)
+	res, _ = body["result"].(map[string]any)
+	if got := num(t, res["coins"]); got != len(moedas) {
+		t.Errorf("aberta com o de sempre: %d moedas, esperava %d", got, len(moedas))
+	}
+	if got := num(t, res["coinMultiplier"]); got != 1 {
+		t.Errorf("multiplicador do de sempre: %d, esperava 1", got)
 	}
 }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Animated, View } from 'react-native';
 
 import { COIN_RADIUS } from '../coins';
@@ -9,11 +9,13 @@ import { COIN_RADIUS } from '../coins';
  * Uma por coluna, montada uma vez: quem muda a cada frame e so a posicao
  * (`x` e `y`, animados), o giro compartilhado por todas (`spin`) e se ela esta
  * a vista (`visible`, que so troca quando a coluna nasce ou a moeda e pega).
- * Nada disso passa pelo React durante o voo.
+ * `dx` e o quanto o ima (poder do Toxina) tirou a moeda do lugar, na
+ * horizontal. Nada disso passa pelo React durante o voo.
  */
-export default function Coin({ layout, x, y, visible, spin }) {
+export default function Coin({ layout, x, dx, y, visible, spin }) {
   const r = layout.birdRadius * COIN_RADIUS;
   const d = r * 2;
+  const left = useMemo(() => (dx ? Animated.add(x, dx) : x), [x, dx]);
 
   return (
     <Animated.View
@@ -25,7 +27,7 @@ export default function Coin({ layout, x, y, visible, spin }) {
         width: d,
         height: d,
         opacity: visible,
-        transform: [{ translateX: x }, { translateY: y }, { scaleX: spin }],
+        transform: [{ translateX: left }, { translateY: y }, { scaleX: spin }],
       }}
     >
       <CoinFace size={d} />

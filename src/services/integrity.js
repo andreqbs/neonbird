@@ -26,7 +26,7 @@ import { sha256Hex } from './sha256';
  */
 
 /** O NUMERO do projeto do Google Cloud (so digitos), nao o id nem o nome. */
-export const DEFAULT_CLOUD_PROJECT_NUMBER = '';
+export const DEFAULT_CLOUD_PROJECT_NUMBER = '943404852239';
 
 const CLOUD_PROJECT_NUMBER = String(
   process.env.EXPO_PUBLIC_CLOUD_PROJECT_NUMBER || DEFAULT_CLOUD_PROJECT_NUMBER

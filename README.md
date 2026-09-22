@@ -267,21 +267,47 @@ moedas, vidas, escudo, nova chance, loja ou ranking — e a tela diz isso. Recor
 e *Seus voos* continuam funcionando, porque moram no aparelho e não são moeda de
 troca.
 
-### Os pássaros e as habilidades
+### Os pássaros e os poderes
 
 O **desenho** de cada pássaro está em [birds.js](src/game/birds.js) (cores e
 acessório: cristais, chamas, antena e máscara, visor, rastro) e é feito por
 [BirdFigure.js](src/game/render/BirdFigure.js) — o mesmo na loja e no voo, só com
-Views. **Nome, preço e habilidade vêm do servidor** ([catalog.go](server/catalog.go)):
-mudar preço é redeploy do servidor, sem build nova do app.
+Views. **Nome, preço e poderes vêm do servidor** ([catalog.go](server/catalog.go)).
 
-As **habilidades** ainda não existem, mas a vaga está pronta: cada pássaro novo
-chega do servidor com `ability: {id, status: "soon"}` (o de sempre, sem
-habilidade, com `null`), a loja mostra *"em breve"*, e o mundo do jogo já chama os
-ganchos da habilidade do pássaro escolhido — início de partida e de fase, cada
-frame, moeda pega, batida, nova chance ([abilities.js](src/game/abilities.js)).
-Se uma habilidade mexer em moeda ou pontuação, a regra também precisa entrar no
-servidor, senão a conferência recusa o que ela rendeu.
+| Pássaro | Preço | Poder | O que faz |
+| --- | --- | --- | --- |
+| Major | grátis | — | O de sempre, sem poder. |
+| Geada | 150 | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
+| Brasa | 320 | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
+| Toxina | 480 | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
+| Fantasma | 750 | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
+| Cometa | 1200 | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
+
+Os três poderes com relógio (câmera lenta, ímã, invisível) **ligam sozinhos, em
+ciclo**: a partida começa recarregando, o poder liga, recarrega de novo. O relógio
+só anda com o pássaro voando — pausa, painel e anúncio não gastam. No canto da
+tela, cada poder tem uma barra que enche enquanto recarrega e esvazia enquanto
+está ligado; o Fantasma fica translúcido e a tela esfria na câmera lenta. Se o
+tempo do invisível acabar com o pássaro dentro do cano, ele espera sair.
+
+**Onde mexer** — tudo em [server/catalog.go](server/catalog.go), e é só
+redeploy do servidor, **sem build nova do app**:
+
+- **Trocar o poder de um pássaro:** na lista `Birds`, troque o que está em
+  `Powers: []Power{...}`.
+- **Dar mais de um poder ao mesmo pássaro:** separe por vírgula —
+  `Powers: []Power{PowerMagnet, PowerDoubleCoins}`. Todos funcionam juntos.
+- **Mudar os números** (tempo ligado, recarga, alcance do ímã, quanto mais lento,
+  quantas chances, por quanto multiplica): no bloco `OS NUMEROS DE CADA PODER`.
+  A frase da loja acompanha sozinha.
+- **Criar um poder novo:** o comportamento no voo entra em
+  [powers.js](src/game/powers.js), com o mesmo `id` do catálogo — aí precisa de
+  build nova. Se ele mexer em moeda ou em nova chance, a regra também entra no
+  servidor ([economy.go](server/economy.go)).
+
+Moedas em dobro e chance extra **valem pelo servidor**, pelo pássaro registrado
+na **abertura** da partida: trocar de pássaro no meio não muda o que ela rende, e
+um app adulterado não inventa poder que o servidor não deu.
 
 ---
 
@@ -712,7 +738,7 @@ src/
     World.js                 motor de fisica (matter-js): gravidade, colisoes e moedas
     coins.js                 onde ficam as moedas (a mesma conta do servidor)
     birds.js                 o visual de cada passaro
-    abilities.js             a vaga das habilidades dos passaros
+    powers.js                o que cada poder dos passaros faz no voo
     session.js               o que sobrevive a uma rotacao no meio da partida
     render/                  ceu, passaro, moeda, colunas, chao e placar (so Views)
   screens/
@@ -736,14 +762,15 @@ src/
     useEconomy.js            a carteira, para as telas redesenharem
     useAds.js                o video premiado e o premio confirmado no servidor
     usePlayer.js             o jogador deste aparelho, para as telas
-  ui/                        tema, botao, passaros de vida e da loja, cobertura do anuncio
+  ui/                        tema, botao, passaros de vida e da loja, cobertura do anuncio,
+                             e o PowerHud (os poderes no canto da tela)
 server/                      o servidor do jogo (Go + Postgres, docker)
   main.go                    configuracao, subida e encerramento limpo
   api.go                     rotas de conta, grupos e ranking
   api_economy.go             rotas de partida, loja e anuncios
   store.go                   regras e consultas de conta, grupos e ranking
   economy.go                 carteira, partidas, loja e premios (com livro-razao)
-  catalog.go                 passaros, precos e regras da economia
+  catalog.go                 passaros, poderes, precos e regras da economia
   coins.go                   a conta das moedas, igual a do app
   ssv.go                     a verificacao do anuncio premiado pelo Google
   season.go                  a rodada da semana, igual a do app
@@ -849,9 +876,6 @@ ligada ao placar.
 - `STAGE_LENGTH` de 10 para 50 quando a troca de fase estiver aprovada.
 - Fases 6+ (é só mais um item em `src/game/stages.js`).
 - Vibração no impacto (`expo-haptics`).
-- Habilidades dos pássaros — o lugar já existe em [abilities.js](src/game/abilities.js).
 - Recuperar a conta ao trocar de aparelho (login Google/Apple): hoje moedas e
   pássaros ficam presos ao código do aparelho.
-- Revisar a política de privacidade em `privacidade/` — ela ainda descreve um
-  jogo sem servidor.
 - Build instalável: `npx expo prebuild` + `eas build -p android --profile preview`.
