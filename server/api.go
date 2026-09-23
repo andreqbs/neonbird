@@ -39,6 +39,7 @@ func (a *API) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/me/bird", a.equipBird)
 	mux.HandleFunc("POST /v1/shop/buy", a.buy)
 	mux.HandleFunc("POST /v1/shop/purchase", a.purchaseBird)
+	mux.HandleFunc("POST /v1/shop/upgrade", a.upgradeBird)
 	mux.HandleFunc("POST /v1/runs/start", a.startRun)
 	mux.HandleFunc("POST /v1/runs/{id}/finish", a.finishRun)
 	mux.HandleFunc("POST /v1/runs/{id}/continue", a.continueRun)

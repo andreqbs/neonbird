@@ -61,7 +61,22 @@ Passo a passo na [Parte 5 do server/README.md](server/README.md#parte-5--compra-
 - [ ] **Play Console:** ficha **Segurança dos dados** com *Informações
       financeiras → Histórico de compras*; publicar a política **v2.2**.
 - [ ] **Preços de teste em moedas** (Geada 10 ... Fantasma 18, escudo 5, nova
-      chance 5) estão em produção: decidir se voltam aos originais.
+      chance 5, estrelas 10/20/40/80/160) estão em produção: decidir os
+      definitivos.
+
+### Avisos do Play Console
+
+Nenhum dos dois impede publicar.
+
+- [x] **APIs descontinuadas de ponta a ponta (Android 15).** Os parâmetros de
+      barra saíram do tema pelo plugin
+      [withEdgeToEdgeBars](plugins/withEdgeToEdgeBars.js) — vale no próximo
+      build. O que o React Native chama por dentro só sai com uma versão nova
+      dele, então o aviso pode continuar aparecendo.
+- [ ] **Restrição de orientação em tela grande.** Decisão sua: o jogo é só
+      retrato de propósito (em paisagem fica fácil demais e desequilibra o
+      ranking) e `appCategory="game"` é a saída oficial para jogos. Soltar a
+      trava significaria acertar o layout e a dificuldade em paisagem.
 
 ### Servidor no ar
 

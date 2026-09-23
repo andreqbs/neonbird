@@ -295,11 +295,29 @@ Views. **Nome, preço e poderes vêm do servidor** ([catalog.go](server/catalog.
 | Pássaro | Compra | Poder | O que faz |
 | --- | --- | --- | --- |
 | Major | grátis | — | O de sempre, sem poder. |
-| Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
+| Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
 | Brasa | moedas ou dinheiro | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
-| Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
-| Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
+| Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 4 s (8 s com 5 estrelas); depois recarrega 10 s. |
+| Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
 | Cometa | **só dinheiro** | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
+
+### As estrelas
+
+Cada pássaro com poder de **tempo** evolui até **5 estrelas**, e cada estrela
+**estica o tempo do poder**. As estrelas se compram com **moedas**, na loja, e
+custam **10 · 20 · 40 · 80 · 160** (preços de teste). Pássaro recém-comprado
+começa sem estrela nenhuma.
+
+| Pássaro | Sem estrela | ★ | ★★ | ★★★ | ★★★★ | ★★★★★ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Geada (câmera lenta) | 2 s | 2,5 s | 3 s | 3,5 s | 4 s | 6 s |
+| Toxina (ímã) | 4 s | 5 s | 6 s | 7 s | 7,5 s | 8 s |
+| Fantasma (invisível) | 2 s | 2,5 s | 3 s | 3,5 s | 4 s | 6 s |
+
+**Brasa e Cometa não evoluem** e já aparecem com as cinco estrelas: o poder deles
+não é de tempo — é uma chance a mais por partida e as moedas em dobro.
+
+A recarga não muda com as estrelas: continua 10 s para os três.
 
 Os três poderes com relógio (câmera lenta, ímã, invisível) **ligam sozinhos, em
 ciclo**: a partida começa recarregando, o poder liga, recarrega de novo. O relógio
@@ -315,9 +333,12 @@ redeploy do servidor, **sem build nova do app**:
   `Powers: []Power{...}`.
 - **Dar mais de um poder ao mesmo pássaro:** separe por vírgula —
   `Powers: []Power{PowerMagnet, PowerDoubleCoins}`. Todos funcionam juntos.
-- **Mudar os números** (tempo ligado, recarga, alcance do ímã, quanto mais lento,
-  quantas chances, por quanto multiplica): no bloco `OS NUMEROS DE CADA PODER`.
-  A frase da loja acompanha sozinha.
+- **Mudar os números** (tempo de cada estrela, recarga, alcance do ímã, quanto
+  mais lento, quantas chances, por quanto multiplica): no bloco
+  `OS NUMEROS DE CADA PODER` — o tempo ligado é a lista de 6 valores, do sem
+  estrela até as cinco. A frase da loja acompanha sozinha.
+- **Preço das estrelas:** `UpgradePrices`, no mesmo arquivo. **Quem evolui:** o
+  campo `Upgradable` de cada pássaro na lista `Birds`.
 - **Criar um poder novo:** o comportamento no voo entra em
   [powers.js](src/game/powers.js), com o mesmo `id` do catálogo — aí precisa de
   build nova. Se ele mexer em moeda ou em nova chance, a regra também entra no
@@ -348,11 +369,40 @@ mais fácil, o que desequilibraria o ranking.
 - **Build nova:** a trava do `app.json` e o plugin só chegam ao Android com build
   nova (`npx expo prebuild --clean`, ou EAS). Até lá, o `lockAsync` já trava o
   build de desenvolvimento que está instalado.
+- **O aviso do Play Console:** a ficha de qualidade em tela grande pede para
+  soltar a trava de orientação e deixar a janela redimensionável. É recomendação,
+  não bloqueio — o retrato aqui é de propósito, e `appCategory="game"` é a saída
+  que o próprio Android abre para jogos.
 
 A área de jogo ainda pode mudar de tamanho (multi-janela do Android, janela do
 navegador). Quando muda, o mundo é refeito e o progresso atravessa: placar,
 moedas, novas chances e tempo de voo ([session.js](src/game/session.js), coberto
 por testes).
+
+---
+
+## Tela de ponta a ponta
+
+Do Android 15 em diante o jogo desenha **de ponta a ponta**: a tela ocupa tudo,
+por baixo da barra de status e da barra de navegação. Não é escolha — o Android
+16 tornou obrigatório e o Expo SDK 57 já vem assim (`edgeToEdgeEnabled=true`).
+
+- **O que o jogo faz com isso:** todo texto e todo botão respeitam as bordas
+  seguras (`useSafeAreaInsets`, do `react-native-safe-area-context`). Durante a
+  partida a barra de status some (`<StatusBar hidden />` no [App.js](App.js)).
+- **Os parâmetros que caíram:** pintar a barra de status ou a de navegação
+  (`android:statusBarColor`, `android:navigationBarColor` e companhia) foi
+  descontinuado no Android 15, e o Play Console avisa quem ainda declara isso no
+  tema. Quem punha esses itens no tema era o próprio Expo; o plugin
+  [withEdgeToEdgeBars](plugins/withEdgeToEdgeBars.js) tira todos.
+- **Até o Android 14 nada muda de cor:** nesses aparelhos ninguém liga o ponta a
+  ponta, e sem a cor no tema a barra de status voltaria ao preto do tema padrão.
+  O mesmo plugin põe `colorPrimaryDark` no lugar, com o azul do fundo do jogo —
+  esse não é parâmetro descontinuado, é o AppCompat que pinta a barra com ele nos
+  Androids antigos. Do 15 em diante ninguém olha nenhum dos dois.
+- **O que ainda pode sobrar do aviso:** o React Native chama essas mesmas funções
+  por dentro (`WindowUtil.kt`) na hora de ligar o ponta a ponta. Isso só sai com
+  uma versão nova do React Native — e é aviso, não impede publicar.
 
 ---
 

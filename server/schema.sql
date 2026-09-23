@@ -164,6 +164,10 @@ create index if not exists bird_purchases_player on bird_purchases (player_id);
 -- fica vazio.
 alter table owned_birds add column if not exists purchase_token text;
 
+-- As estrelas do passaro: cada uma comprada com moedas estica o tempo do poder
+-- dele (catalog.go). Passaro recem-comprado comeca em 0.
+alter table owned_birds add column if not exists level integer not null default 0;
+
 -- Video premiado confirmado pelo GOOGLE (SSV). Uma linha por transacao: a chave
 -- primaria faz o mesmo aviso repetido — o Google tenta de novo quando nao
 -- recebe resposta — valer uma vez so. O app troca cada linha por um premio

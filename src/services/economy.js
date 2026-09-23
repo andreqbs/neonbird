@@ -201,6 +201,14 @@ export async function buy(item, birdId) {
 }
 
 /**
+ * Compra a proxima estrela de um passaro, em moedas: mais tempo de poder. Quem
+ * cobra, guarda o nivel e refaz a conta do poder e o servidor.
+ */
+export async function upgradeBird(birdId) {
+  return absorb(await requestRegistered('POST', '/v1/shop/upgrade', { body: { birdId } }));
+}
+
+/**
  * Troca uma compra com dinheiro (Google Play) pelo passaro dela — quem confere o
  * pagamento com o Google e o servidor (server/billing.go). Repetir e seguro: a
  * mesma compra devolve a mesma carteira. Pagamento ainda pendente volta com
@@ -289,6 +297,7 @@ export default {
   continueRun,
   useShield,
   buy,
+  upgradeBird,
   claimBirdPurchase,
   equip,
   claimAd,

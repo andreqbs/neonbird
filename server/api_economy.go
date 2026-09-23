@@ -202,6 +202,26 @@ func (a *API) buy(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet})
 }
 
+// upgradeBird compra a proxima estrela de um passaro, em moedas.
+func (a *API) upgradeBird(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		BirdID string `json:"birdId"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	wallet, err := a.store.UpgradeBird(r.Context(), p.ID, body.BirdID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet})
+}
+
 // purchaseBird troca uma compra com dinheiro (Google Play) pelo passaro dela.
 //
 // Repetir e seguro: a mesma compra devolve a mesma carteira. E tambem o caminho

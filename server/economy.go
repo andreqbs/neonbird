@@ -32,6 +32,9 @@ type Wallet struct {
 	Continues    int      `json:"continues"`
 	EquippedBird string   `json:"equippedBird"`
 	OwnedBirds   []string `json:"ownedBirds"`
+	// As estrelas de cada passaro que o jogador tem (catalog.go). O que nao
+	// evolui aparece ja no maximo.
+	BirdLevels map[string]int `json:"birdLevels"`
 	// Tempo de voo somado de todas as partidas, em ms. Nao e saldo — nao se
 	// gasta nem se compra —, mas mora aqui porque a Home ja busca a carteira.
 	FlightMs int64 `json:"flightMs"`
@@ -134,21 +137,24 @@ func readWallet(ctx context.Context, q querier, playerID string) (Wallet, error)
 	}
 
 	linhas, err := q.Query(ctx,
-		`select bird_id from owned_birds where player_id = $1 order by acquired_at, bird_id`, playerID)
+		`select bird_id, level from owned_birds where player_id = $1 order by acquired_at, bird_id`, playerID)
 	if err != nil {
 		return Wallet{}, err
 	}
 	defer linhas.Close()
 
 	w.OwnedBirds = []string{DefaultBird}
+	w.BirdLevels = map[string]int{}
 	for linhas.Next() {
 		var id string
-		if err := linhas.Scan(&id); err != nil {
+		var nivel int
+		if err := linhas.Scan(&id, &nivel); err != nil {
 			return Wallet{}, err
 		}
 		if id != DefaultBird {
 			w.OwnedBirds = append(w.OwnedBirds, id)
 		}
+		w.BirdLevels[id] = birdOrDefault(id).starsFor(nivel)
 	}
 	return w, linhas.Err()
 }
@@ -258,13 +264,18 @@ func (s *Store) StartRun(ctx context.Context, playerID string) (RunSession, Wall
 		}
 
 		bird := birdOrDefault(w.EquippedBird)
+		// As estrelas do passaro esticam o tempo dos poderes dele (catalog.go).
+		nivel, err := birdLevel(ctx, tx, playerID, bird.ID)
+		if err != nil {
+			return err
+		}
 		run = RunSession{
 			ID:           newUUID(),
 			Seed:         newSeed(),
 			CoinEvery:    CoinEvery,
 			MaxContinues: MaxContinuesPerRun + bird.extraContinues(),
 			Bird:         bird.ID,
-			Powers:       bird.powerList(),
+			Powers:       bird.powersAtLevel(nivel),
 		}
 		if err := tx.QueryRow(ctx, `
 			insert into game_sessions (id, player_id, seed, bird) values ($1, $2, $3, $4)
@@ -571,6 +582,65 @@ func (s *Store) Buy(ctx context.Context, playerID, item, birdID string) (Wallet,
 			return rule(400, "item desconhecido")
 		}
 
+		wallet, err = readWallet(ctx, tx, playerID)
+		return err
+	})
+	return wallet, err
+}
+
+// birdLevel: as estrelas que este jogador tem neste passaro (0 se nao tem).
+func birdLevel(ctx context.Context, q querier, playerID, birdID string) (int, error) {
+	var nivel int
+	err := q.QueryRow(ctx,
+		`select level from owned_birds where player_id = $1 and bird_id = $2`, playerID, birdID).Scan(&nivel)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return nivel, err
+}
+
+// UpgradeBird compra a proxima estrela de um passaro: mais tempo de poder.
+func (s *Store) UpgradeBird(ctx context.Context, playerID, birdID string) (Wallet, error) {
+	var wallet Wallet
+	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		w, err := lockWallet(ctx, tx, playerID)
+		if err != nil {
+			return err
+		}
+		b, ok := birdByID(birdID)
+		if !ok || len(b.Powers) == 0 {
+			return ruleCode(404, "bird_not_found", "pássaro não encontrado")
+		}
+		if !b.Upgradable {
+			return ruleCode(409, "not_upgradable", "este pássaro já voa no máximo")
+		}
+
+		var nivel int
+		err = tx.QueryRow(ctx,
+			`select level from owned_birds where player_id = $1 and bird_id = $2 for update`,
+			playerID, b.ID).Scan(&nivel)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ruleCode(409, "not_owned", "você ainda não tem este pássaro")
+		}
+		if err != nil {
+			return err
+		}
+		if nivel >= MaxBirdLevel {
+			return ruleCode(409, "max_level", "este pássaro já está com as cinco estrelas")
+		}
+		preco := b.UpgradePrice(nivel)
+		if w.Coins < preco {
+			return ruleCode(409, "not_enough_coins", "moedas insuficientes")
+		}
+
+		if _, err := tx.Exec(ctx,
+			`update owned_birds set level = level + 1 where player_id = $1 and bird_id = $2`,
+			playerID, b.ID); err != nil {
+			return err
+		}
+		if err := applyDelta(ctx, tx, playerID, "upgrade_bird", b.ID, delta{coins: -preco}); err != nil {
+			return err
+		}
 		wallet, err = readWallet(ctx, tx, playerID)
 		return err
 	})

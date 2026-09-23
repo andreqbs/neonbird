@@ -1817,6 +1817,22 @@ async function economySection() {
     );
     check('e a carteira nao muda', economy.economyNow().wallet.coins === 500);
 
+    // ---- evoluir o passaro (estrelas)
+    pedidos.length = 0;
+    responder = (p) =>
+      p.path === '/v1/shop/upgrade'
+        ? { status: 200, body: { wallet: carteira({ coins: 490, birdLevels: { frost: 1 } }) } }
+        : naoAchou;
+    const estrela = await economy.upgradeBird('frost');
+    check(
+      'a estrela do passaro e comprada no servidor, e a carteira volta com ela',
+      estrela.ok &&
+        pedidos[0]?.path === '/v1/shop/upgrade' &&
+        JSON.stringify(pedidos[0]?.corpo) === JSON.stringify({ birdId: 'frost' }) &&
+        economy.economyNow().wallet.birdLevels.frost === 1,
+      JSON.stringify(pedidos[0]?.corpo)
+    );
+
     // ---- anuncio
     let tentativas = 0;
     responder = (p) => {
@@ -2394,9 +2410,73 @@ async function billingSection() {
   }
 }
 
+// ------------------------------------------------------ 12. o tema do Android
+
+/**
+ * O tema que o Android recebe (plugins/withEdgeToEdgeBars.js). Do Android 15 em
+ * diante o jogo desenha de ponta a ponta, e o sistema ignora quem tenta pintar a
+ * barra de status ou a de navegacao — quem ainda declara esses parametros leva
+ * aviso do Play Console. O plugin tira todos; aqui se confere que ele continua
+ * tirando, que o resto do tema fica de pe e que o app.json chama os dois plugins
+ * do Android.
+ */
+function androidThemeSection() {
+  section('O tema do Android');
+
+  const plugin = require(path.join(ROOT, 'plugins/withEdgeToEdgeBars.js'));
+  const item = (name, value) => ({ _: value, $: { name } });
+
+  // O tema do jeito que o Expo entrega, antes do plugin.
+  const tema = {
+    resources: {
+      style: [
+        {
+          $: { name: 'AppTheme', parent: 'Theme.AppCompat.DayNight.NoActionBar' },
+          item: [
+            item('android:editTextBackground', '@drawable/rn_edit_text_material'),
+            item('colorPrimary', '@color/colorPrimary'),
+            item('android:statusBarColor', '@android:color/transparent'),
+            item('android:navigationBarColor', '@android:color/transparent'),
+            item('android:windowBackground', '@color/activityBackground'),
+          ],
+        },
+      ],
+    },
+  };
+
+  const itens = plugin.ajustaTema(tema).resources.style[0].item;
+  const nomes = itens.map((i) => i.$.name);
+  const valor = (nome) => (itens.find((i) => i.$.name === nome) || {})._;
+
+  check(
+    'o tema sai sem os parametros de barra descontinuados no Android 15',
+    plugin.PARAMETROS_DESCONTINUADOS.every((p) => !nomes.includes(p))
+  );
+  check(
+    '...e o resto do tema fica de pe',
+    ['colorPrimary', 'android:windowBackground', 'android:editTextBackground'].every((p) =>
+      nomes.includes(p)
+    )
+  );
+  check(
+    '...e ate o Android 14 a barra de status continua com o azul do jogo',
+    valor('colorPrimaryDark') === plugin.COR_DA_BARRA
+  );
+
+  const app = JSON.parse(fs.readFileSync(path.join(ROOT, 'app.json'), 'utf8')).expo;
+  const plugins = (app.plugins || []).filter((p) => typeof p === 'string');
+  check('o app.json chama o plugin do tema', plugins.includes('./plugins/withEdgeToEdgeBars'));
+  check(
+    'o app.json marca o jogo como jogo (e o que segura o retrato em tela grande)',
+    plugins.includes('./plugins/withGameCategory')
+  );
+  check('o jogo abre em retrato', app.orientation === 'portrait');
+}
+
 seasonSection();
 identitySection();
 coinsSection();
+androidThemeSection();
 
 economySection()
   .then(cloudSection)

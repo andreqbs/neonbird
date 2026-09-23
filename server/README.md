@@ -552,12 +552,13 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | `GET /health` | Diz se o banco responde e qual é a rodada. É o exame do Docker. |
 | `POST /v1/players` | Cadastra o aparelho ou troca o apelido. Corpo: `{id, secret, name}`. |
 | `GET /v1/catalog` | Pássaros, preços e regras. Público. |
-| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros e tempo de voo (`flightMs`) do jogador. |
+| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros (com as estrelas de cada um em `birdLevels`) e tempo de voo (`flightMs`) do jogador. |
 | `POST /v1/runs/start` | Abre uma partida: desconta uma vida e devolve a semente das moedas, o pássaro (`bird`), os poderes dele (`powers`) e quantas novas chances cabem (`maxContinues`). |
 | `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals, flightMs}` — os números dos obstáculos das moedas pegas e o tempo voando de fato, em ms. Fechar de novo devolve o mesmo resultado. Partida que rendeu algo leva também o cabeçalho `X-Integrity-Token` ([passo 12](#12-o-projeto-no-google-cloud)). |
 | `POST /v1/runs/{id}/continue` | Nova chance. Corpo: `{method}` — `stock` (guardada) ou `coins`. |
 | `POST /v1/runs/{id}/shield` | Usa um escudo guardado na partida. |
 | `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `shield` ou `continue`. Pássaro sem preço em moedas (o Cometa) responde `coins_not_accepted`. |
+| `POST /v1/shop/upgrade` | Compra a próxima estrela de um pássaro, em moedas. Corpo: `{birdId}`. Recusa pássaro que não é do jogador (`not_owned`), que não evolui (`not_upgradable`) ou que já está no máximo (`max_level`). |
 | `POST /v1/shop/purchase` | Troca uma compra com dinheiro pelo pássaro. Corpo: `{birdId, purchaseToken}` — o token vem do Google Play. Confere com o Google; pagamento pendente responde **202**. Repetir é seguro, e é também o caminho da restauração ([parte 5](#parte-5--compra-com-dinheiro-google-play)). |
 | `POST /v1/me/bird` | Escolhe o pássaro das próximas partidas. Corpo: `{birdId}`. |
 | `POST /v1/ads/claim` | Troca um vídeo confirmado pelo prêmio. Corpo: `{kind}` — `lives`, `shield` ou `continue`. Sem confirmação ainda, responde **202**. |
@@ -668,16 +669,37 @@ partida.
 | Pássaro | Compra | Poder | O que faz |
 | --- | --- | --- | --- |
 | Major | grátis | — | O de sempre, sem poder. |
-| Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s; depois recarrega 10 s. |
+| Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
 | Brasa | moedas ou dinheiro | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
-| Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 5 s; depois recarrega 10 s. |
-| Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s; depois recarrega 10 s. |
+| Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 4 s (8 s com 5 estrelas); depois recarrega 10 s. |
+| Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
 | Cometa | **só dinheiro** | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
 
-- **Trocar o poder de um pássaro:** lista `Birds`, campo `Powers`.
+### As estrelas
+
+Cada pássaro com poder de **tempo** evolui até **5 estrelas**, e cada estrela
+**estica o tempo do poder**. As estrelas se compram com **moedas**, na loja, e
+custam **10 · 20 · 40 · 80 · 160** (preços de teste). Pássaro recém-comprado
+começa sem estrela nenhuma.
+
+| Pássaro | Sem estrela | ★ | ★★ | ★★★ | ★★★★ | ★★★★★ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Geada (câmera lenta) | 2 s | 2,5 s | 3 s | 3,5 s | 4 s | 6 s |
+| Toxina (ímã) | 4 s | 5 s | 6 s | 7 s | 7,5 s | 8 s |
+| Fantasma (invisível) | 2 s | 2,5 s | 3 s | 3,5 s | 4 s | 6 s |
+
+**Brasa e Cometa não evoluem** e já aparecem com as cinco estrelas: o poder deles
+não é de tempo — é uma chance a mais por partida e as moedas em dobro.
+
+A recarga não muda com as estrelas: continua 10 s para os três.
+
+- **Trocar o poder de um pássaro:** lista `Birds`, campo `Powers`; quem evolui,
+  o campo `Upgradable`.
 - **Mais de um poder no mesmo pássaro:** `Powers: []Power{PowerMagnet, PowerDoubleCoins}`.
-- **Os números** (segundos ligado, recarga, alcance, porcentagem, chances,
-  multiplicador): bloco `OS NUMEROS DE CADA PODER`. A frase da loja acompanha.
+- **Os números** (os segundos de cada estrela, recarga, alcance, porcentagem,
+  chances, multiplicador): bloco `OS NUMEROS DE CADA PODER` — o tempo ligado é a
+  lista de 6 valores, do sem estrela até as cinco. A frase da loja acompanha.
+- **O preço de cada estrela:** `UpgradePrices`, no mesmo arquivo.
 - **Poder novo:** comportamento no app ([powers.js](../src/game/powers.js)) com o
   mesmo `id` — e, se mexer em moeda ou nova chance, a regra aqui
   ([economy.go](economy.go)). O app ignora poder que não conhece.

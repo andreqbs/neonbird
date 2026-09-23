@@ -171,9 +171,9 @@ func TestFraseDoPoderAcompanhaOsNumeros(t *testing.T) {
 		poder Power
 		tem   []string
 	}{
-		{magnetPower(6, 12, 5), []string{"6 s ligado", "12 s recarregando"}},
-		{ghostPower(2.5, 10), []string{"2,5 s invisível"}},
-		{slowPower(1.5, 8, 25), []string{"25% mais devagar", "1,5 s", "8 s"}},
+		{magnetPower([]float64{6, 9}, 12, 5), []string{"6 s ligado", "9 s com 5 estrelas", "12 s recarregando"}},
+		{ghostPower([]float64{2.5, 5}, 10), []string{"2,5 s invisível", "5 s com 5 estrelas"}},
+		{slowPower([]float64{1.5, 3}, 8, 25), []string{"25% mais devagar", "1,5 s", "3 s com 5 estrelas", "8 s"}},
 		{extraChancePower(2, false), []string{"2 novas chances"}},
 		{coinMultiplierPower(3), []string{"3 vezes"}},
 	}

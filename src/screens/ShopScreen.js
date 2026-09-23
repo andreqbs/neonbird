@@ -11,6 +11,7 @@ import AdCover from '../ui/AdCover';
 import BirdAvatar from '../ui/BirdAvatar';
 import Button from '../ui/Button';
 import Screen, { Card, SectionTitle } from '../ui/Screen';
+import Stars from '../ui/Stars';
 import { theme } from '../ui/theme';
 
 /** Quanto tempo o botao de compra fica esperando o segundo toque. */
@@ -29,6 +30,11 @@ const CONFIRM_MS = 3500;
  *
  * Compra com dinheiro (billing.js) e um toque so: quem pede a confirmacao e a
  * tela de pagamento do Google Play. O preco escrito ("R$ 4,99") vem de la.
+ *
+ * ESTRELAS: cada passaro com poder de tempo evolui ate cinco estrelas, compradas
+ * com moedas — e cada uma estica o tempo do poder. A Brasa e o Cometa ja nascem
+ * com as cinco: o poder deles nao e de tempo. Quem guarda o nivel e faz a conta
+ * e o servidor; aqui so se mostram as estrelas e se manda o pedido.
  */
 export default function ShopScreen({ onBack }) {
   const eco = useEconomy();
@@ -176,6 +182,20 @@ export default function ShopScreen({ onBack }) {
                 coins={wallet.coins}
                 armed={armed === id}
                 busy={busy === id}
+                stars={
+                  // Quem nao evolui (Brasa, Cometa) ja nasce com as cinco estrelas.
+                  bird.upgradable ? (wallet.birdLevels && wallet.birdLevels[bird.id]) || 0 : bird.maxStars || 0
+                }
+                upgradeArmed={armed === `estrela:${bird.id}`}
+                upgradeBusy={busy === `estrela:${bird.id}`}
+                onUpgrade={(preco) =>
+                  purchase(
+                    `estrela:${bird.id}`,
+                    preco,
+                    () => economy.upgradeBird(bird.id),
+                    `${bird.name} ganhou mais uma estrela.`
+                  )
+                }
                 moneyPrice={billing.priceOf(bird.productId)}
                 moneyReady={billing.isAvailable()}
                 moneyBusy={busy === `money:${bird.id}`}
@@ -269,6 +289,10 @@ function BirdRow({
   coins,
   armed,
   busy,
+  stars,
+  upgradeArmed,
+  upgradeBusy,
+  onUpgrade,
   moneyPrice,
   moneyReady,
   moneyBusy,
@@ -277,6 +301,12 @@ function BirdRow({
   onBuyMoney,
   onEquip,
 }) {
+  // A proxima estrela: quanto custa e o que ela muda no poder. So de passaro
+  // comprado, que evolui e ainda nao chegou no maximo.
+  const maxStars = bird.maxStars || 0;
+  const precos = bird.upgradePrices || [];
+  const proximaEstrela = owned && bird.upgradable && stars < maxStars ? precos[stars] : null;
+  const poderDeTempo = (bird.powers || []).find((p) => p.levelValues && p.levelValues.length > stars);
   let action;
   if (equipped) {
     action = <Text style={styles.inUse}>EM USO</Text>;
@@ -306,6 +336,22 @@ function BirdRow({
     );
   }
 
+  if (owned && proximaEstrela !== null && proximaEstrela !== undefined) {
+    action = (
+      <View style={styles.buyOptions}>
+        {action}
+        <PriceButton
+          price={proximaEstrela}
+          armed={upgradeArmed}
+          busy={upgradeBusy}
+          short={coins < proximaEstrela}
+          onPress={() => onUpgrade(proximaEstrela)}
+          label="★"
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.row, last && styles.last, equipped && styles.rowActive]}>
       <BirdAvatar birdId={bird.id} size={30} />
@@ -321,6 +367,14 @@ function BirdRow({
         ) : (
           <Text style={[styles.ability, styles.noPower]}>Sem poder</Text>
         )}
+        {maxStars > 0 ? <Stars level={stars} total={maxStars} /> : null}
+        {poderDeTempo && owned && stars < maxStars ? (
+          <Text style={styles.nextStar}>
+            {`Agora ${segundos(poderDeTempo.levelValues[stars])} · próxima estrela ${segundos(
+              poderDeTempo.levelValues[stars + 1]
+            )}`}
+          </Text>
+        ) : null}
       </View>
       {action}
     </View>
@@ -353,6 +407,11 @@ function ItemRow({ icon, title, description, stock, price, coins, armed, busy, c
   );
 }
 
+/** "2,5 s" — os segundos do jeito que se escreve em portugues. */
+function segundos(v) {
+  return `${String(v).replace('.', ',')} s`;
+}
+
 /** Botao da compra com dinheiro: o preco que o Google Play informou. */
 function MoneyButton({ price, busy, onPress }) {
   return (
@@ -366,7 +425,7 @@ function MoneyButton({ price, busy, onPress }) {
 }
 
 /** Botao de preco. Primeiro toque arma, segundo compra; sem saldo, fica apagado. */
-function PriceButton({ price, armed, busy, short, onPress }) {
+function PriceButton({ price, armed, busy, short, onPress, label }) {
   return (
     <Pressable
       onPress={busy ? undefined : onPress}
@@ -383,7 +442,7 @@ function PriceButton({ price, armed, busy, short, onPress }) {
         <Text style={styles.priceArmedText}>{`Confirmar ${price}`}</Text>
       ) : (
         <>
-          <CoinFace size={14} />
+          {label ? <Text style={styles.priceText}>{label}</Text> : <CoinFace size={14} />}
           <Text style={styles.priceText}>{price}</Text>
         </>
       )}
@@ -504,6 +563,7 @@ const styles = StyleSheet.create({
   moneyText: { color: theme.pillar, fontSize: 14, fontWeight: '900' },
   buyOptions: { alignItems: 'flex-end', gap: 6 },
   unavailable: { color: theme.textDim, fontSize: 11, textAlign: 'right', lineHeight: 15 },
+  nextStar: { color: theme.textDim, fontSize: 11, marginTop: 3 },
   priceShort: { opacity: 0.45 },
   priceText: { color: theme.bird, fontSize: 14, fontWeight: '900' },
   priceArmedText: { color: '#1A1330', fontSize: 13, fontWeight: '900' },
