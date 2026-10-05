@@ -195,6 +195,7 @@ func rateLimit(l *limiter, trustProxy bool, next http.Handler) http.Handler {
 			w.Header().Set("Retry-After", "10")
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{
 				"error": "muitos pedidos; tente de novo em instantes",
+				"code":  "rate_limited",
 			})
 			return
 		}

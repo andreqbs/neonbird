@@ -1,5 +1,8 @@
+import { t } from '../i18n';
+
 /**
- * Tempo de voo para a tela: curto e sem zero inutil na frente.
+ * Tempo de voo para a tela: curto e sem zero inutil na frente (no idioma do
+ * jogo — o formato de cada um mora nos arquivos de traducao).
  *
  *   45s · 12min 05s · 3h 07min
  *
@@ -12,7 +15,7 @@ export function formatFlightTime(ms) {
   const segundos = total % 60;
   const dois = (n) => String(n).padStart(2, '0');
 
-  if (horas > 0) return `${horas}h ${dois(minutos)}min`;
-  if (minutos > 0) return `${minutos}min ${dois(segundos)}s`;
-  return `${segundos}s`;
+  if (horas > 0) return t('time.flightH', { h: horas, mm: dois(minutos) });
+  if (minutos > 0) return t('time.flightM', { m: minutos, ss: dois(segundos) });
+  return t('time.flightS', { s: segundos });
 }

@@ -190,11 +190,16 @@ func (a *API) buy(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Item   string `json:"item"`
 		BirdID string `json:"birdId"`
+		SkinID string `json:"skinId"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	wallet, err := a.store.Buy(r.Context(), p.ID, body.Item, body.BirdID)
+	itemID := body.BirdID
+	if body.Item == "skin" {
+		itemID = body.SkinID
+	}
+	wallet, err := a.store.Buy(r.Context(), p.ID, body.Item, itemID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -222,28 +227,49 @@ func (a *API) upgradeBird(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet})
 }
 
-// purchaseBird troca uma compra com dinheiro (Google Play) pelo passaro dela.
+// purchase troca uma compra com dinheiro (Google Play) pelo que ela comprou: o
+// passaro (`birdId`) ou a skin (`skinId`).
 //
 // Repetir e seguro: a mesma compra devolve a mesma carteira. E tambem o caminho
 // da restauracao — o app reinstalado manda as compras que o Google ainda
-// guarda, e o passaro volta para a conta nova (purchases.go).
-func (a *API) purchaseBird(w http.ResponseWriter, r *http.Request) {
+// guarda, e o item volta para a conta nova (purchases.go).
+func (a *API) purchase(w http.ResponseWriter, r *http.Request) {
 	p, ok := a.auth(w, r)
 	if !ok {
 		return
 	}
 	var body struct {
 		BirdID        string `json:"birdId"`
+		SkinID        string `json:"skinId"`
 		PurchaseToken string `json:"purchaseToken"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	b, ok := birdByID(body.BirdID)
-	if !ok || b.ProductID == "" {
-		a.fail(w, r, ruleCode(404, "bird_not_found", "pássaro não encontrado"))
-		return
+
+	// O que se esta comprando: o catalogo diz o produto do Play Console.
+	var (
+		g         goods
+		itemID    string
+		productID string
+		chave     string // como a resposta devolve o item: birdId ou skinId
+	)
+	if body.SkinID != "" {
+		sk, ok := skinByID(body.SkinID)
+		if !ok || sk.ProductID == "" {
+			a.fail(w, r, ruleCode(404, "skin_not_found", "skin não encontrada"))
+			return
+		}
+		g, itemID, productID, chave = skinGoods, sk.ID, sk.ProductID, "skinId"
+	} else {
+		b, ok := birdByID(body.BirdID)
+		if !ok || b.ProductID == "" {
+			a.fail(w, r, ruleCode(404, "bird_not_found", "pássaro não encontrado"))
+			return
+		}
+		g, itemID, productID, chave = birdGoods, b.ID, b.ProductID, "birdId"
 	}
+
 	token := strings.TrimSpace(body.PurchaseToken)
 	if token == "" || len(token) > 2048 {
 		badRequest(w, "compra inválida")
@@ -257,13 +283,13 @@ func (a *API) purchaseBird(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	compra, err := a.billing.Purchase(r.Context(), b.ProductID, token)
+	compra, err := a.billing.Purchase(r.Context(), productID, token)
 	if errors.Is(err, errPurchaseNotFound) {
 		a.fail(w, r, ruleCode(422, "purchase_invalid", "não encontramos esta compra"))
 		return
 	}
 	if err != nil {
-		a.log.Error("compra: o Google nao respondeu", "produto", b.ProductID, "erro", err)
+		a.log.Error("compra: o Google nao respondeu", "produto", productID, "erro", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"error": "Não deu para concluir sua compra agora. Tente de novo em instantes.",
 			"code":  "billing_unavailable",
@@ -273,7 +299,7 @@ func (a *API) purchaseBird(w http.ResponseWriter, r *http.Request) {
 	switch compra.PurchaseState {
 	case 0:
 	case 2:
-		// Pagamento pendente (boleto, por exemplo): o passaro vem quando aprovar.
+		// Pagamento pendente (boleto, por exemplo): o item vem quando aprovar.
 		writeJSON(w, http.StatusAccepted, map[string]any{"pending": true})
 		return
 	default:
@@ -281,7 +307,7 @@ func (a *API) purchaseBird(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wallet, err := a.store.GrantBirdPurchase(r.Context(), p.ID, b.ID, token, compra)
+	wallet, err := a.store.GrantPurchase(r.Context(), g, p.ID, itemID, token, compra)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -290,11 +316,11 @@ func (a *API) purchaseBird(w http.ResponseWriter, r *http.Request) {
 	// comprador. O app confirma tambem, depois desta resposta — se aqui falhar,
 	// la resolve.
 	if compra.AcknowledgementState == 0 {
-		if err := a.billing.Acknowledge(r.Context(), b.ProductID, token); err != nil {
-			a.log.Warn("compra: nao deu para confirmar no Google", "produto", b.ProductID, "erro", err)
+		if err := a.billing.Acknowledge(r.Context(), productID, token); err != nil {
+			a.log.Warn("compra: nao deu para confirmar no Google", "produto", productID, "erro", err)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet, "birdId": b.ID})
+	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet, chave: itemID})
 }
 
 func (a *API) equipBird(w http.ResponseWriter, r *http.Request) {
@@ -309,6 +335,28 @@ func (a *API) equipBird(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wallet, err := a.store.EquipBird(r.Context(), p.ID, body.BirdID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"wallet": wallet})
+}
+
+// equipSkin veste uma skin comprada (`skinId`) ou tira a que esta num encaixe
+// (`slot`, sem `skinId`).
+func (a *API) equipSkin(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		SkinID string `json:"skinId"`
+		Slot   string `json:"slot"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	wallet, err := a.store.EquipSkin(r.Context(), p.ID, body.SkinID, body.Slot)
 	if err != nil {
 		a.fail(w, r, err)
 		return

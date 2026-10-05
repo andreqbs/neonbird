@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { t } from '../i18n';
+
 const KEY = '@major-flyer/player';
 
 /** Limites do nome que o jogador escolhe. */
@@ -50,9 +52,9 @@ export function newUuid() {
   return out;
 }
 
-/** Nome de estreia: melhor um apelido pronto do que um campo vazio. */
+/** Nome de estreia, no idioma do jogo: melhor um apelido pronto do que um campo vazio. */
 export function suggestName() {
-  return `Piloto ${1000 + Math.floor(Math.random() * 9000)}`;
+  return t('identity.defaultName', { n: 1000 + Math.floor(Math.random() * 9000) });
 }
 
 /** Corta espacos, limita o tamanho e recusa o que sobrar vazio demais. */

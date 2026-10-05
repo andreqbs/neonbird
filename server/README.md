@@ -493,6 +493,23 @@ permissão de cobrança — ela vem no módulo de compras (`expo-iap`). Então:
    | `bird_phantom` | Fantasma |
    | `bird_comet` | Cometa |
 
+   E um para cada **skin** (a aba Skins da loja):
+
+   | ID do produto | Skin | Encaixe |
+   | --- | --- | --- |
+   | `skin_cap_red` | Boné Vermelho | boné |
+   | `skin_cap_neon` | Boné Neon | boné |
+   | `skin_cap_propeller` | Boné Hélice | boné |
+   | `skin_wings_angel` | Asas de Anjo | asas |
+   | `skin_wings_bat` | Asas de Morcego | asas |
+   | `skin_wings_butterfly` | Asas de Borboleta | asas |
+   | `skin_glasses_sun` | Óculos Escuros | óculos |
+   | `skin_glasses_3d` | Óculos 3D | óculos |
+   | `skin_glasses_pixel` | Óculos Pixel | óculos |
+   | `skin_necklace_chain` | Corrente de Ouro | colar |
+   | `skin_necklace_medal` | Medalhão de Ouro | colar |
+   | `skin_necklace_diamond` | Colar de Diamante | colar |
+
 3. Em cada um: nome, descrição e o **preço em reais** (o Google converte para os
    outros países, dá para ajustar) → **Salvar** → **Ativar**.
 
@@ -529,11 +546,16 @@ compre: a compra fica marcada como teste no banco.
 select created_at, bird_id, state, test, order_id, player_id
   from bird_purchases
  order by created_at desc limit 50;
+
+-- as de skin
+select created_at, skin_id, state, test, order_id, player_id
+  from skin_purchases
+ order by created_at desc limit 50;
 ```
 
 Depois, revise a ficha **Segurança dos dados** do Play (o jogo passa a ter
 *Informações financeiras → Histórico de compras*) e publique a política de
-privacidade v2.2, que já descreve isso.
+privacidade v2.3, que já descreve isso (e as skins).
 
 ---
 
@@ -551,16 +573,17 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | --- | --- |
 | `GET /health` | Diz se o banco responde e qual é a rodada. É o exame do Docker. |
 | `POST /v1/players` | Cadastra o aparelho ou troca o apelido. Corpo: `{id, secret, name}`. |
-| `GET /v1/catalog` | Pássaros, preços e regras. Público. |
-| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros (com as estrelas de cada um em `birdLevels`) e tempo de voo (`flightMs`) do jogador. |
+| `GET /v1/catalog` | Pássaros, skins (`skins` e os encaixes em `skinSlots`), preços e regras. Público. |
+| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros (com as estrelas de cada um em `birdLevels`), skins (`ownedSkins` e as em uso por encaixe em `equippedSkins`) e tempo de voo (`flightMs`) do jogador. |
 | `POST /v1/runs/start` | Abre uma partida: desconta uma vida e devolve a semente das moedas, o pássaro (`bird`), os poderes dele (`powers`) e quantas novas chances cabem (`maxContinues`). |
 | `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals, flightMs}` — os números dos obstáculos das moedas pegas e o tempo voando de fato, em ms. Fechar de novo devolve o mesmo resultado. Partida que rendeu algo leva também o cabeçalho `X-Integrity-Token` ([passo 12](#12-o-projeto-no-google-cloud)). |
 | `POST /v1/runs/{id}/continue` | Nova chance. Corpo: `{method}` — `stock` (guardada) ou `coins`. |
 | `POST /v1/runs/{id}/shield` | Usa um escudo guardado na partida. |
-| `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `shield` ou `continue`. Pássaro sem preço em moedas (o Cometa) responde `coins_not_accepted`. |
+| `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `skin` (com `skinId`), `shield` ou `continue`. Pássaro ou skin sem preço em moedas (o Cometa) responde `coins_not_accepted`. |
 | `POST /v1/shop/upgrade` | Compra a próxima estrela de um pássaro, em moedas. Corpo: `{birdId}`. Recusa pássaro que não é do jogador (`not_owned`), que não evolui (`not_upgradable`) ou que já está no máximo (`max_level`). |
-| `POST /v1/shop/purchase` | Troca uma compra com dinheiro pelo pássaro. Corpo: `{birdId, purchaseToken}` — o token vem do Google Play. Confere com o Google; pagamento pendente responde **202**. Repetir é seguro, e é também o caminho da restauração ([parte 5](#parte-5--compra-com-dinheiro-google-play)). |
+| `POST /v1/shop/purchase` | Troca uma compra com dinheiro pelo pássaro ou pela skin. Corpo: `{birdId, purchaseToken}` ou `{skinId, purchaseToken}` — o token vem do Google Play. Confere com o Google; pagamento pendente responde **202**. Repetir é seguro, e é também o caminho da restauração ([parte 5](#parte-5--compra-com-dinheiro-google-play)). |
 | `POST /v1/me/bird` | Escolhe o pássaro das próximas partidas. Corpo: `{birdId}`. |
+| `POST /v1/me/skin` | Veste uma skin comprada: `{skinId}` (a do mesmo encaixe sai). Com `{slot}` sem skin, tira a do encaixe — `cap`, `wings`, `glasses` ou `necklace`. Skin que não é do jogador responde `not_owned`. |
 | `POST /v1/ads/claim` | Troca um vídeo confirmado pelo prêmio. Corpo: `{kind}` — `lives`, `shield` ou `continue`. Sem confirmação ainda, responde **202**. |
 | `GET /v1/ads/ssv` | O aviso do Google (passo 7). Não é chamado pelo app. |
 
@@ -568,11 +591,11 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 
 | Rota | O que faz |
 | --- | --- |
-| `GET /v1/groups/me` | O grupo do jogador nesta rodada (ou `null`). |
+| `GET /v1/groups/me` | O grupo do jogador nesta rodada (ou `null`), com a aparência de cada membro em `look`. |
 | `POST /v1/groups` | Cria um grupo, com quem criou já de coroa. Corpo: `{name}`. |
 | `POST /v1/groups/members` | Só o líder. Corpo: `{playerId}` — o código público do convidado. |
 | `DELETE /v1/groups/me` | Sai do grupo. |
-| `GET /v1/rankings/players` | Ranking individual da rodada. `?limit=50` (teto 200). |
+| `GET /v1/rankings/players` | Ranking individual da rodada. `?limit=50` (teto 200). Cada linha traz a aparência do jogador em `look`: `{bird, skins, ownedSkins}` — o pássaro em uso, as skins por encaixe e a coleção. Só o visual: nada de moeda nem de compra. |
 | `GET /v1/rankings/groups` | Ranking dos grupos da rodada. |
 | `GET /v1/me/standing` | A posição do jogador, para quem ficou fora da lista. |
 
@@ -707,6 +730,28 @@ A recarga não muda com as estrelas: continua 10 s para os três.
 O ímã nunca alcança mais que 8 raios do pássaro (o app limita): assim ele não
 chega à moeda de um obstáculo que o jogador ainda não passou, que este servidor
 recusaria.
+
+## Skins
+
+Enfeites do pássaro — boné, asas, óculos e colar —, também em
+[catalog.go](catalog.go) (listas `Skins` e `SkinSlots`). São **só visuais**:
+nenhuma regra de moeda, partida ou ranking olha para elas.
+
+- **Um por encaixe.** O jogador tem quantas quiser, mas usa uma por encaixe
+  (`equipped_skins`, chave `(jogador, encaixe)`). O encaixe vem sempre do
+  catálogo, nunca do pedido: óculos não vira boné.
+- **Compra:** moedas (`POST /v1/shop/buy` com `item: "skin"`) ou dinheiro
+  (`POST /v1/shop/purchase` com `skinId`), pelo mesmo caminho dos pássaros —
+  conferência no Google, restauração no app reinstalado e retirada no estorno
+  ([purchases.go](purchases.go)). As compras ficam em `skin_purchases`.
+- **Estorno ou troca de conta** tira a skin da conta — e do corpo, se estava em
+  uso (cascata no banco, [schema.sql](schema.sql)).
+- **Aparece para os outros:** o ranking e o grupo levam a aparência de cada
+  jogador (`look`), buscada de uma vez para a lista inteira.
+- **Skin nova:** entra na lista `Skins` aqui e ganha desenho no app, com o mesmo
+  id ([skins.js](../src/game/skins.js)) — o `npm test` confere as duas pontas.
+  Para vender por dinheiro, crie o produto no Play Console
+  ([passo 16](#16-os-produtos)).
 
 ## Configuração
 

@@ -59,7 +59,8 @@
       ],
       "./plugins/withGameCategory",
       "./plugins/withEdgeToEdgeBars",
-      "expo-iap"
+      "expo-iap",
+      "expo-localization"
     ],
     "extra": {
       "eas": {

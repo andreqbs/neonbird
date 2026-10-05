@@ -10,8 +10,11 @@ import {
 
 import Screen, { Card } from '../ui/Screen';
 import Button from '../ui/Button';
+import PlayerCard from '../ui/PlayerCard';
+import Tabs from '../ui/Tabs';
 import { theme } from '../ui/theme';
 import usePlayer from '../hooks/usePlayer';
+import { localeTag, t } from '../i18n';
 import cloud from '../services/cloud';
 import { loadRuns } from '../services/scores';
 import {
@@ -22,10 +25,10 @@ import {
   seasonLabel,
 } from '../services/season';
 
-const TABS = [
-  { id: 'players', label: 'Individual' },
-  { id: 'groups', label: 'Grupo' },
-  { id: 'local', label: 'Seus voos' },
+const tabs = () => [
+  { id: 'players', label: t('leaderboard.tabPlayers') },
+  { id: 'groups', label: t('leaderboard.tabGroups') },
+  { id: 'local', label: t('leaderboard.tabLocal') },
 ];
 
 /** Quantos cabem num grupo. O servidor tambem recusa o nono (server/store.go). */
@@ -41,6 +44,8 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
   const [myGroup, setMyGroup] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
+  // O jogador cujo cartao esta aberto (tocado no ranking ou no grupo).
+  const [aberto, setAberto] = useState(null);
 
   const season = currentSeason();
   const online = cloud.isConfigured();
@@ -71,22 +76,8 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
   }, [atualizar]);
 
   return (
-    <Screen title="Ranking" onBack={onBack}>
-      <View style={styles.tabs}>
-        {TABS.map((t) => (
-          <Pressable
-            key={t.id}
-            onPress={() => setTab(t.id)}
-            style={({ pressed }) => [
-              styles.tab,
-              tab === t.id && styles.tabActive,
-              pressed && { opacity: 0.75 },
-            ]}
-          >
-            <Text style={[styles.tabLabel, tab === t.id && styles.tabLabelActive]}>{t.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+    <Screen title={t('leaderboard.title')} onBack={onBack}>
+      <Tabs tabs={tabs()} value={tab} onChange={setTab} />
 
       {tab !== 'local' && <SeasonBar season={season} />}
 
@@ -99,6 +90,7 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
           erro={erro}
           onRefresh={atualizar}
           onOpenSettings={onOpenSettings}
+          onOpen={setAberto}
         />
       )}
 
@@ -111,10 +103,13 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
           loading={carregando}
           onRefresh={atualizar}
           onOpenSettings={onOpenSettings}
+          onOpen={setAberto}
         />
       )}
 
       {tab === 'local' && <LocalTab runs={runs} />}
+
+      <PlayerCard player={aberto} onClose={() => setAberto(null)} />
     </Screen>
   );
 }
@@ -132,14 +127,14 @@ function SeasonBar({ season }) {
   return (
     <View style={[styles.season, apurando && styles.seasonCounting]}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.seasonLabel}>RODADA · {seasonLabel(season)}</Text>
+        <Text style={styles.seasonLabel}>{t('leaderboard.season', { label: seasonLabel(season) })}</Text>
         <Text style={styles.seasonHint}>
           {apurando
-            ? `Rodada fechada para apuração. A próxima abre em ${falta}.`
-            : `Termina em ${falta} · domingo às 18h`}
+            ? t('leaderboard.seasonCounting', { time: falta })
+            : t('leaderboard.seasonEnds', { time: falta })}
         </Text>
       </View>
-      {apurando ? <Text style={styles.seasonBadge}>APURANDO</Text> : null}
+      {apurando ? <Text style={styles.seasonBadge}>{t('leaderboard.counting')}</Text> : null}
     </View>
   );
 }
@@ -149,15 +144,14 @@ function SeasonBar({ season }) {
 function OfflineNotice({ onOpenSettings }) {
   return (
     <Card style={styles.notice}>
-      <Text style={styles.noticeTitle}>Ranking online desligado</Text>
+      <Text style={styles.noticeTitle}>{t('leaderboard.offlineTitle')}</Text>
+      <Text style={styles.noticeBody}>{t('leaderboard.offlineBody')}</Text>
       <Text style={styles.noticeBody}>
-        Este app ainda não está ligado a um servidor, então grupos e ranking entre jogadores não
-        funcionam. Seu recorde e o histórico continuam salvos aqui no aparelho, na aba “Seus voos”.
-      </Text>
-      <Text style={styles.noticeBody}>
-        Para ligar: suba o servidor da pasta <Text style={styles.mono}>server/</Text> (é um{' '}
-        <Text style={styles.mono}>docker compose up -d</Text>) e escreva o endereço dele em{' '}
-        <Text style={styles.mono}>src/services/cloud.js</Text>.
+        {comPecas('leaderboard.offlineSetup', {
+          folder: <Text style={styles.mono}>server/</Text>,
+          command: <Text style={styles.mono}>docker compose up -d</Text>,
+          file: <Text style={styles.mono}>src/services/cloud.js</Text>,
+        })}
       </Text>
     </Card>
   );
@@ -165,15 +159,15 @@ function OfflineNotice({ onOpenSettings }) {
 
 // --------------------------------------------------------- ranking individual
 
-function PlayersTab({ online, rows, me, loading, erro, onRefresh, onOpenSettings }) {
+function PlayersTab({ online, rows, me, loading, erro, onRefresh, onOpenSettings, onOpen }) {
   if (!online) return <OfflineNotice onOpenSettings={onOpenSettings} />;
   if (loading && rows === null) return <Loading />;
 
   if (erro) {
     return (
       <Card style={styles.centerCard}>
-        <Text style={styles.emptyText}>Não deu para carregar o ranking ({erro}).</Text>
-        <Button title="Tentar de novo" variant="ghost" compact onPress={onRefresh} style={{ marginTop: 14 }} />
+        <Text style={styles.emptyText}>{t('leaderboard.loadError', { error: erro })}</Text>
+        <Button title={t('common.retry')} variant="ghost" compact onPress={onRefresh} style={{ marginTop: 14 }} />
       </Card>
     );
   }
@@ -181,8 +175,8 @@ function PlayersTab({ online, rows, me, loading, erro, onRefresh, onOpenSettings
   if (!rows || rows.length === 0) {
     return (
       <Card style={styles.centerCard}>
-        <Text style={styles.emptyText}>Ninguém pontuou nesta rodada ainda. Seja o primeiro.</Text>
-        <Button title="Atualizar" variant="ghost" compact onPress={onRefresh} style={{ marginTop: 14 }} />
+        <Text style={styles.emptyText}>{t('leaderboard.empty')}</Text>
+        <Button title={t('common.refresh')} variant="ghost" compact onPress={onRefresh} style={{ marginTop: 14 }} />
       </Card>
     );
   }
@@ -196,17 +190,16 @@ function PlayersTab({ online, rows, me, loading, erro, onRefresh, onOpenSettings
             rank={i + 1}
             name={row.name}
             score={row.total}
-            badge={`melhor voo: ${row.best}`}
+            badge={t('leaderboard.best', { n: row.best })}
             highlight={me && row.id === me.id}
             last={i === rows.length - 1}
+            onPress={() => onOpen(row)}
           />
         ))}
       </Card>
-      <Text style={styles.footnote}>
-        A pontuação da rodada é a soma de todas as suas partidas nela.
-      </Text>
+      <Text style={styles.footnote}>{t('leaderboard.footnote')}</Text>
       <View style={styles.actions}>
-        <Button title="Atualizar" variant="ghost" compact onPress={onRefresh} />
+        <Button title={t('common.refresh')} variant="ghost" compact onPress={onRefresh} />
       </View>
     </>
   );
@@ -214,21 +207,21 @@ function PlayersTab({ online, rows, me, loading, erro, onRefresh, onOpenSettings
 
 // ------------------------------------------------------------------- grupos
 
-function GroupsTab({ online, me, group, rows, loading, onRefresh, onOpenSettings }) {
+function GroupsTab({ online, me, group, rows, loading, onRefresh, onOpenSettings, onOpen }) {
   if (!online) return <OfflineNotice onOpenSettings={onOpenSettings} />;
   if (loading && rows === null && group === null) return <Loading />;
 
   return (
     <>
       {group ? (
-        <MyGroup group={group} me={me} onChanged={onRefresh} />
+        <MyGroup group={group} me={me} onChanged={onRefresh} onOpen={onOpen} />
       ) : (
         <CreateGroup onCreated={onRefresh} />
       )}
 
       {rows && rows.length > 0 ? (
         <>
-          <Text style={styles.sectionLabel}>RANKING DOS GRUPOS</Text>
+          <Text style={styles.sectionLabel}>{t('leaderboard.groupsRanking')}</Text>
           <Card>
             {rows.map((row, i) => (
               <Entry
@@ -236,7 +229,10 @@ function GroupsTab({ online, me, group, rows, loading, onRefresh, onOpenSettings
                 rank={i + 1}
                 name={row.name}
                 score={row.total}
-                badge={`${row.members} ${row.members === 1 ? 'jogador' : 'jogadores'} · líder ${row.leader}`}
+                badge={t('leaderboard.groupBadge', {
+                  players: t('common.players', { count: row.members }),
+                  leader: row.leader,
+                })}
                 highlight={group && row.id === group.id}
                 last={i === rows.length - 1}
                 crest={row.crest}
@@ -247,7 +243,7 @@ function GroupsTab({ online, me, group, rows, loading, onRefresh, onOpenSettings
       ) : null}
 
       <View style={styles.actions}>
-        <Button title="Atualizar" variant="ghost" compact onPress={onRefresh} />
+        <Button title={t('common.refresh')} variant="ghost" compact onPress={onRefresh} />
       </View>
     </>
   );
@@ -262,7 +258,7 @@ function CreateGroup({ onCreated }) {
   const criar = useCallback(async () => {
     const limpo = nome.trim();
     if (limpo.length < 2) {
-      setErro('Dê um nome com pelo menos 2 letras.');
+      setErro(t('leaderboard.nameTooShort'));
       return;
     }
     setCriando(true);
@@ -279,16 +275,13 @@ function CreateGroup({ onCreated }) {
 
   return (
     <Card style={styles.notice}>
-      <Text style={styles.noticeTitle}>Você ainda não tem grupo</Text>
-      <Text style={styles.noticeBody}>
-        Crie um e chame até {GROUP_MAX} jogadores. A pontuação do grupo é a soma do que todo mundo
-        fizer na rodada — e você continua no ranking individual do mesmo jeito.
-      </Text>
+      <Text style={styles.noticeTitle}>{t('leaderboard.noGroupTitle')}</Text>
+      <Text style={styles.noticeBody}>{t('leaderboard.noGroupBody', { max: GROUP_MAX })}</Text>
 
       <TextInput
         value={nome}
         onChangeText={setNome}
-        placeholder="Nome do grupo"
+        placeholder={t('leaderboard.groupName')}
         placeholderTextColor="rgba(150,161,206,0.6)"
         maxLength={24}
         returnKeyType="done"
@@ -299,20 +292,20 @@ function CreateGroup({ onCreated }) {
       {erro ? <Text style={styles.error}>{erro}</Text> : null}
 
       <Button
-        title={criando ? 'Criando...' : 'Criar grupo'}
+        title={criando ? t('leaderboard.creating') : t('leaderboard.createGroup')}
         compact
         onPress={criar}
         style={{ marginTop: 14, alignSelf: 'flex-start' }}
       />
       <Text style={styles.noticeFoot}>
-        Quem cria vira o líder — só ele chama gente nova, e é o único com a coroa.
+        {t('leaderboard.leaderNote')}
       </Text>
     </Card>
   );
 }
 
 /** Com grupo: escudo, soma, membros e (para o líder) o campo de convite. */
-function MyGroup({ group, me, onChanged }) {
+function MyGroup({ group, me, onChanged, onOpen }) {
   const souLider = me && group.leaderId === me.id;
   const cheio = group.members.length >= GROUP_MAX;
 
@@ -323,7 +316,7 @@ function MyGroup({ group, me, onChanged }) {
   const adicionar = useCallback(async () => {
     const limpo = codigo.trim();
     if (limpo.length < 30) {
-      setMsg({ erro: true, texto: 'Cole o código completo do jogador.' });
+      setMsg({ erro: true, texto: t('leaderboard.pasteCode') });
       return;
     }
     setOcupado(true);
@@ -331,7 +324,7 @@ function MyGroup({ group, me, onChanged }) {
     setOcupado(false);
     if (r.ok) {
       setCodigo('');
-      setMsg({ erro: false, texto: `${r.data?.added ?? 'Jogador'} entrou no grupo.` });
+      setMsg({ erro: false, texto: t('leaderboard.joined', { name: r.data?.added ?? t('leaderboard.someone') }) });
       onChanged();
     } else {
       setMsg({ erro: true, texto: r.error });
@@ -354,12 +347,12 @@ function MyGroup({ group, me, onChanged }) {
             {group.name}
           </Text>
           <Text style={styles.groupMeta}>
-            {group.members.length}/{GROUP_MAX} jogadores
+            {t('leaderboard.members', { count: group.members.length, max: GROUP_MAX })}
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={styles.groupTotal}>{group.total}</Text>
-          <Text style={styles.groupMeta}>pontos</Text>
+          <Text style={styles.groupMeta}>{t('leaderboard.groupPoints')}</Text>
         </View>
       </View>
 
@@ -369,24 +362,25 @@ function MyGroup({ group, me, onChanged }) {
           rank={i + 1}
           name={m.leader ? `👑 ${m.name}` : m.name}
           score={m.total}
-          badge={`melhor voo: ${m.best}`}
+          badge={t('leaderboard.best', { n: m.best })}
           highlight={me && m.id === me.id}
           last={i === group.members.length - 1 && !souLider}
+          onPress={() => onOpen(m)}
         />
       ))}
 
       {souLider ? (
         <View style={styles.inviteBox}>
-          <Text style={styles.inviteTitle}>Chamar alguém</Text>
+          <Text style={styles.inviteTitle}>{t('leaderboard.inviteTitle')}</Text>
           <Text style={styles.inviteHint}>
             {cheio
-              ? 'O grupo está cheio. Para chamar outra pessoa, alguém precisa sair.'
-              : 'Peça o código do jogador (ele acha em Configurações) e cole aqui.'}
+              ? t('leaderboard.groupFull')
+              : t('leaderboard.inviteHint')}
           </Text>
           <TextInput
             value={codigo}
             onChangeText={setCodigo}
-            placeholder="Código do jogador"
+            placeholder={t('leaderboard.playerCode')}
             placeholderTextColor="rgba(150,161,206,0.6)"
             autoCapitalize="none"
             autoCorrect={false}
@@ -399,7 +393,7 @@ function MyGroup({ group, me, onChanged }) {
             <Text style={msg.erro ? styles.error : styles.success}>{msg.texto}</Text>
           ) : null}
           <Button
-            title={ocupado ? 'Aguarde...' : 'Adicionar ao grupo'}
+            title={ocupado ? t('common.wait') : t('leaderboard.addToGroup')}
             compact
             onPress={adicionar}
             style={{ marginTop: 12, alignSelf: 'flex-start', opacity: cheio ? 0.5 : 1 }}
@@ -408,7 +402,7 @@ function MyGroup({ group, me, onChanged }) {
       ) : null}
 
       <View style={styles.groupFoot}>
-        <Button title="Sair do grupo" variant="ghost" compact onPress={sair} />
+        <Button title={t('leaderboard.leaveGroup')} variant="ghost" compact onPress={sair} />
       </View>
     </Card>
   );
@@ -436,9 +430,7 @@ function LocalTab({ runs }) {
   if (runs.length === 0) {
     return (
       <Card style={styles.centerCard}>
-        <Text style={styles.emptyText}>
-          Nenhum voo registrado ainda. Jogue uma partida e ela aparece aqui.
-        </Text>
+        <Text style={styles.emptyText}>{t('leaderboard.noRuns')}</Text>
       </Card>
     );
   }
@@ -451,7 +443,7 @@ function LocalTab({ runs }) {
           rank={i + 1}
           name={formatDate(run.at)}
           score={run.score}
-          badge={run.landscape ? 'paisagem' : 'retrato'}
+          badge={run.landscape ? t('leaderboard.landscape') : t('leaderboard.portrait')}
           highlight={i === 0}
           last={i === runs.length - 1}
         />
@@ -462,7 +454,7 @@ function LocalTab({ runs }) {
 
 function formatDate(at) {
   try {
-    return new Date(at).toLocaleDateString('pt-BR', {
+    return new Date(at).toLocaleDateString(localeTag(), {
       day: '2-digit',
       month: '2-digit',
       hour: '2-digit',
@@ -479,17 +471,33 @@ function Loading() {
   return (
     <Card style={styles.centerCard}>
       <ActivityIndicator color={theme.pillar} />
-      <Text style={styles.emptyText}>Carregando...</Text>
+      <Text style={styles.emptyText}>{t('common.loading')}</Text>
     </Card>
   );
 }
 
 const MEDALS = ['#FFD54A', '#D8DEF2', '#E2913F'];
 
-function Entry({ rank, name, score, badge, highlight, last, crest }) {
+/**
+ * O texto da chave com pedacos de tela no lugar dos {marcadores} — para frase
+ * traduzida que leva um trecho em outro estilo (o caminho de um arquivo, por
+ * exemplo), sem quebrar a frase em pedacos que cada idioma ordena diferente.
+ */
+function comPecas(key, pecas) {
+  return t(key)
+    .split(/(\{\w+\})/)
+    .map((parte, i) => {
+      const nome = parte.match(/^\{(\w+)\}$/);
+      return nome && pecas[nome[1]] ? <React.Fragment key={i}>{pecas[nome[1]]}</React.Fragment> : parte;
+    });
+}
+
+/** Uma linha de ranking. Com `onPress`, ela abre o cartao do jogador. */
+function Entry({ rank, name, score, badge, highlight, last, crest, onPress }) {
   const medal = rank <= 3 ? MEDALS[rank - 1] : null;
-  return (
-    <View style={[styles.entry, last && { borderBottomWidth: 0 }, highlight && styles.entryHighlight]}>
+  const estilo = [styles.entry, last && { borderBottomWidth: 0 }, highlight && styles.entryHighlight];
+  const corpo = (
+    <>
       <View style={[styles.rank, medal && { backgroundColor: medal }]}>
         <Text style={[styles.rankText, medal && { color: '#1A1330' }]}>{rank}</Text>
       </View>
@@ -504,24 +512,23 @@ function Entry({ rank, name, score, badge, highlight, last, crest }) {
         ) : null}
       </View>
       <Text style={styles.entryScore}>{score}</Text>
-    </View>
+      {onPress ? <Text style={styles.chevron}>›</Text> : null}
+    </>
+  );
+  if (!onPress) return <View style={estilo}>{corpo}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={t('leaderboard.seePlayer', { name })}
+      style={({ pressed }) => [estilo, pressed && styles.entryPressed]}
+    >
+      {corpo}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14,
-    padding: 4,
-    marginTop: 6,
-    marginBottom: 14,
-  },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  tabActive: { backgroundColor: 'rgba(46,230,197,0.18)' },
-  tabLabel: { color: theme.textDim, fontSize: 14, fontWeight: '700' },
-  tabLabelActive: { color: theme.pillar },
-
   season: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -641,6 +648,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   entryHighlight: { backgroundColor: 'rgba(46,230,197,0.09)' },
+  entryPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  chevron: { color: 'rgba(150,161,206,0.7)', fontSize: 20, fontWeight: '700', marginLeft: -4 },
   rank: {
     width: 28,
     height: 28,

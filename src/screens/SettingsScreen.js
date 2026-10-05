@@ -2,10 +2,11 @@ import React, { useCallback, useState } from 'react';
 import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import Screen, { Card, SectionTitle } from '../ui/Screen';
-import { ActionRow, InputRow, ToggleRow } from '../ui/Row';
+import { ActionRow, ChoiceRow, InputRow, ToggleRow } from '../ui/Row';
 import { theme } from '../ui/theme';
 import { useSettings } from '../state/SettingsContext';
 import usePlayer from '../hooks/usePlayer';
+import { AUTO, LANGUAGES, detectDeviceLanguage, languageName, t } from '../i18n';
 import { NAME_MAX } from '../services/identity';
 import { clearRuns } from '../services/scores';
 
@@ -13,7 +14,7 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
   const { settings, setSetting } = useSettings();
   const { player, rename } = usePlayer();
   const [enviado, setEnviado] = useState(false);
-
+  const [idiomas, setIdiomas] = useState(false);
 
   /**
    * Passar o codigo adiante. O `Share` do sistema resolve os dois casos de uma
@@ -23,10 +24,7 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
   const compartilharCodigo = useCallback(async () => {
     if (!player) return;
     try {
-      await Share.share({
-        message:
-          'Me chama para o seu grupo no Major Flyer! Meu codigo de jogador e:\n\n' + player.id,
-      });
+      await Share.share({ message: t('settings.shareMessage', { code: player.id }) });
       setEnviado(true);
       setTimeout(() => setEnviado(false), 2000);
     } catch (e) {
@@ -34,65 +32,92 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
     }
   }, [player]);
   const handleClear = useCallback(() => {
-    Alert.alert(
-      'Apagar recordes locais?',
-      'O historico de partidas guardado neste aparelho sera perdido. Nao da para desfazer.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Apagar',
-          style: 'destructive',
-          onPress: async () => {
-            await clearRuns();
-            onScoresCleared?.();
-          },
+    Alert.alert(t('settings.clearConfirmTitle'), t('settings.clearConfirmBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('settings.clear'),
+        style: 'destructive',
+        onPress: async () => {
+          await clearRuns();
+          onScoresCleared?.();
         },
-      ]
-    );
+      },
+    ]);
   }, [onScoresCleared]);
 
+  // O idioma. Escolher um faz o app redesenhar as telas ja no idioma novo (a
+  // raiz assina a troca) — e esta lista fecha sozinha nessa hora.
+  const escolhido = settings.language || AUTO;
+  const doCelular = languageName(detectDeviceLanguage());
+
   return (
-    <Screen title="Configurações" onBack={onBack}>
-      <SectionTitle>Som</SectionTitle>
+    <Screen title={t('settings.title')} onBack={onBack}>
+      <SectionTitle>{`🌐 ${t('settings.language')}`}</SectionTitle>
+      <Card>
+        <ActionRow
+          label={escolhido === AUTO ? t('settings.languageAuto') : languageName(escolhido)}
+          description={escolhido === AUTO ? t('settings.languageAutoDesc', { name: doCelular }) : undefined}
+          onPress={() => setIdiomas((aberto) => !aberto)}
+          last={!idiomas}
+        />
+        {idiomas ? (
+          <>
+            <ChoiceRow
+              label={t('settings.languageAuto')}
+              description={t('settings.languageAutoDesc', { name: doCelular })}
+              selected={escolhido === AUTO}
+              onPress={() => setSetting('language', AUTO)}
+            />
+            {LANGUAGES.map((l, i) => (
+              <ChoiceRow
+                key={l.code}
+                label={l.name}
+                selected={escolhido === l.code}
+                onPress={() => setSetting('language', l.code)}
+                last={i === LANGUAGES.length - 1}
+              />
+            ))}
+          </>
+        ) : null}
+      </Card>
+
+      <SectionTitle>{t('settings.sound')}</SectionTitle>
       <Card>
         <ToggleRow
-          label="Música de fundo"
-          description="Trilha musical durante a partida"
+          label={t('settings.music')}
+          description={t('settings.musicDesc')}
           value={settings.music}
           onValueChange={(v) => setSetting('music', v)}
         />
         <ToggleRow
-          label="Som do toque"
-          description="O bater de asas a cada toque na tela"
+          label={t('settings.flap')}
+          description={t('settings.flapDesc')}
           value={settings.flapSound}
           onValueChange={(v) => setSetting('flapSound', v)}
         />
         <ToggleRow
-          label="Efeitos do jogo"
-          description="Ponto marcado e colisão"
+          label={t('settings.effects')}
+          description={t('settings.effectsDesc')}
           value={settings.effects}
           onValueChange={(v) => setSetting('effects', v)}
           last
         />
       </Card>
 
-      <SectionTitle>Jogador</SectionTitle>
+      <SectionTitle>{t('settings.player')}</SectionTitle>
       <Card>
         <InputRow
-          label="Seu nome"
-          description="É assim que você aparece no ranking e no grupo."
+          label={t('settings.yourName')}
+          description={t('settings.yourNameDesc')}
           value={player?.name ?? ''}
           maxLength={NAME_MAX}
-          placeholder="Seu apelido"
+          placeholder={t('settings.namePlaceholder')}
           onSubmit={rename}
         />
         <View style={styles.codeRow}>
           <View style={styles.codeTexts}>
-            <Text style={styles.codeLabel}>Seu código de jogador</Text>
-            <Text style={styles.codeHint}>
-              Mande para quem vai te chamar para um grupo. Só o líder consegue adicionar alguém, e
-              ele precisa deste código.
-            </Text>
+            <Text style={styles.codeLabel}>{t('settings.yourCode')}</Text>
+            <Text style={styles.codeHint}>{t('settings.codeHint')}</Text>
             <Text style={styles.code} selectable numberOfLines={2}>
               {player?.id ?? '...'}
             </Text>
@@ -102,16 +127,16 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
             disabled={!player}
             style={({ pressed }) => [styles.codeButton, pressed && { opacity: 0.7 }]}
           >
-            <Text style={styles.codeButtonLabel}>{enviado ? 'Enviado' : 'Compartilhar'}</Text>
+            <Text style={styles.codeButtonLabel}>{enviado ? t('settings.shared') : t('settings.share')}</Text>
           </Pressable>
         </View>
       </Card>
 
-      <SectionTitle>Dados</SectionTitle>
+      <SectionTitle>{t('settings.data')}</SectionTitle>
       <Card>
         <ActionRow
-          label="Apagar recordes locais"
-          description="Limpa o histórico de partidas neste aparelho."
+          label={t('settings.clearRecords')}
+          description={t('settings.clearRecordsDesc')}
           onPress={handleClear}
           danger
           last

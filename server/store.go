@@ -63,10 +63,20 @@ type Player struct {
 // RankRow e uma linha do ranking individual: `total` e a soma da rodada e
 // `best` o melhor voo — os dois nomes que a tela ja le.
 type RankRow struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Total int    `json:"total"`
-	Best  int    `json:"best"`
+	ID    string     `json:"id"`
+	Name  string     `json:"name"`
+	Total int        `json:"total"`
+	Best  int        `json:"best"`
+	Look  PlayerLook `json:"look"`
+}
+
+// PlayerLook: como o jogador aparece para os outros quando tocam no nome dele
+// no ranking — o passaro que ele usa, as skins no corpo (por encaixe) e a
+// colecao inteira de skins dele. So o que e visual: nada de moeda nem de compra.
+type PlayerLook struct {
+	Bird       string            `json:"bird"`
+	Skins      map[string]string `json:"skins"`
+	OwnedSkins []string          `json:"ownedSkins"`
 }
 
 type GroupRow struct {
@@ -79,11 +89,12 @@ type GroupRow struct {
 }
 
 type GroupMember struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Total  int    `json:"total"`
-	Best   int    `json:"best"`
-	Leader bool   `json:"leader"`
+	ID     string     `json:"id"`
+	Name   string     `json:"name"`
+	Total  int        `json:"total"`
+	Best   int        `json:"best"`
+	Leader bool       `json:"leader"`
+	Look   PlayerLook `json:"look"`
 }
 
 type Group struct {
@@ -241,7 +252,7 @@ func (s *Store) Authenticate(ctx context.Context, id, secret string) (Player, er
 // CreateGroup abre um grupo com o jogador dentro, ja de coroa.
 func (s *Store) CreateGroup(ctx context.Context, playerID, name string, season Season) (*Group, error) {
 	if !season.Open {
-		return nil, rule(409, "a rodada está em apuração; os grupos da próxima abrem domingo às 20h")
+		return nil, ruleCode(409, "season_counting", "a rodada está em apuração; os grupos da próxima abrem domingo às 20h")
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -263,7 +274,7 @@ func (s *Store) CreateGroup(ctx context.Context, playerID, name string, season S
 		`insert into group_members (group_id, player_id, season_id) values ($1, $2, $3)`,
 		groupID, playerID, season.ID)
 	if isUniqueViolation(err) {
-		return nil, rule(409, "você já está em um grupo nesta rodada")
+		return nil, ruleCode(409, "already_in_group", "você já está em um grupo nesta rodada")
 	}
 	if err != nil {
 		return nil, err
@@ -278,10 +289,10 @@ func (s *Store) CreateGroup(ctx context.Context, playerID, name string, season S
 // AddMember e o convite: so o lider chama, e chama pelo codigo publico do outro.
 func (s *Store) AddMember(ctx context.Context, leaderID, targetID string, season Season) (string, error) {
 	if !season.Open {
-		return "", rule(409, "a rodada está em apuração; ninguém mais entra em grupo nela")
+		return "", ruleCode(409, "season_counting", "a rodada está em apuração; ninguém mais entra em grupo nela")
 	}
 	if leaderID == targetID {
-		return "", rule(409, "você já está no grupo")
+		return "", ruleCode(409, "already_member", "você já está no grupo")
 	}
 
 	var groupID, donoID string
@@ -295,22 +306,22 @@ func (s *Store) AddMember(ctx context.Context, leaderID, targetID string, season
 		leaderID, season.ID).Scan(&groupID, &donoID, &membros)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", rule(409, "você ainda não tem grupo nesta rodada")
+		return "", ruleCode(409, "no_group", "você ainda não tem grupo nesta rodada")
 	}
 	if err != nil {
 		return "", err
 	}
 	if donoID != leaderID {
-		return "", rule(403, "só o líder pode chamar gente nova")
+		return "", ruleCode(403, "not_leader", "só o líder pode chamar gente nova")
 	}
 	if membros >= GroupMaxMembers {
-		return "", rule(409, "o grupo já tem %d jogadores", GroupMaxMembers)
+		return "", ruleCode(409, "group_full", "o grupo já tem %d jogadores", GroupMaxMembers)
 	}
 
 	var nome string
 	err = s.pool.QueryRow(ctx, `select name from players where id = $1`, targetID).Scan(&nome)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", rule(404, "não achamos ninguém com esse código")
+		return "", ruleCode(404, "player_not_found", "não achamos ninguém com esse código")
 	}
 	if err != nil {
 		return "", err
@@ -320,7 +331,7 @@ func (s *Store) AddMember(ctx context.Context, leaderID, targetID string, season
 		`insert into group_members (group_id, player_id, season_id) values ($1, $2, $3)`,
 		groupID, targetID, season.ID)
 	if isUniqueViolation(err) {
-		return "", rule(409, "%s já está em um grupo nesta rodada", nome)
+		return "", ruleCode(409, "target_in_group", "%s já está em um grupo nesta rodada", nome)
 	}
 	if err != nil {
 		return "", err
@@ -430,7 +441,22 @@ func (s *Store) MyGroup(ctx context.Context, playerID string, season Season) (*G
 		g.Total += m.Total
 		g.Members = append(g.Members, m)
 	}
-	return &g, linhas.Err()
+	if err := linhas.Err(); err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, len(g.Members))
+	for i, m := range g.Members {
+		ids[i] = m.ID
+	}
+	caras, err := loadLooks(ctx, s.pool, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range g.Members {
+		g.Members[i].Look = caras.of(g.Members[i].ID)
+	}
+	return &g, nil
 }
 
 // ------------------------------------------------------------------- ranking
@@ -459,7 +485,65 @@ func (s *Store) TopPlayers(ctx context.Context, seasonID string, limit int) ([]R
 		}
 		saida = append(saida, r)
 	}
-	return saida, linhas.Err()
+	if err := linhas.Err(); err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, len(saida))
+	for i, r := range saida {
+		ids[i] = r.ID
+	}
+	caras, err := loadLooks(ctx, s.pool, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range saida {
+		saida[i].Look = caras.of(saida[i].ID)
+	}
+	return saida, nil
+}
+
+type looks map[string]PlayerLook
+
+// of devolve a aparencia do jogador — ou a de quem ainda nao comprou nada.
+func (l looks) of(id string) PlayerLook {
+	if c, ok := l[id]; ok {
+		return c
+	}
+	return PlayerLook{Bird: DefaultBird, Skins: map[string]string{}, OwnedSkins: []string{}}
+}
+
+// loadLooks busca de uma vez a aparencia de uma lista de jogadores: um pedido
+// so ao banco para o ranking inteiro, e nao um por linha.
+func loadLooks(ctx context.Context, q querier, ids []string) (looks, error) {
+	caras := looks{}
+	if len(ids) == 0 {
+		return caras, nil
+	}
+	linhas, err := q.Query(ctx, `
+		select p.id::text,
+		       coalesce(w.equipped_bird, $2),
+		       coalesce((select json_object_agg(e.slot, e.skin_id)
+		                   from equipped_skins e where e.player_id = p.id), '{}'::json),
+		       coalesce((select array_agg(o.skin_id order by o.acquired_at, o.skin_id)
+		                   from owned_skins o where o.player_id = p.id), '{}'::text[])
+		  from players p
+		  left join wallets w on w.player_id = p.id
+		 where p.id = any($1::uuid[])`, ids, DefaultBird)
+	if err != nil {
+		return nil, err
+	}
+	defer linhas.Close()
+
+	for linhas.Next() {
+		var id string
+		c := PlayerLook{Skins: map[string]string{}, OwnedSkins: []string{}}
+		if err := linhas.Scan(&id, &c.Bird, &c.Skins, &c.OwnedSkins); err != nil {
+			return nil, err
+		}
+		caras[id] = c
+	}
+	return caras, linhas.Err()
 }
 
 // TopGroups soma os pontos dos membros ATUAIS do grupo na rodada. Quem sai leva

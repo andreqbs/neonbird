@@ -36,6 +36,9 @@ import World from '../game/World';
 import { captureSession, EMPTY_SESSION, restoreSession } from '../game/session';
 import { powersOfRun } from '../game/powers';
 import { DEFAULT_BIRD, lookFor } from '../game/birds';
+import { wornSkins } from '../game/skins';
+import { t } from '../i18n';
+import { stageName } from '../i18n/catalog';
 import Backdrop from '../game/render/Backdrop';
 import Bird from '../game/render/Bird';
 import { CoinFace } from '../game/render/Coin';
@@ -133,6 +136,8 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     birdIdRef.current = (run && run.bird) || (wallet && wallet.equippedBird) || DEFAULT_BIRD;
   }
   const look = useMemo(() => lookFor(birdIdRef.current), []);
+  // As skins em uso, tambem lidas uma vez: so visual, entao valem as da carteira.
+  const skins = useMemo(() => wornSkins(wallet && wallet.equippedSkins), []);
 
   // --- mundo (matter-js) ---
   const worldRef = useRef(null);
@@ -545,9 +550,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           }
         : {
             collected,
-            error: r.offline
-              ? 'Sem conexão agora. As moedas desta partida sobem quando a internet voltar, com o app aberto.'
-              : r.error,
+            error: r.offline ? t('game.offlineFinish') : r.error,
           };
     }
     rs.result = result;
@@ -606,7 +609,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     if (!mountedRef.current) return;
     if (r.ok) beginRun(r.run);
     else if (r.code !== 'no_lives') {
-      setNotice(r.offline ? 'Sem conexão com o servidor. Volte ao menu para treinar.' : r.error);
+      setNotice(r.offline ? t('game.offlineRestart') : r.error);
     }
   }, [beginRun, setBusyState, training]);
 
@@ -925,8 +928,8 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   // deve prometer novidade que nao existe.
   const hasNewLook = nextLook !== look_;
   const nextLine = hasNewLook
-    ? `A seguir: ${nextLook.name} · +${Math.round((nextLook.speed - 1) * 100)}% de velocidade`
-    : `A seguir: fase ${stageNumber(stageIndex) + 1} · velocidade no maximo`;
+    ? t('game.nextStage', { name: stageName(nextLook), percent: Math.round((nextLook.speed - 1) * 100) })
+    : t('game.nextStageMax', { n: stageNumber(stageIndex) + 1 });
   // Zerou: acabou de fechar a ULTIMA fase da tabela. Da fase seguinte em diante
   // o jogo continua no ritmo da quinta, e o painel volta a ser o de sempre —
   // parabens que se repete a cada 100 obstaculos nao e parabens, e ruido.
@@ -943,18 +946,21 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   const chanceOptions = [];
   if (overMode === 'chance') {
     if (!chanceExtra && continuesInStock > 0) {
-      chanceOptions.push({ key: 'stock', title: `Usar nova chance (${continuesInStock})` });
+      chanceOptions.push({ key: 'stock', title: t('game.useContinue', { count: continuesInStock }) });
     }
     if (!chanceExtra && online && continuePrice !== null && coinsInWallet >= continuePrice) {
-      chanceOptions.push({ key: 'coins', title: `Continuar por ${continuePrice} moedas` });
+      chanceOptions.push({
+        key: 'coins',
+        title: t('game.continueForCoins', { coins: t('common.coins', { count: continuePrice }) }),
+      });
     }
-    if (online && canWatch) chanceOptions.push({ key: 'ad', title: 'Assistir e continuar' });
+    if (online && canWatch) chanceOptions.push({ key: 'ad', title: t('game.watchToContinue') });
   }
   const chanceLine = chanceExtra
-    ? 'Seu pássaro ainda tem uma chance extra: assista a um vídeo e volte deste ponto.'
+    ? t('game.chanceVideoOnly')
     : chancesPorPartida > 1
-      ? `A nova chance volta deste ponto — ${chancesPorPartida} por partida com este pássaro.`
-      : 'A nova chance volta deste ponto — uma por partida.';
+      ? t('game.chanceMany', { count: chancesPorPartida })
+      : t('game.chanceOne');
 
   const result = rs.result;
   const showShieldOffer =
@@ -963,28 +969,23 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     ? layout.playHeight - 58
     : panelTop + (hintVisible ? panelHeights.hint + 14 : 0);
 
-  const s = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+  // "12 pontos", "1 moeda" — no idioma do jogo, com o plural dele.
+  const pontos = t('common.points', { count: world.score });
+  const moedas = t('common.coins', { count: world.coins });
   let hint;
   if (hintKind === 'resumed') {
-    hint = {
-      title: 'Tela girada',
-      text: `Sua partida continua de onde parou, com ${s(world.score, 'ponto', 'pontos')}. Toque para seguir.`,
-    };
+    hint = { title: t('game.resumedTitle'), text: t('game.resumedText', { points: pontos }) };
   } else if (hintKind === 'chance') {
     hint = {
-      title: 'Nova chance!',
-      text: `Você volta com ${s(world.score, 'ponto', 'pontos')}${world.coins ? ` e ${s(world.coins, 'moeda', 'moedas')}` : ''}. Toque para voar.`,
+      title: t('game.chanceTitle'),
+      text: world.coins
+        ? t('game.chanceTextCoins', { points: pontos, coins: moedas })
+        : t('game.chanceText', { points: pontos }),
     };
   } else if (training) {
-    hint = {
-      title: 'Treino',
-      text: 'Sem internet: dá para voar, mas sem moedas, vidas ou ranking.',
-    };
+    hint = { title: t('game.trainingTitle'), text: t('game.trainingText') };
   } else {
-    hint = {
-      title: 'Toque para voar',
-      text: 'Cada toque impulsiona. Passe pelas moedas no meio dos vãos.',
-    };
+    hint = { title: t('game.tapTitle'), text: t('game.tapText') };
   }
 
   return (
@@ -1039,6 +1040,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           shieldLevel={a.shieldLevel}
           ghost={a.ghost}
           look={look}
+          skins={skins}
         />
         {burst > 0 && <ShieldBurst key={burst} layout={layout} y={a.birdY} />}
       </View>
@@ -1097,7 +1099,10 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
         <ScoreHud
           ref={scoreHudRef}
           world={world}
-          stageLabel={`${training ? 'TREINO · ' : ''}FASE ${stageNumber(stageIndex)} · ${look_.name.toUpperCase()}`}
+          stageLabel={`${training ? t('game.trainingPrefix') : ''}${t('game.stageLabel', {
+            n: stageNumber(stageIndex),
+            name: stageName(look_).toUpperCase(),
+          })}`}
           scoreTop={hudTop + 40}
           stageTop={hudTop + 10}
         />
@@ -1122,7 +1127,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           { top: hudTop, left: insets.left + hudSide, right: insets.right + hudSide },
         ]}
       >
-        <Button title="Menu" variant="ghost" compact onPress={leave} />
+        <Button title={t('common.menu')} variant="ghost" compact onPress={leave} />
         {phase === PHASE.PLAYING && (
           <Button
             title={paused ? 'Continuar' : 'Pausar'}
@@ -1163,7 +1168,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
             ) : (
               <View style={styles.shieldRing} />
             )}
-            <Text style={styles.shieldChipText}>{`Usar escudo (${shieldsInStock})`}</Text>
+            <Text style={styles.shieldChipText}>{t('game.useShield', { count: shieldsInStock })}</Text>
           </Pressable>
           {notice ? <Text style={styles.readyNotice}>{notice}</Text> : null}
         </View>
@@ -1178,10 +1183,10 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           onMeasure={(h) => measurePanel('pause', h)}
         >
           <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Pausado</Text>
+            <Text style={styles.panelTitle}>{t('game.paused')}</Text>
             <View style={styles.row}>
-              <Button title="Continuar" onPress={togglePause} />
-              <Button title="Menu" variant="ghost" onPress={leave} style={{ marginLeft: 12 }} />
+              <Button title={t('common.continue')} onPress={togglePause} />
+              <Button title={t('common.menu')} variant="ghost" onPress={leave} style={{ marginLeft: 12 }} />
             </View>
           </View>
         </Overlay>
@@ -1200,22 +1205,20 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
               <>
                 {/* uma estrela por fase vencida */}
                 <Text style={styles.winStars}>{'★'.repeat(STAGE_COUNT)}</Text>
-                <Text style={styles.winTitle}>Voce zerou o Major Flyer!</Text>
+                <Text style={styles.winTitle}>{t('game.winTitle')}</Text>
                 <Text style={styles.panelText}>
-                  {`${STAGE_COUNT} fases, ${STAGE_LENGTH * STAGE_COUNT} obstaculos, gelo, gravidade dobrada e o vao fugindo do lugar. Nada disso te derrubou. Parabens.`}
+                  {t('game.winText', { stages: STAGE_COUNT, obstacles: STAGE_LENGTH * STAGE_COUNT })}
                 </Text>
 
                 <View style={styles.statsRow}>
-                  <Stat label="Obstaculos" value={world.score} highlight />
+                  <Stat label={t('game.obstacles')} value={world.score} highlight />
                   <View style={styles.divider} />
-                  <Stat label="Recorde" value={Math.max(best, world.score)} />
+                  <Stat label={t('common.record')} value={Math.max(best, world.score)} />
                 </View>
               </>
             ) : (
               <>
-                <Text style={styles.panelTitle}>
-                  {`Fase ${stageNumber(stageIndex)} concluida`}
-                </Text>
+                <Text style={styles.panelTitle}>{t('game.stageClear', { n: stageNumber(stageIndex) })}</Text>
                 <Text style={styles.panelText}>{nextLine}</Text>
               </>
             )}
@@ -1223,37 +1226,39 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
             <View style={styles.stageButtons}>
               {shieldsInStock > 0 && (
                 <Button
-                  title={`Usar escudo (${shieldsInStock})`}
+                  title={t('game.useShield', { count: shieldsInStock })}
                   onPress={stageWithStoredShield}
                   style={styles.stageButton}
                 />
               )}
               {online && canWatch && (
                 <Button
-                  title="Assistir e ganhar escudo"
+                  title={t('game.watchForShield')}
                   variant={shieldsInStock > 0 ? 'ghost' : 'primary'}
                   onPress={stageWithAdShield}
                   style={styles.stageButton}
                 />
               )}
               <Button
-                title={zerou ? 'Continuar voando' : online ? 'Continuar sem escudo' : 'Continuar'}
+                title={
+                  zerou ? t('game.keepFlying') : online ? t('game.continueNoShield') : t('common.continue')
+                }
                 variant={online && (shieldsInStock > 0 || canWatch) ? 'ghost' : 'primary'}
                 onPress={advanceStage}
                 style={styles.stageButton}
               />
               {zerou && (
-                <Button title="Menu" variant="ghost" onPress={leave} style={styles.stageButton} />
+                <Button title={t('common.menu')} variant="ghost" onPress={leave} style={styles.stageButton} />
               )}
             </View>
             {busy === 'shield' ? <ActivityIndicator color={theme.shield} style={{ marginTop: 12 }} /> : null}
             {notice ? <Text style={styles.notice}>{notice}</Text> : null}
             <Text style={styles.tapHint}>
               {zerou
-                ? 'Daqui para frente o jogo segue no ritmo da fase 5. O placar continua.'
+                ? t('game.afterWin', { n: STAGE_COUNT })
                 : online
-                  ? 'O escudo perdoa as batidas enquanto se dissipa.'
-                  : 'No treino não há escudo.'}
+                  ? t('game.shieldHint')
+                  : t('game.trainingNoShield')}
             </Text>
           </View>
         </Overlay>
@@ -1269,9 +1274,11 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
         >
           {overMode === 'chance' ? (
             <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Continuar daqui?</Text>
+              <Text style={styles.panelTitle}>{t('game.continueTitle')}</Text>
               <Text style={styles.panelText}>
-                {`Você caiu com ${s(world.score, 'ponto', 'pontos')}${world.coins ? ` e ${s(world.coins, 'moeda', 'moedas')}` : ''}. ${chanceLine}`}
+                {world.coins
+                  ? t('game.fellWithCoins', { points: pontos, coins: moedas, line: chanceLine })
+                  : t('game.fellWith', { points: pontos, line: chanceLine })}
               </Text>
               <View style={styles.stageButtons}>
                 {chanceOptions.map((opt, i) => (
@@ -1283,7 +1290,12 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
                     style={styles.stageButton}
                   />
                 ))}
-                <Button title="Encerrar voo" variant="ghost" onPress={finishRun} style={styles.stageButton} />
+                <Button
+                  title={t('game.endFlight')}
+                  variant="ghost"
+                  onPress={finishRun}
+                  style={styles.stageButton}
+                />
               </View>
               {busy === 'chance' ? <ActivityIndicator color={theme.pillar} style={{ marginTop: 12 }} /> : null}
               {notice ? <Text style={styles.notice}>{notice}</Text> : null}
@@ -1291,42 +1303,44 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
           ) : overMode === 'finishing' ? (
             <View style={styles.panel}>
               <ActivityIndicator color={theme.pillar} />
-              <Text style={styles.busyText}>Guardando seu voo...</Text>
+              <Text style={styles.busyText}>{t('game.saving')}</Text>
             </View>
           ) : (
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>
-                {training ? 'Treino encerrado' : isNewBest ? 'Novo recorde!' : 'Voo encerrado'}
+                {training ? t('game.trainingOver') : isNewBest ? t('game.newRecord') : t('game.flightOver')}
               </Text>
 
               <View style={styles.statsRow}>
-                <Stat label="Pontos" value={world.score} highlight />
+                <Stat label={t('game.points')} value={world.score} highlight />
                 <View style={styles.divider} />
-                <Stat label="Recorde" value={Math.max(best, world.score)} />
+                <Stat label={t('common.record')} value={Math.max(best, world.score)} />
               </View>
 
               {training || !result ? (
-                <Text style={styles.panelText}>No treino não há moedas, vidas nem ranking.</Text>
+                <Text style={styles.panelText}>{t('game.trainingNoRewards')}</Text>
               ) : result.error ? (
                 <Text style={styles.notice}>{result.error}</Text>
               ) : (
                 <View style={styles.earn}>
                   <View style={styles.earnRow}>
                     <CoinFace size={20} />
-                    <Text style={styles.earnText}>{`+${result.coins + result.stageBonus} moedas`}</Text>
+                    <Text style={styles.earnText}>
+                      {t('game.earned', { count: result.coins + result.stageBonus })}
+                    </Text>
                   </View>
                   {result.stageBonus > 0 || result.coinMultiplier > 1 ? (
                     <Text style={styles.earnDim}>{earnDetail(result)}</Text>
                   ) : null}
                   {result.coins < result.collected * (result.coinMultiplier || 1) ? (
-                    <Text style={styles.earnDim}>Algumas moedas não foram aceitas pelo servidor.</Text>
+                    <Text style={styles.earnDim}>{t('game.someRejected')}</Text>
                   ) : null}
                 </View>
               )}
 
               {!training && (
                 <View style={styles.livesRow}>
-                  <Text style={styles.livesLabel}>VIDAS</Text>
+                  <Text style={styles.livesLabel}>{t('common.livesLabel')}</Text>
                   <LifeBirds lives={lives} total={maxLives} size={19} gap={7} />
                 </View>
               )}
@@ -1334,23 +1348,34 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
               {training || lives > 0 ? (
                 <View style={styles.row}>
                   <Button
-                    title={busy === 'restart' ? 'Preparando...' : training ? 'Treinar de novo' : 'Jogar de novo'}
+                    title={
+                      busy === 'restart'
+                        ? t('common.preparing')
+                        : training
+                          ? t('game.trainAgain')
+                          : t('game.playAgain')
+                    }
                     onPress={restart}
                   />
-                  <Button title="Menu" variant="ghost" onPress={leave} style={{ marginLeft: 12 }} />
+                  <Button title={t('common.menu')} variant="ghost" onPress={leave} style={{ marginLeft: 12 }} />
                 </View>
               ) : (
                 <>
-                  <Text style={styles.outOfLives}>Suas vidas acabaram.</Text>
+                  <Text style={styles.outOfLives}>{t('game.outOfLives')}</Text>
                   <View style={styles.stageButtons}>
                     {canWatch && (
                       <Button
-                        title="Assistir e ganhar 5 vidas"
+                        title={t('common.watchForLives')}
                         onPress={watchAdForLives}
                         style={styles.stageButton}
                       />
                     )}
-                    <Button title="Menu" variant="ghost" onPress={leave} style={styles.stageButton} />
+                    <Button
+                      title={t('common.menu')}
+                      variant="ghost"
+                      onPress={leave}
+                      style={styles.stageButton}
+                    />
                   </View>
                 </>
               )}
@@ -1389,8 +1414,11 @@ function extraChanceNeedsVideo(world) {
 
 /** De onde vieram as moedas: "6 no voo ×2 + 10 de fase fechada". */
 function earnDetail({ coins, stageBonus, coinMultiplier = 1 }) {
-  const voo = coinMultiplier > 1 ? `${coins / coinMultiplier} no voo ×${coinMultiplier}` : `${coins} no voo`;
-  return stageBonus > 0 ? `${voo} + ${stageBonus} de fase fechada` : voo;
+  const voo =
+    coinMultiplier > 1
+      ? t('game.earnFlightMult', { coins: coins / coinMultiplier, mult: coinMultiplier })
+      : t('game.earnFlight', { coins });
+  return stageBonus > 0 ? t('game.earnWithStage', { flight: voo, bonus: stageBonus }) : voo;
 }
 
 const ScoreHud = forwardRef(function ScoreHud({ world, stageLabel, scoreTop, stageTop }, ref) {

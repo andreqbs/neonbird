@@ -67,11 +67,43 @@ cd server && docker compose -f docker-compose.test.yml run --rm --build test
 
 | Tela | O que tem |
 |------|-----------|
-| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações; recorde, moedas, as 5 vidas e o tempo de voo |
-| **Loja** | 5 pássaros novos, escudos e novas chances — em moedas ou assistindo a um vídeo |
-| **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (histórico local) |
-| **Configurações** | Música de fundo, som do toque, efeitos, nome e código do jogador, apagar recordes |
+| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações — só o título em cada card, para caber sem rolar; recorde, moedas, as 5 vidas e o tempo de voo |
+| **Loja** | Abas *Birds* (5 pássaros novos, escudos e novas chances) e *Skins* (bonés, asas, óculos e colares) |
+| **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (histórico local); tocar num jogador mostra o pássaro e as skins dele |
+| **Configurações** | Idioma, música de fundo, som do toque, efeitos, nome e código do jogador, apagar recordes |
 | **Jogo** | Partida, placar e moedas ao vivo, escudo guardado, nova chance, pausa e fim de jogo |
+
+---
+
+## Idiomas
+
+O jogo fala **dez idiomas**: português, inglês, espanhol, italiano, alemão,
+francês, russo, chinês (simplificado), japonês e árabe.
+
+- **Qual vale:** em *Configurações → Idioma*, o jogador escolhe um, ou deixa no
+  **Automático**, que é o padrão: aí vale o idioma do celular, se for um dos dez
+  (o primeiro da lista de idiomas do aparelho que o jogo tiver). Celular em outro
+  idioma, ou leitura que falhou: **inglês**. A troca vale na hora, sem reiniciar.
+- **Os textos** moram em [src/i18n/locales/](src/i18n/locales), um arquivo JSON
+  por idioma, todos com as mesmas chaves. Mudar uma frase é editar o arquivo do
+  idioma; frase nova entra nos dez. O `npm test` confere que nenhum arquivo
+  ficou sem chave, com marcador (`{name}`) trocado ou sem as formas de plural
+  do idioma (o russo tem três, o árabe seis).
+- **O que vem do servidor** — nomes e frases dos pássaros, skins e poderes —
+  também sai traduzido: o app troca pelo id, e os números dos poderes continuam
+  vindo do servidor. Item novo no servidor sem tradução no app aparece com o
+  texto em português dele. Os **erros** do servidor vêm com um código, e é por
+  ele que o app escreve o erro no idioma do jogador.
+- **O idioma do celular** é lido pelo `expo-localization` (módulo nativo, entra
+  no build novo). No build antigo, sem o módulo, o app usa o que o JavaScript
+  sabe do aparelho — e, sem nada, inglês.
+- **Árabe:** o texto sai da direita para a esquerda, mas a tela não espelha.
+  Espelhar pede reiniciar o app e inverteria também o voo, que vai da esquerda
+  para a direita.
+
+O módulo é próprio, sem biblioteca: [src/i18n/index.js](src/i18n/index.js) (a
+escolha, a detecção, o plural) e [catalog.js](src/i18n/catalog.js) (o que vem
+do servidor).
 
 ---
 
@@ -182,11 +214,14 @@ moedas compram, na **Loja**:
 | Item | O que é | Como se consegue |
 |---|---|---|
 | **5 pássaros** | Geada, Brasa, Toxina, Fantasma e Cometa, cada um com um poder | moedas **ou dinheiro** (Google Play); o **Cometa, só dinheiro** |
+| **12 skins** | bonés, asas, óculos e colares de ouro — só visual, em qualquer pássaro | moedas **ou dinheiro** (Google Play) |
 | **Escudo** | o anel que perdoa as batidas enquanto se dissipa | moedas ou vídeo premiado |
 | **Nova chance** | ao cair, continuar do mesmo ponto — uma por partida | moedas ou vídeo premiado |
 
+A loja tem duas abas: **Birds** (pássaros, escudo e nova chance) e **Skins**.
+
 A compra com dinheiro é pelo **Google Play** ([billing.js](src/services/billing.js)):
-o app abre o pagamento do Google, e quem entrega o pássaro é o servidor, depois
+o app abre o pagamento do Google, e quem entrega o pássaro (ou a skin) é o servidor, depois
 de conferir a compra com o Google ([server/billing.go](server/billing.go)). O
 preço em reais é o cadastrado no Play Console; o app mostra o que o Google
 informar. Compra que ficou pelo caminho (app fechado no meio, sem internet,
@@ -201,8 +236,8 @@ guardada, pagando em moedas ou assistindo a um vídeo ali mesmo.
 
 ### O servidor é a única fonte da verdade
 
-**Nada disso é gravado no aparelho.** Moedas, vidas, escudos, novas chances e
-pássaros moram no servidor ([server/](server/)); o app só mostra a última
+**Nada disso é gravado no aparelho.** Moedas, vidas, escudos, novas chances,
+pássaros e skins moram no servidor ([server/](server/)); o app só mostra a última
 resposta dele e não faz conta de saldo nem para adiantar o número na tela
 ([economy.js](src/services/economy.js)). Fechou o app, esqueceu — na próxima
 abertura pergunta de novo.
@@ -348,6 +383,40 @@ Moedas em dobro e chance extra **valem pelo servidor**, pelo pássaro registrado
 na **abertura** da partida: trocar de pássaro no meio não muda o que ela rende, e
 um app adulterado não inventa poder que o servidor não deu.
 
+### As skins
+
+Enfeites para o pássaro, na aba **Skins** da loja: **só visual** — não mexem em
+poder, moeda nem ranking. Cada skin ocupa um **encaixe**, um por vez: um boné,
+umas asas, um óculos e um colar. O que está em uso vai em **qualquer pássaro** que
+o jogador voar, e aparece para os outros no **ranking**: tocar no nome de alguém
+abre o cartão com o pássaro dele, vestido, e a coleção de skins.
+
+| Encaixe | Skins |
+| --- | --- |
+| Bonés | Boné Vermelho, Boné Neon, Boné Hélice (a hélice balança com a batida da asa) |
+| Asas | Asas de Anjo, Asas de Morcego, Asas de Borboleta |
+| Óculos | Óculos Escuros, Óculos 3D, Óculos Pixel |
+| Colares | Corrente de Ouro, Medalhão de Ouro, Colar de Diamante |
+
+Na loja, cada skin já aparece **vestida no pássaro do jogador**, junto com o que
+ele usa nos outros encaixes — dá para ver como fica antes de comprar. Comprar não
+veste sozinho: é o **Usar**, e o **Tirar** devolve o encaixe vazio. O boné toma o
+lugar da crista, e as asas o da asa do pássaro.
+
+Todas se compram com **moedas ou dinheiro** (preços de teste: 6 a 18 moedas). Os
+ids para cadastrar no Play Console estão no
+[server/README.md](server/README.md#16-os-produtos).
+
+**Onde mexer:**
+
+- **Nome, frase, encaixe, preço e produto:** lista `Skins` em
+  [server/catalog.go](server/catalog.go) — redeploy, sem build nova. `Price: 0`
+  vende só por dinheiro; sem `ProductID`, só por moedas.
+- **O desenho:** as cores em [skins.js](src/game/skins.js) e o formato de cada
+  modelo em [SkinParts.js](src/game/render/SkinParts.js) — build nova. Skin nova
+  precisa dos dois lados com o mesmo id: a loja esconde a que o app não sabe
+  desenhar, e o `npm test` acusa skin sem desenho (ou desenho sem skin).
+
 ---
 
 ## Só retrato
@@ -470,6 +539,11 @@ de internet.
 
 Ranking da rodada da semana, com os pontos das partidas fechadas no servidor. Ver
 [Grupos, rodadas e ranking](#grupos-rodadas-e-ranking).
+
+**Tocar num jogador** (no ranking individual ou no grupo) abre o cartão dele
+([PlayerCard.js](src/ui/PlayerCard.js)): o pássaro que ele usa, vestido com as
+skins, os pontos da rodada e a coleção de skins, com as que estão em uso
+marcadas. Vem tudo na própria lista do ranking (`look`), sem outro pedido.
 
 > A primeira ideia de ranking global era o **Google Play Games Services**, que
 > dependia de um módulo nativo em Kotlin nunca escrito. O servidor próprio o

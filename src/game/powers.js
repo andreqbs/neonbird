@@ -1,3 +1,4 @@
+import { powerText } from '../i18n/catalog';
 import { FIXED_DT } from './constants';
 
 /**
@@ -231,5 +232,6 @@ export function powersOfRun(run) {
 /** Texto curto de um poder para a loja: "🧲 Ímã — puxa as moedas..." */
 export function describePower(power) {
   const icone = POWER_ICONS[power.id] || '✨';
-  return `${icone} ${power.name}${power.description ? ` — ${power.description}` : ''}`;
+  const { name, description } = powerText(power);
+  return `${icone} ${name}${description ? ` — ${description}` : ''}`;
 }

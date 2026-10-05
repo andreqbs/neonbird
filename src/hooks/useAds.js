@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import audio from '../audio/AudioManager';
+import { t } from '../i18n';
 import ads, { USE_TEST_UNITS } from '../services/ads';
 import economy from '../services/economy';
 
@@ -93,9 +94,7 @@ export default function useAds() {
       if (!rewarded) {
         return {
           ok: false,
-          error: shown
-            ? 'O vídeo foi fechado antes do fim — sem prêmio desta vez.'
-            : 'Nenhum anúncio disponível agora. Tente de novo em instantes.',
+          error: shown ? t('ads.closedEarly') : t('ads.noAd'),
         };
       }
       setStateSafe('confirming');

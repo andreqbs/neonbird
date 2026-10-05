@@ -335,6 +335,86 @@ func (b BirdOffer) coinMultiplier() int {
 	return vezes
 }
 
+// ====================================================================== SKINS
+//
+// Enfeites que o jogador compra para o passaro: bone, asas, oculos e colar. Sao
+// so VISUAIS — nao mexem em poder, moeda nem ranking. Cada skin ocupa um
+// ENCAIXE (o lugar no corpo), um por vez: um bone, umas asas, um oculos e um
+// colar. O que o jogador esta usando vai em qualquer passaro que ele voar, e
+// aparece para os outros jogadores quando tocam no nome dele no ranking.
+//
+// O DESENHO de cada skin mora no app (src/game/skins.js), pelo `ID`; daqui vem
+// nome, encaixe, preco e produto. Skin nova precisa de desenho la com o mesmo
+// id — o app esconde da loja a skin que ainda nao sabe desenhar.
+
+type SkinSlot struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// Os encaixes, na ordem em que aparecem na loja.
+var SkinSlots = []SkinSlot{
+	{ID: "cap", Name: "Bonés"},
+	{ID: "wings", Name: "Asas"},
+	{ID: "glasses", Name: "Óculos"},
+	{ID: "necklace", Name: "Colares"},
+}
+
+type SkinOffer struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Slot    string `json:"slot"`
+	Tagline string `json:"tagline"`
+	// Preco em moedas. 0 = nao se compra com moedas (so com dinheiro).
+	Price int `json:"price"`
+	// O produto no Play Console, para a compra com dinheiro. Vazio = so com
+	// moedas. O valor em reais e o cadastrado la, como nos passaros.
+	ProductID string `json:"productId,omitempty"`
+}
+
+// ----------------------------------------------------------------------------
+// COMO SE COMPRA: igual aos passaros — `Price` em moedas (0 = so com dinheiro)
+// e `ProductID` no Play Console (vazio = so com moedas). Cada produto tem que
+// existir no Play Console com EXATAMENTE este id (Monetizar > Produtos >
+// Produtos no app) — a lista pronta para cadastrar esta no server/README.md.
+// Precos de teste.
+// ----------------------------------------------------------------------------
+var Skins = []SkinOffer{
+	{ID: "cap_red", Name: "Boné Vermelho", Slot: "cap", Tagline: "O clássico, com botão branco.", Price: 8, ProductID: "skin_cap_red"},
+	{ID: "cap_neon", Name: "Boné Neon", Slot: "cap", Tagline: "Preto, com a aba que brilha.", Price: 10, ProductID: "skin_cap_neon"},
+	{ID: "cap_propeller", Name: "Boné Hélice", Slot: "cap", Tagline: "Quatro cores e uma hélice no topo.", Price: 12, ProductID: "skin_cap_propeller"},
+
+	{ID: "wings_angel", Name: "Asas de Anjo", Slot: "wings", Tagline: "Penas brancas, voo leve.", Price: 14, ProductID: "skin_wings_angel"},
+	{ID: "wings_bat", Name: "Asas de Morcego", Slot: "wings", Tagline: "Pontudas, para os voos da madrugada.", Price: 14, ProductID: "skin_wings_bat"},
+	{ID: "wings_butterfly", Name: "Asas de Borboleta", Slot: "wings", Tagline: "Coloridas, com pintas.", Price: 16, ProductID: "skin_wings_butterfly"},
+
+	{ID: "glasses_sun", Name: "Óculos Escuros", Slot: "glasses", Tagline: "Lente preta e um reflexo.", Price: 6, ProductID: "skin_glasses_sun"},
+	{ID: "glasses_3d", Name: "Óculos 3D", Slot: "glasses", Tagline: "Uma lente vermelha, outra ciano.", Price: 8, ProductID: "skin_glasses_3d"},
+	{ID: "glasses_pixel", Name: "Óculos Pixel", Slot: "glasses", Tagline: "Oito bits de estilo.", Price: 10, ProductID: "skin_glasses_pixel"},
+
+	{ID: "necklace_chain", Name: "Corrente de Ouro", Slot: "necklace", Tagline: "Elos grossos de ouro.", Price: 12, ProductID: "skin_necklace_chain"},
+	{ID: "necklace_medal", Name: "Medalhão de Ouro", Slot: "necklace", Tagline: "Uma medalha de campeão no peito.", Price: 14, ProductID: "skin_necklace_medal"},
+	{ID: "necklace_diamond", Name: "Colar de Diamante", Slot: "necklace", Tagline: "Corrente de ouro e uma pedra azul.", Price: 18, ProductID: "skin_necklace_diamond"},
+}
+
+func skinByID(id string) (SkinOffer, bool) {
+	for _, s := range Skins {
+		if s.ID == id {
+			return s, true
+		}
+	}
+	return SkinOffer{}, false
+}
+
+func skinSlotExists(id string) bool {
+	for _, s := range SkinSlots {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 type ItemOffer struct {
 	Price int `json:"price"`
 }
@@ -349,9 +429,11 @@ type Rules struct {
 }
 
 type Catalog struct {
-	Birds []BirdOffer          `json:"birds"`
-	Items map[string]ItemOffer `json:"items"`
-	Rules Rules                `json:"rules"`
+	Birds     []BirdOffer          `json:"birds"`
+	SkinSlots []SkinSlot           `json:"skinSlots"`
+	Skins     []SkinOffer          `json:"skins"`
+	Items     map[string]ItemOffer `json:"items"`
+	Rules     Rules                `json:"rules"`
 }
 
 func CurrentCatalog() Catalog {
@@ -365,7 +447,9 @@ func CurrentCatalog() Catalog {
 		birds[i] = b
 	}
 	return Catalog{
-		Birds: birds,
+		Birds:     birds,
+		SkinSlots: SkinSlots,
+		Skins:     Skins,
 		Items: map[string]ItemOffer{
 			"shield":   {Price: ShieldPrice},
 			"continue": {Price: ContinuePrice},

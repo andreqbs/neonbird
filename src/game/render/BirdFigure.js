@@ -1,6 +1,9 @@
 import React from 'react';
 import { Animated, View } from 'react-native';
 
+import { NO_SKINS } from '../skins';
+import { SkinCap, SkinGlasses, SkinNecklace, SkinWings } from './SkinParts';
+
 /**
  * O desenho do passaro, sem posicao nem halo: corpo, barriga, cauda, asa, olho,
  * bico e os acessorios do visual (birds.js).
@@ -12,8 +15,12 @@ import { Animated, View } from 'react-native';
  * do corpo (crista, rastro, bico) ficam dentro da folga que quem chama reserva
  * em volta — nenhuma plataforma as recorta. O passaro de sempre sai com as
  * mesmas medidas de antes desta separacao.
+ *
+ * `skins` sao os enfeites em uso (skins.js, `wornSkins`): o bone toma o lugar
+ * da crista, as asas o da asa, o colar vai por cima da asa e por baixo do bico,
+ * e os oculos ficam por cima do olho. Quem desenha cada uma e o SkinParts.
  */
-export default function BirdFigure({ s, look, wingRotate = '0deg' }) {
+export default function BirdFigure({ s, look, wingRotate = '0deg', skins = NO_SKINS }) {
   const eye = look.visor ? (
     <Visor s={s} color={look.visor} />
   ) : (
@@ -47,7 +54,7 @@ export default function BirdFigure({ s, look, wingRotate = '0deg' }) {
     <>
       {/* atras do corpo: rastro e crista (so a ponta aparece) */}
       {look.tail ? <Tail s={s} colors={look.tail} /> : null}
-      {look.crest ? <Crest s={s} crest={look.crest} /> : null}
+      {look.crest && !skins.cap ? <Crest s={s} crest={look.crest} /> : null}
 
       {/* corpo */}
       <View
@@ -91,18 +98,23 @@ export default function BirdFigure({ s, look, wingRotate = '0deg' }) {
         }}
       />
       {/* asa */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          left: s * 0.1,
-          top: s * 0.38,
-          width: s * 0.52,
-          height: s * 0.3,
-          borderRadius: s * 0.16,
-          backgroundColor: look.wing,
-          transform: [{ rotate: wingRotate }],
-        }}
-      />
+      {skins.wings ? (
+        <SkinWings s={s} skin={skins.wings} rotate={wingRotate} />
+      ) : (
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left: s * 0.1,
+            top: s * 0.38,
+            width: s * 0.52,
+            height: s * 0.3,
+            borderRadius: s * 0.16,
+            backgroundColor: look.wing,
+            transform: [{ rotate: wingRotate }],
+          }}
+        />
+      )}
+      {skins.necklace ? <SkinNecklace s={s} skin={skins.necklace} /> : null}
       {/* mascara: por baixo do olho, por cima do corpo */}
       {look.mask ? (
         <View
@@ -131,6 +143,8 @@ export default function BirdFigure({ s, look, wingRotate = '0deg' }) {
           backgroundColor: look.beak,
         }}
       />
+      {skins.glasses ? <SkinGlasses s={s} skin={skins.glasses} /> : null}
+      {skins.cap ? <SkinCap s={s} skin={skins.cap} rotate={wingRotate} /> : null}
     </>
   );
 }

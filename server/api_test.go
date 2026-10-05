@@ -63,7 +63,8 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 	// Cada teste comeca com o banco limpo: saldo herdado de outro teste da
 	// falso positivo dos bons (passa por acaso).
 	if _, err := store.pool.Exec(ctx, `
-		truncate player_access, ad_views, ledger, game_sessions, bird_purchases, owned_birds, wallets,
+		truncate player_access, ad_views, ledger, game_sessions, bird_purchases, owned_birds,
+		         skin_purchases, equipped_skins, owned_skins, wallets,
 		         runs, group_members, groups, players
 		restart identity cascade`); err != nil {
 		t.Fatalf("limpar: %v", err)
@@ -478,4 +479,47 @@ func TestGrupoNaoPassaDeOitoJogadores(t *testing.T) {
 	if !strings.Contains(erroDe(body), "8") {
 		t.Errorf("mensagem %q deveria dizer o limite", erroDe(body))
 	}
+}
+
+// Os erros que o jogador pode ver levam codigo: e por ele que o app escreve o
+// erro no idioma de quem joga (o texto continua em portugues).
+func TestErrosDeGrupoTemCodigo(t *testing.T) {
+	exigeRodadaAberta(t)
+	a := novoAmbiente(t, nil)
+	ana := a.registra(t, "Ana")
+	bia := a.registra(t, "Bia")
+	caio := a.registra(t, "Caio")
+
+	confere := func(oQue string, st int, body map[string]any, status int, codigo string) {
+		t.Helper()
+		if st != status || codigoDe(body) != codigo {
+			t.Errorf("%s: status %d (%v), esperava %d %s", oQue, st, body, status, codigo)
+		}
+	}
+
+	st, body := a.chama(t, &ana, "POST", "/v1/groups", map[string]any{"name": "A"})
+	confere("nome curto demais", st, body, 400, "invalid_name")
+	if st, body := a.chama(t, &ana, "POST", "/v1/groups", map[string]any{"name": "Esquadrão"}); st != 200 {
+		t.Fatalf("criar grupo: status %d (%v)", st, body)
+	}
+	st, body = a.chama(t, &ana, "POST", "/v1/groups", map[string]any{"name": "Outro"})
+	confere("criar um segundo grupo", st, body, 409, "already_in_group")
+	st, body = a.chama(t, &bia, "POST", "/v1/groups/members", map[string]any{"playerId": caio.id})
+	confere("convite de quem nao tem grupo", st, body, 409, "no_group")
+	st, body = a.chama(t, &ana, "POST", "/v1/groups/members", map[string]any{"playerId": "nao-e-codigo"})
+	confere("codigo torto", st, body, 400, "invalid_player_code")
+	st, body = a.chama(t, &ana, "POST", "/v1/groups/members", map[string]any{"playerId": newUUID()})
+	confere("codigo de ninguem", st, body, 404, "player_not_found")
+	st, body = a.chama(t, &ana, "POST", "/v1/groups/members", map[string]any{"playerId": ana.id})
+	confere("chamar a si mesmo", st, body, 409, "already_member")
+
+	a.chama(t, &ana, "POST", "/v1/groups/members", map[string]any{"playerId": bia.id})
+	st, body = a.chama(t, &bia, "POST", "/v1/groups/members", map[string]any{"playerId": caio.id})
+	confere("convite de quem nao e lider", st, body, 403, "not_leader")
+
+	if st, body := a.chama(t, &caio, "POST", "/v1/groups", map[string]any{"name": "Do Caio"}); st != 200 {
+		t.Fatalf("grupo do Caio: status %d (%v)", st, body)
+	}
+	st, body = a.chama(t, &ana, "POST", "/v1/groups/members", map[string]any{"playerId": caio.id})
+	confere("chamar quem ja tem grupo", st, body, 409, "target_in_group")
 }

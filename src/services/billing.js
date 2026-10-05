@@ -1,33 +1,43 @@
+import { t } from '../i18n';
 import economy from './economy';
 import { playerNow } from './identity';
 import { sha256Hex } from './sha256';
 
 /**
- * A compra com dinheiro dos passaros (Google Play Billing, pelo expo-iap).
+ * A compra com dinheiro dos passaros e das skins (Google Play Billing, pelo
+ * expo-iap).
  *
- * QUEM ENTREGA O PASSARO E O SERVIDOR. O app abre o pagamento do Google Play;
- * quando o Google aprova, o app manda o token da compra ao servidor, que confere
- * com o Google e so entao poe o passaro na conta (server/billing.go). So depois
- * disso o app fecha a compra no aparelho (finishTransaction).
+ * QUEM ENTREGA E O SERVIDOR. O app abre o pagamento do Google Play; quando o
+ * Google aprova, o app manda o token da compra ao servidor, que confere com o
+ * Google e so entao poe o passaro (ou a skin) na conta (server/billing.go). So
+ * depois disso o app fecha a compra no aparelho (finishTransaction).
  *
  * Compra que ficou pelo caminho nao se perde — app fechado no meio, sem
  * internet, pagamento pendente que aprovou depois, app reinstalado: a cada
  * abertura o app pede ao Google as compras que ele ainda guarda e manda ao
  * servidor as que a carteira nao tem (syncPurchases).
  *
- * QUAIS passaros se compram com dinheiro, e com qual produto, vem do servidor
- * (server/catalog.go, campo ProductID). O VALOR em reais vem do Google Play,
- * que e onde ele e cadastrado.
+ * O QUE se compra com dinheiro, e com qual produto, vem do servidor
+ * (server/catalog.go, campo ProductID de cada passaro e de cada skin). O VALOR
+ * em reais vem do Google Play, que e onde ele e cadastrado.
  *
  * So no Android. No iPhone e na web a loja vende so por moedas.
  */
 
-/** O que o jogador le. Sem bastidor: nem Google nem servidor. */
+/** O que o jogador le, no idioma do jogo. Sem bastidor: nem Google nem servidor. */
 export const BILLING_MESSAGES = {
-  unavailable: 'Compra indisponível neste aparelho.',
-  pending: 'Pagamento pendente. O pássaro chega assim que o pagamento for aprovado.',
-  later: 'Pagamento feito! O pássaro aparece na sua conta assim que a internet voltar.',
-  failed: 'Não deu para concluir a compra. Tente de novo.',
+  get unavailable() {
+    return t('billing.unavailable');
+  },
+  get pending() {
+    return t('billing.pending');
+  },
+  get later() {
+    return t('billing.later');
+  },
+  get failed() {
+    return t('billing.failed');
+  },
 };
 
 let iap; // o modulo nativo: undefined = ainda nao procurei; null = nao ha
@@ -95,15 +105,19 @@ function conecta() {
   return conexao;
 }
 
-/** O passaro do catalogo que se compra com este produto. */
-function birdOfProduct(productId) {
-  const birds = (economy.economyNow().catalog || {}).birds || [];
-  return birds.find((b) => b.productId && b.productId === productId) || null;
+/** O que se compra com este produto: { kind: 'bird' | 'skin', item }, ou null. */
+function itemOfProduct(productId) {
+  if (!productId) return null;
+  const catalogo = economy.economyNow().catalog || {};
+  const bird = (catalogo.birds || []).find((b) => b.productId === productId);
+  if (bird) return { kind: 'bird', item: bird };
+  const skin = (catalogo.skins || []).find((s) => s.productId === productId);
+  return skin ? { kind: 'skin', item: skin } : null;
 }
 
-/** Busca no Google Play o preco de cada passaro que se compra com dinheiro. */
-export async function loadPrices(birds) {
-  const ids = (birds || []).map((b) => b.productId).filter(Boolean);
+/** Busca no Google Play o preco de cada item (passaro ou skin) que se compra com dinheiro. */
+export async function loadPrices(items) {
+  const ids = (items || []).map((b) => b.productId).filter(Boolean);
   if (ids.length === 0 || !(await conecta())) return;
   try {
     const produtos = await nativeIap().fetchProducts({ skus: ids, type: 'in-app' });
@@ -122,33 +136,39 @@ export function priceOf(productId) {
 }
 
 /**
- * Compra um passaro com dinheiro. Resolve com { ok: true } quando o passaro ja
- * esta na carteira; { pending } se o pagamento ficou pendente; { cancelled } se
- * o jogador desistiu; ou { ok: false, error }.
+ * Compra com dinheiro um passaro ou uma skin do catalogo (qualquer item com
+ * `productId`). Resolve com { ok: true } quando o item ja esta na carteira;
+ * { pending } se o pagamento ficou pendente; { cancelled } se o jogador
+ * desistiu; ou { ok: false, error }.
  */
-export async function buyBird(bird) {
+export async function buyItem(item) {
   const mod = nativeIap();
   const jogador = playerNow();
-  if (!bird || !bird.productId || !mod || !jogador || !(await conecta())) {
+  if (!item || !item.productId || !mod || !jogador || !(await conecta())) {
     return { ok: false, error: BILLING_MESSAGES.unavailable };
   }
+  const productId = item.productId;
   return new Promise((resolve) => {
-    esperando.set(bird.productId, resolve);
+    esperando.set(productId, resolve);
     Promise.resolve(
       mod.requestPurchase({
         request: {
           // O resumo do codigo do jogador vai amarrado na compra: ajuda o Google
           // a barrar fraude, sem mandar nada que identifique a pessoa.
-          google: { skus: [bird.productId], obfuscatedAccountId: sha256Hex(jogador.id) },
+          google: { skus: [productId], obfuscatedAccountId: sha256Hex(jogador.id) },
         },
         type: 'in-app',
       })
     ).catch((erro) => {
-      esperando.delete(bird.productId);
+      esperando.delete(productId);
       resolve(respostaDeErro(erro));
     });
   });
 }
+
+/** Os nomes de sempre: o passaro e a skin se compram do mesmo jeito. */
+export const buyBird = buyItem;
+export const buySkin = buyItem;
 
 function responde(productId, resposta) {
   const fim = esperando.get(productId);
@@ -169,11 +189,14 @@ async function tratarCompra(compra) {
   responde(productId, await entrega(compra));
 }
 
-/** Leva a compra ao servidor e, com o passaro na conta, fecha a compra no aparelho. */
+/** Leva a compra ao servidor e, com o item na conta, fecha a compra no aparelho. */
 async function entrega(compra) {
-  const bird = birdOfProduct(compra.productId);
-  if (!bird) return { ok: false, error: BILLING_MESSAGES.unavailable };
-  const r = await economy.claimBirdPurchase(bird.id, compra.purchaseToken);
+  const alvo = itemOfProduct(compra.productId);
+  if (!alvo) return { ok: false, error: BILLING_MESSAGES.unavailable };
+  const r =
+    alvo.kind === 'skin'
+      ? await economy.claimSkinPurchase(alvo.item.id, compra.purchaseToken)
+      : await economy.claimBirdPurchase(alvo.item.id, compra.purchaseToken);
   if (r.ok) {
     try {
       await nativeIap().finishTransaction({ purchase: compra, isConsumable: false });
@@ -204,7 +227,7 @@ function tratarErro(erro) {
 
 /**
  * Manda ao servidor as compras que o Google ainda guarda e a carteira nao tem.
- * Devolve quantos passaros chegaram.
+ * Devolve quantos itens (passaros e skins) chegaram.
  */
 export async function syncPurchases() {
   const mod = nativeIap();
@@ -216,14 +239,17 @@ export async function syncPurchases() {
     return 0;
   }
   const carteira = economy.economyNow().wallet;
-  const donos = new Set((carteira && carteira.ownedBirds) || []);
+  const donos = new Set([
+    ...((carteira && carteira.ownedBirds) || []),
+    ...((carteira && carteira.ownedSkins) || []),
+  ]);
   let chegaram = 0;
   for (const compra of compras || []) {
     if (compra.purchaseState !== 'purchased' || !compra.purchaseToken) continue;
-    const bird = birdOfProduct(compra.productId);
-    if (!bird) continue;
+    const alvo = itemOfProduct(compra.productId);
+    if (!alvo) continue;
     // Ja esta na conta e fechada no aparelho: nada a fazer.
-    if (donos.has(bird.id) && compra.isAcknowledgedAndroid) continue;
+    if (donos.has(alvo.item.id) && compra.isAcknowledgedAndroid) continue;
     const r = await entrega(compra);
     if (r.ok) chegaram += 1;
   }
@@ -235,6 +261,8 @@ export default {
   subscribeBilling,
   loadPrices,
   priceOf,
+  buyItem,
   buyBird,
+  buySkin,
   syncPurchases,
 };

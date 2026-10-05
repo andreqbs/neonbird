@@ -2,6 +2,7 @@ import React from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
 import { POWER_ICONS } from '../game/powers';
+import { powerText } from '../i18n/catalog';
 import { theme } from './theme';
 
 /**
@@ -46,7 +47,7 @@ function TimedPower({ power, value }) {
       <Text style={styles.icon}>{POWER_ICONS[power.id]}</Text>
       <View style={styles.texts}>
         <Text style={styles.name} numberOfLines={1}>
-          {power.name}
+          {powerText(power).name}
         </Text>
         <View style={styles.track}>
           <Animated.View style={[styles.fill, { width: largura, backgroundColor: cor }]} />
@@ -61,7 +62,7 @@ function PassivePower({ power }) {
     <View style={[styles.chip, { opacity: 0.8 }]}>
       <Text style={styles.icon}>{POWER_ICONS[power.id]}</Text>
       <Text style={styles.name} numberOfLines={1}>
-        {power.name}
+        {powerText(power).name}
       </Text>
     </View>
   );

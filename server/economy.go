@@ -35,6 +35,10 @@ type Wallet struct {
 	// As estrelas de cada passaro que o jogador tem (catalog.go). O que nao
 	// evolui aparece ja no maximo.
 	BirdLevels map[string]int `json:"birdLevels"`
+	// As skins do jogador e o que ele esta usando em cada encaixe (catalog.go):
+	// {"cap": "cap_red", "glasses": "glasses_3d"}.
+	OwnedSkins    []string          `json:"ownedSkins"`
+	EquippedSkins map[string]string `json:"equippedSkins"`
 	// Tempo de voo somado de todas as partidas, em ms. Nao e saldo — nao se
 	// gasta nem se compra —, mas mora aqui porque a Home ja busca a carteira.
 	FlightMs int64 `json:"flightMs"`
@@ -156,7 +160,40 @@ func readWallet(ctx context.Context, q querier, playerID string) (Wallet, error)
 		}
 		w.BirdLevels[id] = birdOrDefault(id).starsFor(nivel)
 	}
-	return w, linhas.Err()
+	if err := linhas.Err(); err != nil {
+		return Wallet{}, err
+	}
+
+	w.OwnedSkins, w.EquippedSkins, err = readSkins(ctx, q, playerID)
+	return w, err
+}
+
+// readSkins: as skins do jogador, na ordem em que chegaram, e a que esta em uso
+// em cada encaixe.
+func readSkins(ctx context.Context, q querier, playerID string) ([]string, map[string]string, error) {
+	linhas, err := q.Query(ctx, `
+		select o.skin_id, coalesce(e.slot, '')
+		  from owned_skins o
+		  left join equipped_skins e on e.player_id = o.player_id and e.skin_id = o.skin_id
+		 where o.player_id = $1
+		 order by o.acquired_at, o.skin_id`, playerID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer linhas.Close()
+
+	donas, usando := []string{}, map[string]string{}
+	for linhas.Next() {
+		var id, encaixe string
+		if err := linhas.Scan(&id, &encaixe); err != nil {
+			return nil, nil, err
+		}
+		donas = append(donas, id)
+		if encaixe != "" {
+			usando[encaixe] = id
+		}
+	}
+	return donas, usando, linhas.Err()
 }
 
 func (s *Store) Wallet(ctx context.Context, playerID string) (Wallet, error) {
@@ -524,8 +561,9 @@ func (s *Store) UseShield(ctx context.Context, playerID, runID string, rules Run
 
 // ---------------------------------------------------------------------- loja
 
-// Buy e a loja: passaro, escudo ou nova chance, sempre pago em moedas.
-func (s *Store) Buy(ctx context.Context, playerID, item, birdID string) (Wallet, error) {
+// Buy e a loja: passaro, skin, escudo ou nova chance, sempre pago em moedas.
+// `itemID` e o passaro ou a skin; escudo e nova chance nao precisam dele.
+func (s *Store) Buy(ctx context.Context, playerID, item, itemID string) (Wallet, error) {
 	var wallet Wallet
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		w, err := lockWallet(ctx, tx, playerID)
@@ -535,7 +573,7 @@ func (s *Store) Buy(ctx context.Context, playerID, item, birdID string) (Wallet,
 
 		switch item {
 		case "bird":
-			b, ok := birdByID(birdID)
+			b, ok := birdByID(itemID)
 			if !ok || b.ID == DefaultBird {
 				return ruleCode(404, "bird_not_found", "pássaro não encontrado")
 			}
@@ -558,6 +596,33 @@ func (s *Store) Buy(ctx context.Context, playerID, item, birdID string) (Wallet,
 				return err
 			}
 			if err := applyDelta(ctx, tx, playerID, "buy_bird", b.ID, delta{coins: -b.Price}); err != nil {
+				return err
+			}
+
+		case "skin":
+			sk, ok := skinByID(itemID)
+			if !ok {
+				return ruleCode(404, "skin_not_found", "skin não encontrada")
+			}
+			// Skin sem preco em moedas so se compra com dinheiro (billing.go).
+			if sk.Price <= 0 {
+				return ruleCode(409, "coins_not_accepted", "esta skin não se compra com moedas")
+			}
+			tem, err := ownsSkin(ctx, tx, playerID, sk.ID)
+			if err != nil {
+				return err
+			}
+			if tem {
+				return ruleCode(409, "already_owned", "você já tem esta skin")
+			}
+			if w.Coins < sk.Price {
+				return ruleCode(409, "not_enough_coins", "moedas insuficientes")
+			}
+			if _, err := tx.Exec(ctx,
+				`insert into owned_skins (player_id, skin_id) values ($1, $2)`, playerID, sk.ID); err != nil {
+				return err
+			}
+			if err := applyDelta(ctx, tx, playerID, "buy_skin", sk.ID, delta{coins: -sk.Price}); err != nil {
 				return err
 			}
 
@@ -680,6 +745,59 @@ func (s *Store) EquipBird(ctx context.Context, playerID, birdID string) (Wallet,
 			playerID, birdID); err != nil {
 			return err
 		}
+		wallet, err = readWallet(ctx, tx, playerID)
+		return err
+	})
+	return wallet, err
+}
+
+func ownsSkin(ctx context.Context, q querier, playerID, skinID string) (bool, error) {
+	var tem bool
+	err := q.QueryRow(ctx,
+		`select exists(select 1 from owned_skins where player_id = $1 and skin_id = $2)`,
+		playerID, skinID).Scan(&tem)
+	return tem, err
+}
+
+// EquipSkin veste uma skin comprada no encaixe dela: a que estava ali sai. Com
+// `skinID` vazio, tira a skin do encaixe `slot` e o passaro fica sem nada ali.
+func (s *Store) EquipSkin(ctx context.Context, playerID, skinID, slot string) (Wallet, error) {
+	var wallet Wallet
+	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		if _, err := lockWallet(ctx, tx, playerID); err != nil {
+			return err
+		}
+
+		if skinID == "" {
+			if !skinSlotExists(slot) {
+				return ruleCode(404, "slot_not_found", "encaixe não encontrado")
+			}
+			if _, err := tx.Exec(ctx,
+				`delete from equipped_skins where player_id = $1 and slot = $2`, playerID, slot); err != nil {
+				return err
+			}
+		} else {
+			sk, ok := skinByID(skinID)
+			if !ok {
+				return ruleCode(404, "skin_not_found", "skin não encontrada")
+			}
+			tem, err := ownsSkin(ctx, tx, playerID, sk.ID)
+			if err != nil {
+				return err
+			}
+			if !tem {
+				return ruleCode(403, "not_owned", "compre esta skin antes de usar")
+			}
+			// O encaixe vem do catalogo, nunca do pedido: oculos nao vira bone.
+			if _, err := tx.Exec(ctx, `
+				insert into equipped_skins (player_id, slot, skin_id) values ($1, $2, $3)
+				on conflict (player_id, slot) do update set skin_id = excluded.skin_id`,
+				playerID, sk.Slot, sk.ID); err != nil {
+				return err
+			}
+		}
+
+		var err error
 		wallet, err = readWallet(ctx, tx, playerID)
 		return err
 	})

@@ -1,3 +1,4 @@
+import { errorText } from '../i18n';
 import { playerNow } from './identity';
 
 /**
@@ -74,7 +75,7 @@ export async function request(
   path,
   { body, auth = true, headers: extras, retry = method === 'GET' } = {}
 ) {
-  if (!isConfigured()) return { ok: false, error: 'offline', offline: true };
+  if (!isConfigured()) return { ok: false, code: 'offline', error: errorText({ code: 'offline' }), offline: true };
 
   const headers = {
     'Content-Type': 'application/json',
@@ -89,7 +90,7 @@ export async function request(
   };
   if (auth) {
     const id = authHeaders();
-    if (!id) return { ok: false, error: 'sem jogador' };
+    if (!id) return { ok: false, code: 'no_player', error: errorText({ code: 'no_player' }) };
     Object.assign(headers, id);
   }
   if (extras) Object.assign(headers, extras);
@@ -118,11 +119,8 @@ async function attempt(method, path, headers, payload) {
     });
   } catch (e) {
     clearTimeout(timer);
-    return {
-      ok: false,
-      offline: true,
-      error: e.name === 'AbortError' ? 'o servidor demorou demais' : 'sem conexão',
-    };
+    const code = e.name === 'AbortError' ? 'timeout' : 'offline';
+    return { ok: false, offline: true, code, error: errorText({ code }) };
   }
 
   let corpo = null;
@@ -138,12 +136,14 @@ async function attempt(method, path, headers, payload) {
 
   if (!res.ok) {
     // O servidor manda a regra ja escrita para o jogador ler ("moedas
-    // insuficientes") e um codigo para o app decidir o que fazer.
+    // insuficientes") e um codigo para o app decidir o que fazer. O texto sai no
+    // idioma do jogo: em portugues, o do servidor; nos outros, a traducao do
+    // codigo (i18n/errorText).
     return {
       ok: false,
       status: res.status,
       code: corpo?.code,
-      error: corpo?.error || `erro ${res.status}`,
+      error: errorText({ code: corpo?.code, error: corpo?.error }),
       // Servidor fora do ar atras do proxy conta como sem conexao.
       offline: res.status === 502 || res.status === 503 || res.status === 504,
     };
@@ -156,7 +156,7 @@ async function attempt(method, path, headers, payload) {
 /** Apresenta o jogador ao servidor (ou atualiza o apelido dele). */
 export async function syncPlayer() {
   const p = playerNow();
-  if (!p) return { ok: false, error: 'sem jogador' };
+  if (!p) return { ok: false, code: 'no_player', error: errorText({ code: 'no_player' }) };
   // Repetir e seguro: na segunda vez o servidor so grava o apelido de novo.
   return request('POST', '/v1/players', {
     auth: false,

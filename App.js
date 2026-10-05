@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { Fragment, useCallback, useEffect, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,6 +16,8 @@ import economy from './src/services/economy';
 import integrity from './src/services/integrity';
 import audio from './src/audio/AudioManager';
 import ads from './src/services/ads';
+import { resolveLanguage, setLanguage } from './src/i18n';
+import useLanguage from './src/i18n/useLanguage';
 import { SettingsProvider, useSettings } from './src/state/SettingsContext';
 import { theme } from './src/ui/theme';
 
@@ -35,6 +37,14 @@ function Root() {
   // A partida que a tela de jogo abre: a do servidor (`run`) ou um treino.
   const [game, setGame] = useState(null);
   const { best, refresh, submit } = useScores();
+  const lang = useLanguage();
+
+  // O idioma: o escolhido em Configuracoes ou, no automatico, o do celular (se
+  // for um dos do jogo; senao, ingles). Antes de as preferencias chegarem do
+  // disco, ja vale o do celular — e a troca, quando vem, redesenha as telas.
+  useEffect(() => {
+    if (loaded) setLanguage(resolveLanguage(settings.language));
+  }, [loaded, settings.language]);
   // Cria o jogador (codigo + apelido) ja na abertura: sem ele nao ha partida no
   // servidor, nem video premiado que pague a alguem.
   usePlayer();
@@ -126,30 +136,34 @@ function Root() {
     <View style={styles.root}>
       <StatusBar style="light" hidden={screen === 'game'} />
 
-      {screen === 'home' && (
-        <HomeScreen onNavigate={setScreen} onPlay={startGame} onTrain={startTraining} best={best} />
-      )}
+      {/* A chave do idioma: trocar de idioma monta as telas de novo, ja com os
+          textos novos. A tela aberta continua a mesma (ela mora fora daqui). */}
+      <Fragment key={lang}>
+        {screen === 'home' && (
+          <HomeScreen onNavigate={setScreen} onPlay={startGame} onTrain={startTraining} best={best} />
+        )}
 
-      {screen === 'game' && game && (
-        <GameScreen
-          key={game.key}
-          initialRun={game.run}
-          training={game.training}
-          onExit={goHome}
-          best={best}
-          onScore={handleScore}
-        />
-      )}
+        {screen === 'game' && game && (
+          <GameScreen
+            key={game.key}
+            initialRun={game.run}
+            training={game.training}
+            onExit={goHome}
+            best={best}
+            onScore={handleScore}
+          />
+        )}
 
-      {screen === 'shop' && <ShopScreen onBack={goHome} />}
+        {screen === 'shop' && <ShopScreen onBack={goHome} />}
 
-      {screen === 'leaderboard' && (
-        <LeaderboardScreen onBack={goHome} onOpenSettings={() => setScreen('settings')} />
-      )}
+        {screen === 'leaderboard' && (
+          <LeaderboardScreen onBack={goHome} onOpenSettings={() => setScreen('settings')} />
+        )}
 
-      {screen === 'settings' && (
-        <SettingsScreen onBack={goHome} onScoresCleared={refresh} />
-      )}
+        {screen === 'settings' && (
+          <SettingsScreen onBack={goHome} onScoresCleared={refresh} />
+        )}
+      </Fragment>
     </View>
   );
 }

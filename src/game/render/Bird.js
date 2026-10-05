@@ -3,6 +3,7 @@ import { Animated, View } from 'react-native';
 
 import { theme } from '../../ui/theme';
 import { lookFor } from '../birds';
+import { NO_SKINS } from '../skins';
 import BirdFigure from './BirdFigure';
 
 /**
@@ -10,8 +11,9 @@ import BirdFigure from './BirdFigure';
  * em qualquer densidade de tela. A posicao vem de Animated.Value, ou seja,
  * atualiza sem re-renderizar a arvore React a cada frame.
  *
- * O visual vem de `look` (birds.js): o de sempre ou o comprado na loja. O
- * desenho em si esta em BirdFigure, que a loja tambem usa.
+ * O visual vem de `look` (birds.js): o de sempre ou o comprado na loja — e
+ * `skins` (skins.js), os enfeites em uso. O desenho em si esta em BirdFigure,
+ * que a loja e o ranking tambem usam.
  *
  * Nada aqui depende de API especifica de plataforma:
  *  - o brilho e feito com circulos concentricos, e nao com sombra. `shadow*`
@@ -22,7 +24,17 @@ import BirdFigure from './BirdFigure';
  *    uma caixa com folga, entao nenhuma plataforma as recorta.
  * Resultado: o mesmo desenho na web, no Android e no iOS.
  */
-export default function Bird({ layout, y, rotation, wing, shield, shieldLevel, ghost, look = lookFor() }) {
+export default function Bird({
+  layout,
+  y,
+  rotation,
+  wing,
+  shield,
+  shieldLevel,
+  ghost,
+  look = lookFor(),
+  skins = NO_SKINS,
+}) {
   const s = layout.birdRadius * 2; // diametro do corpo
   const pad = s * 0.42; // folga para halo, cauda, bico e acessorios
   const box = s + pad * 2;
@@ -108,7 +120,7 @@ export default function Bird({ layout, y, rotation, wing, shield, shieldLevel, g
 
         {/* corpo do passaro, centrado na caixa */}
         <View style={{ position: 'absolute', left: pad, top: pad, width: s, height: s }}>
-          <BirdFigure s={s} look={look} wingRotate={wingRotate} />
+          <BirdFigure s={s} look={look} wingRotate={wingRotate} skins={skins} />
         </View>
       </Animated.View>
 

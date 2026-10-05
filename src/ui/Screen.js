@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { t } from '../i18n';
 import { SKY_GRADIENT, theme } from './theme';
 
 /**
@@ -36,7 +37,7 @@ export default function Screen({ title, onBack, children, footer, contentStyle }
                 style={({ pressed }) => [styles.back, pressed && { opacity: 0.6 }]}
               >
                 <Text style={styles.backIcon}>‹</Text>
-                <Text style={styles.backLabel}>Voltar</Text>
+                <Text style={styles.backLabel}>{t('common.back')}</Text>
               </Pressable>
             ) : (
               <View style={styles.back} />

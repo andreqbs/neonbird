@@ -37,8 +37,9 @@ func (a *API) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/catalog", a.catalog)
 	mux.HandleFunc("GET /v1/me/wallet", a.wallet)
 	mux.HandleFunc("POST /v1/me/bird", a.equipBird)
+	mux.HandleFunc("POST /v1/me/skin", a.equipSkin)
 	mux.HandleFunc("POST /v1/shop/buy", a.buy)
-	mux.HandleFunc("POST /v1/shop/purchase", a.purchaseBird)
+	mux.HandleFunc("POST /v1/shop/purchase", a.purchase)
 	mux.HandleFunc("POST /v1/shop/upgrade", a.upgradeBird)
 	mux.HandleFunc("POST /v1/runs/start", a.startRun)
 	mux.HandleFunc("POST /v1/runs/{id}/finish", a.finishRun)
@@ -89,6 +90,12 @@ func (a *API) fail(w http.ResponseWriter, r *http.Request, err error) {
 
 func badRequest(w http.ResponseWriter, msg string) {
 	writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+}
+
+// badRequestCode e o badRequest com codigo — para o erro que o jogador pode
+// ver, e que o app escreve no idioma dele pelo codigo.
+func badRequestCode(w http.ResponseWriter, code, msg string) {
+	writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg, "code": code})
 }
 
 // decode le o corpo com teto de tamanho e recusa campo desconhecido — corpo
@@ -170,7 +177,7 @@ func (a *API) registerPlayer(w http.ResponseWriter, r *http.Request) {
 	}
 	nome, ok := sanitizeName(body.Name, PlayerNameMax)
 	if !ok {
-		badRequest(w, "escolha um nome com pelo menos 2 letras")
+		badRequestCode(w, "invalid_name", "escolha um nome com pelo menos 2 letras")
 		return
 	}
 
@@ -209,7 +216,7 @@ func (a *API) createGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	nome, ok := sanitizeName(body.Name, GroupNameMax)
 	if !ok {
-		badRequest(w, "dê um nome com pelo menos 2 letras")
+		badRequestCode(w, "invalid_name", "dê um nome com pelo menos 2 letras")
 		return
 	}
 
@@ -235,7 +242,7 @@ func (a *API) addMember(w http.ResponseWriter, r *http.Request) {
 	}
 	alvo, ok := normalizeUUID(body.PlayerID)
 	if !ok {
-		badRequest(w, "código do jogador inválido")
+		badRequestCode(w, "invalid_player_code", "código do jogador inválido")
 		return
 	}
 

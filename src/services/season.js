@@ -1,3 +1,5 @@
+import { t, tList } from '../i18n';
+
 /**
  * Rodadas semanais.
  *
@@ -91,28 +93,30 @@ export function msUntilNext(season, when = new Date()) {
  * fica olhando so custa render.
  */
 export function formatRemaining(ms) {
-  if (ms <= 0) return 'agora';
+  if (ms <= 0) return t('time.now');
   const min = Math.floor(ms / 60000);
-  const dias = Math.floor(min / (60 * 24));
-  const horas = Math.floor((min % (60 * 24)) / 60);
-  const minutos = min % 60;
-  if (dias > 0) return horas > 0 ? `${dias}d ${horas}h` : `${dias}d`;
-  if (horas > 0) return minutos > 0 ? `${horas}h ${minutos}min` : `${horas}h`;
-  return `${minutos}min`;
+  const d = Math.floor(min / (60 * 24));
+  const h = Math.floor((min % (60 * 24)) / 60);
+  const m = min % 60;
+  if (d > 0) return h > 0 ? t('time.dh', { d, h }) : t('time.d', { d });
+  if (h > 0) return m > 0 ? t('time.hm', { h, m }) : t('time.h', { h });
+  return t('time.m', { m });
 }
 
-/** Rotulo curto da rodada, do tipo "6 a 13 de setembro". */
+/** Rotulo curto da rodada, do tipo "6 a 13 de setembro" (no idioma do jogo). */
 export function seasonLabel(season) {
-  const meses = [
-    'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
-  ];
+  const meses = tList('time.months');
   const inicio = toLocal(season.startsAt);
   const fim = toLocal(season.endsAt);
   const mesInicio = meses[inicio.getUTCMonth()];
   const mesFim = meses[fim.getUTCMonth()];
-  if (mesInicio === mesFim) {
-    return `${inicio.getUTCDate()} a ${fim.getUTCDate()} de ${mesFim}`;
+  if (inicio.getUTCMonth() === fim.getUTCMonth()) {
+    return t('season.sameMonth', { from: inicio.getUTCDate(), to: fim.getUTCDate(), month: mesFim });
   }
-  return `${inicio.getUTCDate()} de ${mesInicio} a ${fim.getUTCDate()} de ${mesFim}`;
+  return t('season.twoMonths', {
+    from: inicio.getUTCDate(),
+    monthFrom: mesInicio,
+    to: fim.getUTCDate(),
+    monthTo: mesFim,
+  });
 }

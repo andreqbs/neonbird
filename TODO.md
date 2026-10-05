@@ -52,6 +52,10 @@ Passo a passo na [Parte 5 do server/README.md](server/README.md#parte-5--compra-
       libera produtos depois de receber um app com o módulo de compras.
 - [ ] **Play Console:** criar e ativar os produtos `bird_frost`, `bird_ember`,
       `bird_toxic`, `bird_phantom` e `bird_comet`, com o preço em reais.
+- [ ] **Play Console:** criar e ativar os **12 produtos das skins**
+      (`skin_cap_red` ... `skin_necklace_diamond`) — a lista completa, com o
+      nome de cada uma, está no
+      [passo 16 do server/README.md](server/README.md#16-os-produtos).
 - [ ] **Play Console:** dar à conta de serviço do servidor as permissões **Ver
       dados financeiros...** e **Gerenciar pedidos e assinaturas**.
 - [ ] **Dokploy:** `GOOGLE_SERVICE_ACCOUNT` configurada (a mesma do Play
@@ -59,10 +63,11 @@ Passo a passo na [Parte 5 do server/README.md](server/README.md#parte-5--compra-
 - [ ] **Play Console:** **Teste de licença** com as contas de teste, e uma compra
       de teste de ponta a ponta.
 - [ ] **Play Console:** ficha **Segurança dos dados** com *Informações
-      financeiras → Histórico de compras*; publicar a política **v2.2**.
+      financeiras → Histórico de compras*; publicar a política **v2.3** (ela já
+      diz que o visual do pássaro — pássaro e skins — aparece no ranking).
 - [ ] **Preços de teste em moedas** (Geada 10 ... Fantasma 18, escudo 5, nova
-      chance 5, estrelas 10/20/40/80/160) estão em produção: decidir os
-      definitivos.
+      chance 5, estrelas 10/20/40/80/160, skins 6 a 18) estão em produção:
+      decidir os definitivos.
 
 ### Avisos do Play Console
 
@@ -96,6 +101,14 @@ Nenhum dos dois impede publicar.
       automáticos cobrem os poderes, mas o ritmo (5 s de ímã, 2 s de invisível,
       20% mais lento) só se sente jogando. Ajustar é em
       [server/catalog.go](server/catalog.go), sem build nova.
+- [ ] **Ver as skins no celular**, no build novo: no voo o pássaro é pequeno, e
+      colar e óculos são os detalhes que mais dependem do tamanho da tela.
+- [ ] **Revisar as traduções** com quem fala cada idioma — sobretudo russo,
+      chinês, japonês e árabe. Os textos estão em
+      [src/i18n/locales/](src/i18n/locales).
+- [ ] **Ficha da Play Store nos outros idiomas** (título, descrição, imagens):
+      o jogo agora fala dez idiomas, mas a ficha da loja continua só em
+      português. É no Play Console → *Presença na loja* → *Traduções*.
 
 ### Loja e documentos
 
@@ -103,7 +116,7 @@ Nenhum dos dois impede publicar.
       ([privacidade/index.html](privacidade/index.html), v2.1):
       `[PROVEDOR DE HOSPEDAGEM]`, `[PAÍS DO SERVIDOR]`, `[NOME COMPLETO OU RAZÃO
       SOCIAL]`, `[CPF/CNPJ]`, `[CIDADE / ESTADO]`.
-- [ ] Publicar a v2.2 no endereço que está na ficha do Google Play.
+- [ ] Publicar a v2.3 no endereço que está na ficha do Google Play.
 - [ ] Revisar a ficha **Segurança de Dados** do Play: a finalidade continua
       "prevenção de fraudes, segurança e conformidade", mas vale conferir que a
       declaração bate com a Seção 18 da política.

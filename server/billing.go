@@ -15,22 +15,22 @@ import (
 	"time"
 )
 
-// A compra com dinheiro dos passaros da loja (Google Play Billing).
+// A compra com dinheiro dos passaros e das skins da loja (Google Play Billing).
 //
 // O app abre a tela de pagamento do Google Play. Quando o pagamento e aprovado,
 // o app manda a este servidor o TOKEN da compra, e o servidor pergunta ao
 // Google, com a conta de servico (GOOGLE_SERVICE_ACCOUNT), se aquele token e
-// mesmo uma compra paga daquele produto. So entao o passaro entra na conta — e
+// mesmo uma compra paga daquele produto. So entao o item entra na conta — e
 // o servidor confirma a compra no Google ("acknowledge": compra nao confirmada
 // em 3 dias o Google devolve o dinheiro sozinho).
 //
 // A mesma compra mandada de novo devolve o mesmo resultado; mandada por OUTRA
 // conta (o app reinstalado, que ganhou codigo de jogador novo), ela muda de
-// conta: o passaro sai da antiga e vai para a nova. E assim que o jogador
+// conta: o item sai da antiga e vai para a nova. E assim que o jogador
 // recupera o que pagou sem precisar de login.
 //
 // Estorno e cancelamento: a cada 6 horas o servidor pergunta ao Google pelas
-// compras anuladas dos ultimos 30 dias (billingVoidedLoop), e o passaro
+// compras anuladas dos ultimos 30 dias (billingVoidedLoop), e o que foi
 // comprado com elas sai da conta.
 
 const (
@@ -194,7 +194,8 @@ func (b *PlayBilling) call(ctx context.Context, method, endereco string, corpo, 
 }
 
 // syncVoidedPurchases pergunta ao Google pelas compras anuladas dos ultimos 30
-// dias e tira o passaro delas. Devolve quantas eram deste jogo e ainda valiam.
+// dias e tira da conta o que elas deram. Devolve quantas eram deste jogo e
+// ainda valiam.
 func syncVoidedPurchases(ctx context.Context, store *Store, billing *PlayBilling) (int, error) {
 	lista, err := billing.Voided(ctx, time.Now().Add(-billingVoidedWindow))
 	if err != nil {
@@ -204,7 +205,7 @@ func syncVoidedPurchases(ctx context.Context, store *Store, billing *PlayBilling
 	for _, v := range lista {
 		tokens = append(tokens, v.PurchaseToken)
 	}
-	return store.VoidBirdPurchases(ctx, tokens)
+	return store.VoidPurchases(ctx, tokens)
 }
 
 // billingVoidedLoop confere as compras anuladas na subida e a cada 6 horas.
@@ -221,7 +222,7 @@ func billingVoidedLoop(ctx context.Context, store *Store, billing *PlayBilling, 
 			return
 		}
 		if n > 0 {
-			log.Info("compras anuladas: passaros retirados das contas", "quantos", n)
+			log.Info("compras anuladas: itens retirados das contas", "quantos", n)
 		}
 	}
 

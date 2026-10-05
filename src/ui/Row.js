@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { t } from '../i18n';
 import { theme } from './theme';
 
 /** Linha de configuracao com interruptor. */
@@ -39,6 +40,28 @@ export function ActionRow({ label, description, value, onPress, danger, last, di
   return (
     <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.65 }}>
       {body}
+    </Pressable>
+  );
+}
+
+/** Linha de escolha: uma opcao de uma lista, com a marca na escolhida. */
+export function ChoiceRow({ label, description, selected, onPress, last }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: Boolean(selected) }}
+      style={({ pressed }) => pressed && { opacity: 0.65 }}
+    >
+      <View style={[styles.row, styles.choice, last && styles.last]}>
+        <View style={styles.texts}>
+          <Text style={[styles.label, selected && styles.labelSelected]}>{label}</Text>
+          {description ? <Text style={styles.description}>{description}</Text> : null}
+        </View>
+        <View style={[styles.radio, selected && styles.radioOn]}>
+          {selected ? <View style={styles.radioDot} /> : null}
+        </View>
+      </View>
     </Pressable>
   );
 }
@@ -92,10 +115,10 @@ export function InputRow({ label, description, value, onSubmit, placeholder, max
         />
         {mudou ? (
           <Pressable onPress={enviar} style={({ pressed }) => [styles.save, pressed && { opacity: 0.7 }]}>
-            <Text style={styles.saveLabel}>Salvar</Text>
+            <Text style={styles.saveLabel}>{t('common.save')}</Text>
           </Pressable>
         ) : salvo ? (
-          <Text style={styles.saved}>Salvo</Text>
+          <Text style={styles.saved}>{t('common.saved')}</Text>
         ) : null}
       </View>
     </View>
@@ -119,6 +142,19 @@ const styles = StyleSheet.create({
   description: { color: theme.textDim, fontSize: 12, lineHeight: 17, marginTop: 3 },
   value: { color: theme.textDim, fontSize: 14, fontWeight: '600' },
   chevron: { color: theme.textDim, fontSize: 22, marginLeft: 2, marginTop: -2 },
+  choice: { paddingVertical: 12 },
+  labelSelected: { color: theme.pillar },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOn: { borderColor: theme.pillar },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.pillar },
   inputRow: {
     paddingVertical: 15,
     paddingHorizontal: 18,

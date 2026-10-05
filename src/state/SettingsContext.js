@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS = {
   music: true, // trilha de fundo em loop
   flapSound: true, // som do toque que faz o passaro subir
   effects: true, // ponto e colisao
+  language: 'auto', // 'auto' (o do celular) ou um dos idiomas do jogo (src/i18n)
 };
 
 const SettingsContext = createContext({

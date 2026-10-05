@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CoinFace } from '../game/render/Coin';
 import useAds from '../hooks/useAds';
 import useEconomy from '../hooks/useEconomy';
+import { t } from '../i18n';
 import economy from '../services/economy';
 import AdCover from '../ui/AdCover';
 import { formatFlightTime } from '../ui/flightTime';
@@ -59,9 +60,7 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
     const r = await onPlay();
     setStarting(false);
     if (r.ok || r.code === 'no_lives') return; // sem vidas: a Home ja oferece o video
-    setNotice(
-      r.offline ? 'Sem conexão com o servidor. Dá para treinar enquanto isso.' : r.error
-    );
+    setNotice(r.offline ? t('home.offlineNotice') : r.error);
   }, [onPlay, starting]);
 
   const watchForLives = useCallback(async () => {
@@ -75,42 +74,26 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
     economy.refresh();
   }, []);
 
+  // Os cards so com o titulo: sem a linha de baixo, a Home cabe inteira na
+  // tela de um celular comum, sem rolar. O que a linha dizia ja aparece no
+  // proprio titulo ("Treinar", "Sem vidas") ou nas pilulas de cima.
   let primary;
   if (offline) {
-    primary = {
-      id: 'train',
-      title: 'Treinar',
-      subtitle: 'Sem internet: sem moedas, vidas ou ranking',
-      onPress: onTrain,
-    };
+    primary = { id: 'train', title: t('home.train'), onPress: onTrain };
   } else if (!ready) {
-    primary = { id: 'loading', title: 'Conectando...', subtitle: 'Buscando suas moedas e vidas' };
+    primary = { id: 'loading', title: t('home.connecting') };
   } else if (empty) {
     primary = canWatch
-      ? {
-          id: 'refill',
-          title: 'Assistir e ganhar 5 vidas',
-          subtitle: 'Suas partidas acabaram',
-          onPress: watchForLives,
-        }
-      : { id: 'refill', title: 'Sem vidas', subtitle: 'Nenhum anúncio disponível agora' };
+      ? { id: 'refill', title: t('common.watchForLives'), onPress: watchForLives }
+      : { id: 'refill', title: t('home.noLives') };
   } else {
-    primary = {
-      id: 'game',
-      title: starting ? 'Preparando...' : 'Jogar',
-      subtitle: 'Toque para voar',
-      onPress: play,
-    };
+    primary = { id: 'game', title: starting ? t('common.preparing') : t('home.play'), onPress: play };
   }
 
   const items = [
-    {
-      id: 'shop',
-      title: 'Loja',
-      subtitle: offline ? 'Precisa de internet' : 'Pássaros, escudos e novas chances',
-    },
-    { id: 'leaderboard', title: 'Ranking', subtitle: 'Compare seus voos' },
-    { id: 'settings', title: 'Configurações', subtitle: 'Som e conta' },
+    { id: 'shop', title: t('home.shop') },
+    { id: 'leaderboard', title: t('home.leaderboard') },
+    { id: 'settings', title: t('home.settings') },
   ];
 
   return (
@@ -140,13 +123,11 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
             resizeMode="contain"
           />
           <Text style={styles.title}>MAJOR FLYER</Text>
-          <Text style={styles.subtitle}>
-            Toque para bater as asas. Solte e a gravidade cobra o preço.
-          </Text>
+          <Text style={styles.subtitle}>{t('home.tagline')}</Text>
 
           <View style={[styles.pills, compact && styles.pillsCompact]}>
             <View style={styles.pill}>
-              <Text style={styles.pillLabel}>RECORDE</Text>
+              <Text style={styles.pillLabel}>{t('home.recordLabel')}</Text>
               <Text style={styles.pillValue}>{best}</Text>
             </View>
             {/* Moedas e vidas sao do servidor: sem ele, a pilula mostra traco em
@@ -160,7 +141,7 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
           <View
             style={[styles.pill, styles.stacked, compact && styles.stackedCompact, !ready && styles.pillWaiting]}
           >
-            <Text style={styles.pillLabel}>VIDAS</Text>
+            <Text style={styles.pillLabel}>{t('common.livesLabel')}</Text>
             <LifeBirds lives={ready ? lives : 0} total={maxLives} size={20} gap={7} />
           </View>
 
@@ -169,14 +150,14 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
           <View
             style={[styles.pill, styles.stacked, compact && styles.stackedCompact, !ready && styles.pillWaiting]}
           >
-            <Text style={styles.pillLabel}>TEMPO DE VOO</Text>
+            <Text style={styles.pillLabel}>{t('home.flightLabel')}</Text>
             <Text style={styles.flightValue}>{ready ? formatFlightTime(wallet.flightMs) : '—'}</Text>
           </View>
 
           {offline ? (
             <Pressable onPress={retry} style={({ pressed }) => [styles.offline, pressed && { opacity: 0.7 }]}>
-              <Text style={styles.offlineTitle}>SEM CONEXÃO · MODO TREINO</Text>
-              <Text style={styles.offlineAction}>Tocar para tentar de novo</Text>
+              <Text style={styles.offlineTitle}>{t('home.offlineTitle')}</Text>
+              <Text style={styles.offlineAction}>{t('home.offlineAction')}</Text>
             </Pressable>
           ) : null}
 
@@ -210,12 +191,9 @@ function MenuButton({ item, primary, compact, onPress }) {
         pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
       ]}
     >
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.itemTitle, primary && styles.itemTitlePrimary]}>{item.title}</Text>
-        <Text style={[styles.itemSubtitle, primary && styles.itemSubtitlePrimary]}>
-          {item.subtitle}
-        </Text>
-      </View>
+      <Text style={[styles.itemTitle, primary && styles.itemTitlePrimary]} numberOfLines={1}>
+        {item.title}
+      </Text>
       <Text style={[styles.itemChevron, primary && styles.itemTitlePrimary]}>›</Text>
     </Pressable>
   );
@@ -326,9 +304,7 @@ const styles = StyleSheet.create({
   },
   itemGhost: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.18)' },
 
-  itemTitle: { color: theme.text, fontSize: 18, fontWeight: '800' },
+  itemTitle: { flex: 1, color: theme.text, fontSize: 18, fontWeight: '800' },
   itemTitlePrimary: { color: '#04231D' },
-  itemSubtitle: { color: theme.textDim, fontSize: 12, marginTop: 2 },
-  itemSubtitlePrimary: { color: 'rgba(4,35,29,0.7)' },
   itemChevron: { color: theme.textDim, fontSize: 26, marginTop: -3 },
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { t } from '../i18n';
 import { USE_TEST_UNITS } from '../services/ads';
 import { theme } from './theme';
 
@@ -25,17 +26,17 @@ export default function AdCover({ state, seconds }) {
   const simulated = state === 'simulating';
   const confirming = state === 'confirming';
 
-  let title = 'Carregando anúncio...';
-  let text = 'O vídeo abre em instantes.';
+  let title = t('ads.loadingTitle');
+  let text = t('ads.loadingText');
   if (simulated) {
-    title = 'Propaganda (simulação)';
-    text = 'Aqui entra o vídeo premiado quando o AdMob estiver configurado.';
+    title = t('ads.simulatedTitle');
+    text = t('ads.simulatedText');
   } else if (confirming && USE_TEST_UNITS) {
-    title = 'Confirmando o prêmio...';
-    text = 'Anúncio de teste: o Google não manda confirmação ao servidor.';
+    title = t('ads.confirmingTitle');
+    text = t('ads.confirmingTestText');
   } else if (confirming) {
-    title = 'Liberando seu prêmio...';
-    text = 'Só um instante.';
+    title = t('ads.releasingTitle');
+    text = t('ads.releasingText');
   }
 
   return (

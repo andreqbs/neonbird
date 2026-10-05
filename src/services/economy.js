@@ -1,10 +1,11 @@
+import { t } from '../i18n';
 import { isConfigured, request, requestRegistered } from './cloud';
 import { initPlayer } from './identity';
 import integrity from './integrity';
 
 /**
- * A economia do jogo vista pelo app: moedas, vidas, escudos, novas chances e
- * passaros — e as partidas abertas no servidor.
+ * A economia do jogo vista pelo app: moedas, vidas, escudos, novas chances,
+ * passaros e skins — e as partidas abertas no servidor.
  *
  * NADA DAQUI VAI PARA O DISCO. O servidor e a unica fonte da verdade; este
  * modulo guarda na MEMORIA so a ultima resposta dele, para a tela desenhar sem
@@ -107,6 +108,11 @@ export function birdById(id) {
   return (birds && birds.find((b) => b.id === id)) || null;
 }
 
+export function skinById(id) {
+  const skins = state.catalog && state.catalog.skins;
+  return (skins && skins.find((s) => s.id === id)) || null;
+}
+
 /** Preco de 'shield' ou 'continue', em moedas. Null antes do catalogo chegar. */
 export function priceOf(item) {
   const offer = state.catalog && state.catalog.items && state.catalog.items[item];
@@ -194,9 +200,11 @@ export async function useShield(runId) {
 
 // ---------------------------------------------------------------------- loja
 
-/** Compra 'bird' (com `birdId`), 'shield' ou 'continue'. */
-export async function buy(item, birdId) {
-  const body = item === 'bird' ? { item, birdId } : { item };
+/** Compra 'bird' (com o id do passaro), 'skin' (com o id da skin), 'shield' ou 'continue'. */
+export async function buy(item, itemId) {
+  let body = { item };
+  if (item === 'bird') body = { item, birdId: itemId };
+  else if (item === 'skin') body = { item, skinId: itemId };
   return absorb(await requestRegistered('POST', '/v1/shop/buy', { body }));
 }
 
@@ -222,9 +230,31 @@ export async function claimBirdPurchase(birdId, purchaseToken) {
   return r;
 }
 
+/**
+ * Troca uma compra com dinheiro pela skin dela — do mesmo jeito que o passaro
+ * (claimBirdPurchase): o servidor confere com o Google antes de entregar.
+ */
+export async function claimSkinPurchase(skinId, purchaseToken) {
+  const r = absorb(
+    await requestRegistered('POST', '/v1/shop/purchase', { body: { skinId, purchaseToken }, retry: true })
+  );
+  if (r.ok && r.status === 202) return { ok: false, pending: true };
+  return r;
+}
+
 /** Escolhe o passaro das proximas partidas. */
 export async function equip(birdId) {
   return absorb(await requestRegistered('POST', '/v1/me/bird', { body: { birdId } }));
+}
+
+/** Veste uma skin comprada; a que estava no mesmo encaixe sai. */
+export async function equipSkin(skinId) {
+  return absorb(await requestRegistered('POST', '/v1/me/skin', { body: { skinId } }));
+}
+
+/** Tira a skin de um encaixe ('cap', 'wings', 'glasses', 'necklace'). */
+export async function unequipSkin(slot) {
+  return absorb(await requestRegistered('POST', '/v1/me/skin', { body: { slot } }));
 }
 
 // ------------------------------------------------------------------ anuncios
@@ -246,9 +276,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * desenvolve, e so aparece la (ver `testAd` abaixo).
  */
 export const CLAIM_MESSAGES = {
-  production: 'Não deu para liberar seu prêmio agora. Tente de novo em alguns instantes.',
-  testAd:
-    'Anúncio de teste não é confirmado pelo Google. Para testar prêmios, use um servidor com ADS_DEV_AUTOVERIFY=true.',
+  get production() {
+    return t('ads.claimFailed');
+  },
+  get testAd() {
+    return t('ads.claimTestAd');
+  },
 };
 
 /**
@@ -291,6 +324,7 @@ export default {
   subscribeEconomy,
   refresh,
   birdById,
+  skinById,
   priceOf,
   startRun,
   finishRun,
@@ -299,6 +333,9 @@ export default {
   buy,
   upgradeBird,
   claimBirdPurchase,
+  claimSkinPurchase,
   equip,
+  equipSkin,
+  unequipSkin,
   claimAd,
 };

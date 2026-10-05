@@ -25,6 +25,7 @@ const MODULES = [
   'src/game/layout.js',
   'src/game/coins.js',
   'src/game/powers.js',
+  'src/game/skins.js',
   'src/game/caps.js',
   'src/game/World.js',
   'src/game/session.js',
@@ -36,11 +37,29 @@ const MODULES = [
   'src/services/economy.js',
   'src/services/billing.js',
   'src/ui/flightTime.js',
+  'src/i18n/index.js',
+  'src/i18n/catalog.js',
+  'src/i18n/locales/pt.json',
+  'src/i18n/locales/en.json',
+  'src/i18n/locales/es.json',
+  'src/i18n/locales/it.json',
+  'src/i18n/locales/de.json',
+  'src/i18n/locales/fr.json',
+  'src/i18n/locales/ru.json',
+  'src/i18n/locales/zh.json',
+  'src/i18n/locales/ja.json',
+  'src/i18n/locales/ar.json',
 ];
 
 function build() {
   for (const file of MODULES) {
     const code = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    if (file.endsWith('.json')) {
+      // os arquivos de traducao vao como estao
+      fs.mkdirSync(path.dirname(path.join(BUILD, file)), { recursive: true });
+      fs.writeFileSync(path.join(BUILD, file), code);
+      continue;
+    }
     const out = babel.transformSync(code, {
       babelrc: false,
       configFile: false,
@@ -53,6 +72,11 @@ function build() {
 }
 
 build();
+
+// Os testes leem os textos em portugues: o idioma fica fixo nele, seja qual for
+// o do computador. A secao dos idiomas troca e volta.
+const i18n = require(path.join(BUILD, 'src/i18n/index.js'));
+i18n.setLanguage('pt');
 
 const { computeLayout, GAP_TO_BIRD, PORTRAIT_ZOOM } = require(path.join(BUILD, 'src/game/layout.js'));
 const { formatFlightTime } = require(path.join(BUILD, 'src/ui/flightTime.js'));
@@ -1833,6 +1857,27 @@ async function economySection() {
       JSON.stringify(pedidos[0]?.corpo)
     );
 
+    // ---- skins: comprar, vestir e tirar
+    pedidos.length = 0;
+    responder = (p) =>
+      p.path === '/v1/shop/buy' || p.path === '/v1/me/skin'
+        ? { status: 200, body: { wallet: carteira({ coins: 480, ownedSkins: ['cap_red'], equippedSkins: {} }) } }
+        : naoAchou;
+    await economy.buy('skin', 'cap_red');
+    await economy.equipSkin('cap_red');
+    await economy.unequipSkin('cap');
+    check(
+      'skin: compra, veste e tira pelo servidor, com o id da skin ou o encaixe',
+      JSON.stringify(pedidos.map((p) => [p.path, p.corpo])) ===
+        JSON.stringify([
+          ['/v1/shop/buy', { item: 'skin', skinId: 'cap_red' }],
+          ['/v1/me/skin', { skinId: 'cap_red' }],
+          ['/v1/me/skin', { slot: 'cap' }],
+        ]),
+      JSON.stringify(pedidos.map((p) => p.corpo))
+    );
+    check('...e a carteira volta com a colecao', economy.economyNow().wallet.ownedSkins.includes('cap_red'));
+
     // ---- anuncio
     let tentativas = 0;
     responder = (p) => {
@@ -2267,14 +2312,32 @@ async function billingSection() {
       { id: 'frost', name: 'Geada', price: 150, productId: 'bird_frost', powers: [] },
       { id: 'comet', name: 'Cometa', price: 0, productId: 'bird_comet', powers: [] },
     ],
+    skinSlots: [
+      { id: 'cap', name: 'Bonés' },
+      { id: 'glasses', name: 'Óculos' },
+    ],
+    skins: [
+      { id: 'cap_red', name: 'Boné Vermelho', slot: 'cap', price: 8, productId: 'skin_cap_red' },
+      { id: 'glasses_3d', name: 'Óculos 3D', slot: 'glasses', price: 8, productId: 'skin_glasses_3d' },
+    ],
     items: { shield: { price: 60 }, continue: { price: 100 } },
     rules: { maxLives: 5, coinEvery: 3, stageLength: 100, stageBonus: 10, maxContinuesPerRun: 1 },
   };
   let donos = ['classic'];
+  let donasSkins = [];
   const carteira = () => ({
     coins: 0, lives: 5, maxLives: 5, shields: 0, continues: 0, flightMs: 0,
-    equippedBird: 'classic', ownedBirds: donos.slice(),
+    equippedBird: 'classic', ownedBirds: donos.slice(), ownedSkins: donasSkins.slice(), equippedSkins: {},
   });
+  // O servidor entregando a compra: o passaro (birdId) ou a skin (skinId).
+  const entregar = (p) => {
+    if (p.corpo.skinId) {
+      donasSkins = [...new Set([...donasSkins, p.corpo.skinId])];
+      return { status: 200, body: { wallet: carteira(), skinId: p.corpo.skinId } };
+    }
+    donos = [...new Set([...donos, p.corpo.birdId])];
+    return { status: 200, body: { wallet: carteira(), birdId: p.corpo.birdId } };
+  };
 
   // O dublê do Google Play: guarda quem escuta, e responde como a loja.
   let aoComprar = null;
@@ -2314,10 +2377,7 @@ async function billingSection() {
     responder = (p) => {
       if (p.path === '/v1/catalog') return { status: 200, body: catalogo };
       if (p.path === '/v1/me/wallet') return { status: 200, body: { wallet: carteira() } };
-      if (p.path === '/v1/shop/purchase') {
-        donos = [...new Set([...donos, p.corpo.birdId])];
-        return { status: 200, body: { wallet: carteira(), birdId: p.corpo.birdId } };
-      }
+      if (p.path === '/v1/shop/purchase') return entregar(p);
       return { status: 404, body: {} };
     };
     await economy.refresh();
@@ -2345,6 +2405,25 @@ async function billingSection() {
       pedidosAoGoogle[0].request.google.obfuscatedAccountId === sha256Hex(jogador.id)
     );
 
+    // ---- skin com dinheiro: o mesmo caminho, e o servidor recebe o id da skin
+    await billing.loadPrices([...catalogo.birds, ...catalogo.skins]);
+    pedidos.length = 0;
+    const bone = catalogo.skins[0];
+    const skinPaga = await billing.buySkin(bone);
+    const skinAoServidor = pedidos.find((p) => p.path === '/v1/shop/purchase');
+    check('o preco da skin tambem vem do Google Play', billing.priceOf('skin_cap_red') === 'R$ 4,99');
+    check(
+      'skin paga: chega pela resposta do servidor, que recebe o id da skin e o token',
+      skinPaga.ok === true &&
+        economy.economyNow().wallet.ownedSkins.includes('cap_red') &&
+        skinAoServidor &&
+        skinAoServidor.corpo.skinId === 'cap_red' &&
+        !('birdId' in skinAoServidor.corpo) &&
+        skinAoServidor.corpo.purchaseToken === 'tok-skin_cap_red',
+      JSON.stringify(skinAoServidor && skinAoServidor.corpo)
+    );
+    check('...e so entao a compra da skin fecha no aparelho', fechadas.includes('tok-skin_cap_red'));
+
     // ---- sem rede na hora de entregar: nao fecha, sobe na proxima abertura
     responder = (p) => (p.path === '/v1/shop/purchase' ? { falha: 'TypeError' } : { status: 200, body: { wallet: carteira() } });
     const semRede = await billing.buyBird(catalogo.birds[1]);
@@ -2370,13 +2449,8 @@ async function billingSection() {
 
     // ---- abertura seguinte: a compra que ficou pelo caminho sobe
     proxima = { purchaseState: 'purchased' };
-    responder = (p) => {
-      if (p.path === '/v1/shop/purchase') {
-        donos = [...new Set([...donos, p.corpo.birdId])];
-        return { status: 200, body: { wallet: carteira(), birdId: p.corpo.birdId } };
-      }
-      return { status: 200, body: { wallet: carteira() } };
-    };
+    responder = (p) =>
+      p.path === '/v1/shop/purchase' ? entregar(p) : { status: 200, body: { wallet: carteira() } };
     guardadas = [
       { productId: 'bird_frost', purchaseToken: 'tok-bird_frost', purchaseState: 'purchased', isAcknowledgedAndroid: false },
       { productId: 'bird_comet', purchaseToken: 'tok-bird_comet', purchaseState: 'purchased', isAcknowledgedAndroid: true },
@@ -2390,6 +2464,18 @@ async function billingSection() {
       JSON.stringify(subiram)
     );
     check('...e a que ja estava na conta e fechada nem vai ao servidor', !subiram.includes('comet'));
+
+    guardadas = [
+      { productId: 'skin_glasses_3d', purchaseToken: 'tok-skin_glasses_3d', purchaseState: 'purchased', isAcknowledgedAndroid: false },
+    ];
+    pedidos.length = 0;
+    const skinsChegaram = await billing.syncPurchases();
+    const skinSubiu = pedidos.find((p) => p.path === '/v1/shop/purchase');
+    check(
+      '...e a skin paga que ficou pelo caminho tambem chega',
+      skinsChegaram === 1 && skinSubiu && skinSubiu.corpo.skinId === 'glasses_3d',
+      JSON.stringify(skinSubiu && skinSubiu.corpo)
+    );
 
     // ---- sem o modulo do Google (web, iPhone, build antiga)
     billing.__setIap(null);
@@ -2410,7 +2496,52 @@ async function billingSection() {
   }
 }
 
-// ------------------------------------------------------ 12. o tema do Android
+// ------------------------------------------------------------- 12. as skins
+
+/**
+ * O desenho das skins (src/game/skins.js) contra o catalogo do servidor
+ * (server/catalog.go). O servidor vende pelo id; o app desenha pelo id. Skin
+ * vendida sem desenho some da loja do app — e desenho sem skin no servidor e
+ * codigo morto. Aqui se confere que as duas listas andam juntas, e que o
+ * encaixe de cada uma e o mesmo nas duas pontas.
+ */
+function skinsSection() {
+  section('Skins: o desenho e o catalogo do servidor');
+
+  const { SKIN_LOOKS, NO_SKINS, wornSkins } = require(path.join(BUILD, 'src/game/skins.js'));
+  const fonte = fs.readFileSync(path.join(ROOT, 'server/catalog.go'), 'utf8').replace(/\r\n/g, '\n');
+  const bloco = (inicio) => {
+    const de = fonte.indexOf(inicio);
+    return de < 0 ? '' : fonte.slice(de, fonte.indexOf('\n}\n', de));
+  };
+
+  const doServidor = [...bloco('var Skins = []SkinOffer{').matchAll(/ID: "([^"]+)",[^\n]*?Slot: "([^"]+)"/g)].map(
+    (m) => ({ id: m[1], slot: m[2] })
+  );
+  const encaixes = [...bloco('var SkinSlots = []SkinSlot{').matchAll(/ID: "([^"]+)"/g)].map((m) => m[1]);
+
+  check('o catalogo do servidor tem skins e encaixes', doServidor.length > 0 && encaixes.length > 0);
+  const semDesenho = doServidor.filter((s) => !SKIN_LOOKS[s.id]);
+  check('toda skin do servidor tem desenho no app', semDesenho.length === 0, semDesenho.map((s) => s.id).join(', '));
+  const trocadas = doServidor.filter((s) => SKIN_LOOKS[s.id] && SKIN_LOOKS[s.id].slot !== s.slot);
+  check('...no mesmo encaixe nas duas pontas', trocadas.length === 0, trocadas.map((s) => s.id).join(', '));
+  const orfas = Object.keys(SKIN_LOOKS).filter((id) => !doServidor.some((s) => s.id === id));
+  check('...e todo desenho e de uma skin que o servidor vende', orfas.length === 0, orfas.join(', '));
+  check(
+    'cada encaixe tem pelo menos 3 skins',
+    encaixes.every((e) => doServidor.filter((s) => s.slot === e).length >= 3),
+    encaixes.map((e) => `${e}: ${doServidor.filter((s) => s.slot === e).length}`).join(', ')
+  );
+
+  const vestidas = wornSkins({ cap: 'cap_red', glasses: 'cap_neon', wings: 'asa_inventada' });
+  check(
+    'no corpo so entra skin conhecida, no encaixe dela',
+    Object.keys(vestidas).join(',') === 'cap' && vestidas.cap === SKIN_LOOKS.cap_red
+  );
+  check('sem skin nenhuma, o mesmo objeto vazio de sempre', wornSkins(null) === NO_SKINS && wornSkins({}) === NO_SKINS);
+}
+
+// ------------------------------------------------------ 13. o tema do Android
 
 /**
  * O tema que o Android recebe (plugins/withEdgeToEdgeBars.js). Do Android 15 em
@@ -2473,9 +2604,168 @@ function androidThemeSection() {
   check('o jogo abre em retrato', app.orientation === 'portrait');
 }
 
+// ------------------------------------------------------------ 14. os idiomas
+
+/**
+ * Os idiomas do jogo (src/i18n). Os arquivos de traducao precisam ter TODAS as
+ * chaves do portugues, com os mesmos {marcadores} e as formas de plural de cada
+ * idioma — texto faltando vira a chave crua na tela, e marcador trocado vira
+ * "{name}" no lugar do nome. Aqui tambem: a deteccao do idioma do celular, o
+ * plural de cada idioma, os erros do servidor e o que vem do catalogo.
+ */
+function languagesSection() {
+  section('Idiomas');
+
+  const catalog = require(path.join(BUILD, 'src/i18n/catalog.js'));
+  const pastas = path.join(ROOT, 'src/i18n/locales');
+  const FORMAS = ['zero', 'one', 'two', 'few', 'many', 'other'];
+  const PRECISA = {
+    pt: ['one', 'other'], en: ['one', 'other'], es: ['one', 'other'], it: ['one', 'other'],
+    de: ['one', 'other'], fr: ['one', 'other'], ru: ['one', 'few', 'many', 'other'],
+    zh: ['other'], ja: ['other'], ar: ['zero', 'one', 'two', 'few', 'many', 'other'],
+  };
+  const folhas = (no, prefixo = '', saida = {}) => {
+    for (const [k, v] of Object.entries(no)) {
+      const chave = prefixo ? `${prefixo}.${k}` : k;
+      if (typeof v === 'string' || Array.isArray(v) || i18n.isPluralNode(v)) saida[chave] = v;
+      else if (v && typeof v === 'object') folhas(v, chave, saida);
+      else saida[chave] = v;
+    }
+    return saida;
+  };
+  const marcas = (v) => {
+    const textos = typeof v === 'string' ? [v] : Array.isArray(v) ? v : Object.values(v);
+    return new Set(textos.flatMap((x) => [...String(x).matchAll(/\{(\w+)\}/g)].map((m) => m[1])));
+  };
+
+  const base = folhas(JSON.parse(fs.readFileSync(path.join(pastas, 'pt.json'), 'utf8')));
+  check('os dez idiomas pedidos estao no jogo', i18n.LANGUAGES.map((l) => l.code).join(',') === 'pt,en,es,it,de,fr,ru,zh,ja,ar');
+  for (const { code } of i18n.LANGUAGES) {
+    const dic = folhas(JSON.parse(fs.readFileSync(path.join(pastas, `${code}.json`), 'utf8')));
+    const faltam = Object.keys(base).filter((k) => !(k in dic));
+    const sobram = Object.keys(dic).filter((k) => !(k in base));
+    const marcadores = Object.keys(base).filter((k) => {
+      if (!(k in dic)) return false;
+      const a = marcas(base[k]);
+      const b = marcas(dic[k]);
+      return [...b].some((m) => !a.has(m)) || [...a].some((m) => m !== 'count' && !b.has(m));
+    });
+    const plurais = Object.keys(dic).filter(
+      (k) => i18n.isPluralNode(dic[k]) && PRECISA[code].some((f) => !(f in dic[k]))
+    );
+    check(
+      `${code}: todas as chaves, os mesmos marcadores e o plural do idioma`,
+      !faltam.length && !sobram.length && !marcadores.length && !plurais.length,
+      [faltam.length && `faltam ${faltam.slice(0, 5)}`, sobram.length && `sobram ${sobram.slice(0, 5)}`,
+        marcadores.length && `marcadores ${marcadores.slice(0, 5)}`, plurais.length && `plural ${plurais.slice(0, 5)}`]
+        .filter(Boolean).join('; ')
+    );
+  }
+
+  // ---- o idioma do celular
+  const detecta = i18n.detectDeviceLanguage;
+  check('celular em pt-BR abre em portugues', detecta(['pt-BR']) === 'pt');
+  check('...zh-Hant-TW em chines e ja_JP em japones', detecta(['zh-Hant-TW']) === 'zh' && detecta(['ja_JP']) === 'ja');
+  check('celular em coreano (idioma que o jogo nao tem) abre em ingles', detecta(['ko-KR']) === 'en');
+  check('...mas vale o segundo idioma do celular, se o jogo tiver', detecta(['ko-KR', 'fr-CA']) === 'fr');
+  check('leitura que falhou (nada, lixo) cai no ingles', detecta([]) === 'en' && detecta(null) === 'en' && detecta([undefined, 42]) === 'en');
+  check(
+    'a preferencia salva: idioma escolhido vale; automatico (ou lixo) segue o celular',
+    i18n.resolveLanguage('de') === 'de' && i18n.resolveLanguage('auto') === detecta() && i18n.resolveLanguage('xx') === detecta()
+  );
+
+  // ---- plural de cada idioma
+  const cat = (code, ns) => ns.map((n) => i18n.pluralCategory(code, n)).join(',');
+  check('plural do russo', cat('ru', [1, 2, 5, 11, 21, 22, 112]) === 'one,few,many,many,one,few,many', cat('ru', [1, 2, 5, 11, 21, 22, 112]));
+  check('plural do arabe', cat('ar', [0, 1, 2, 3, 11, 100]) === 'zero,one,two,few,many,other', cat('ar', [0, 1, 2, 3, 11, 100]));
+  check('frances: 0 e 1 no singular; portugues: so o 1', cat('fr', [0, 1, 2]) === 'one,one,other' && cat('pt', [0, 1, 2]) === 'other,one,other');
+
+  try {
+    // ---- textos
+    i18n.setLanguage('pt');
+    check('portugues: "1 moeda", "5 moedas"', i18n.t('common.coins', { count: 1 }) === '1 moeda' && i18n.t('common.coins', { count: 5 }) === '5 moedas');
+    check('chave que nao existe aparece crua (e o teste acima garante que nao falta nenhuma)', i18n.t('nao.existe') === 'nao.existe');
+    i18n.setLanguage('ru');
+    check('russo: "3 монеты", "5 монет"', i18n.t('common.coins', { count: 3 }) === '3 монеты' && i18n.t('common.coins', { count: 5 }) === '5 монет');
+    i18n.setLanguage('ja');
+    check('japones: segundos com ponto e "秒"', i18n.formatSeconds(2.5) === '2.5秒', i18n.formatSeconds(2.5));
+    i18n.setLanguage('de');
+    check('alemao: decimal com virgula', i18n.formatSeconds(2.5) === '2,5 s', i18n.formatSeconds(2.5));
+
+    // ---- erros do servidor
+    i18n.setLanguage('pt');
+    check(
+      'portugues: o erro e o texto do servidor; sem texto, a traducao do codigo',
+      i18n.errorText({ code: 'not_enough_coins', error: 'moedas insuficientes' }) === 'moedas insuficientes' &&
+        i18n.errorText({ code: 'offline' }) === i18n.t('errors.offline')
+    );
+    i18n.setLanguage('en');
+    check(
+      'ingles: o codigo vira a traducao, nunca a frase em portugues',
+      i18n.errorText({ code: 'not_enough_coins', error: 'moedas insuficientes' }) === 'Not enough coins.' &&
+        i18n.errorText({ code: 'codigo_novo', error: 'algo em portugues' }) === i18n.t('errors.generic')
+    );
+
+    // ---- o que vem do catalogo
+    const ima = {
+      id: 'magnet',
+      name: 'Ímã',
+      params: { activeSeconds: 4, cooldownSeconds: 10, reach: 5 },
+      levelValues: [4, 5, 6, 7, 7.5, 8],
+    };
+    i18n.setLanguage('pt');
+    check(
+      'portugues: a frase do poder sai igual a do servidor',
+      catalog.powerText(ima).description === 'Puxa as moedas por perto: 4 s ligado (8 s com 5 estrelas), 10 s recarregando.',
+      catalog.powerText(ima).description
+    );
+    i18n.setLanguage('en');
+    check(
+      'ingles: a mesma frase, com os numeros do servidor',
+      catalog.powerText(ima).description === 'Pulls in nearby coins: 4 s on (8 s with 5 stars), 10 s to recharge.',
+      catalog.powerText(ima).description
+    );
+    check(
+      'poder que o app nao conhece fica com o texto do servidor',
+      catalog.powerText({ id: 'novo', name: 'Novo', description: 'Faz algo.' }).name === 'Novo'
+    );
+    check(
+      'nome do passaro traduzido; passaro novo do servidor fica com o nome dele',
+      catalog.birdName({ id: 'frost', name: 'Geada' }) === 'Frost' && catalog.birdName({ id: 'novo', name: 'Novato' }) === 'Novato'
+    );
+    check('a data da rodada em ingles', season.seasonLabel(season.seasonAt(new Date('2026-09-09T12:00:00Z'))) === 'September 6–13',
+      season.seasonLabel(season.seasonAt(new Date('2026-09-09T12:00:00Z'))));
+    check('o tempo de voo em ingles', formatFlightTime(3 * 3600000 + 7 * 60000) === '3h 07m', formatFlightTime(3 * 3600000 + 7 * 60000));
+
+    // ---- todo id do catalogo do servidor tem traducao
+    const fonte = fs.readFileSync(path.join(ROOT, 'server/catalog.go'), 'utf8').replace(/\r\n/g, '\n');
+    const bloco = (inicio) => {
+      const de = fonte.indexOf(inicio);
+      return de < 0 ? '' : fonte.slice(de, fonte.indexOf('\n}\n', de));
+    };
+    const ids = (inicio) => [...bloco(inicio).matchAll(/^\s*\{ID: "?([^",]+)"?,/gm)].map((m) => m[1]);
+    const passaros = ids('var Birds = []BirdOffer{').map((id) => (id === 'DefaultBird' ? 'classic' : id));
+    const semNome = [
+      ...passaros.filter((id) => !i18n.has(`birds.${id}.name`)),
+      ...ids('var Skins = []SkinOffer{').filter((id) => !i18n.has(`skins.${id}.name`)),
+      ...ids('var SkinSlots = []SkinSlot{').filter((id) => !i18n.has(`skinSlots.${id}`)),
+      ...STAGES.map((st) => st.id).filter((id) => !i18n.has(`stages.${id}`)),
+    ];
+    check(
+      'todo passaro, skin, encaixe e fase tem nome traduzido',
+      passaros.length >= 6 && semNome.length === 0,
+      semNome.join(', ') || `${passaros.length} passaros`
+    );
+  } finally {
+    i18n.setLanguage('pt');
+  }
+}
+
 seasonSection();
 identitySection();
 coinsSection();
+skinsSection();
+languagesSection();
 androidThemeSection();
 
 economySection()

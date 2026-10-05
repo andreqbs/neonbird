@@ -168,6 +168,44 @@ alter table owned_birds add column if not exists purchase_token text;
 -- dele (catalog.go). Passaro recem-comprado comeca em 0.
 alter table owned_birds add column if not exists level integer not null default 0;
 
+-- Skins: os enfeites do passaro — bone, asas, oculos e colar (catalog.go). So
+-- visual: nao mexem em poder, moeda nem ranking. Comprada com moedas, a skin
+-- fica sem token; com dinheiro, guarda o token da compra (skin_purchases), que
+-- diz qual skin sai num estorno ou quando a compra muda de conta.
+create table if not exists owned_skins (
+  player_id      uuid        not null references players (id),
+  skin_id        text        not null,
+  purchase_token text,
+  acquired_at    timestamptz not null default now(),
+  primary key (player_id, skin_id)
+);
+
+-- O que o jogador esta usando: uma skin por encaixe (bone, asas, oculos,
+-- colar). A chave estrangeira com cascata tira do corpo a skin que sai da conta
+-- (estorno, troca de conta) sem ninguem precisar lembrar disso.
+create table if not exists equipped_skins (
+  player_id uuid not null,
+  slot      text not null,
+  skin_id   text not null,
+  primary key (player_id, slot),
+  foreign key (player_id, skin_id) references owned_skins (player_id, skin_id) on delete cascade
+);
+
+-- Compras de skin com dinheiro (Google Play), do mesmo jeito que bird_purchases.
+create table if not exists skin_purchases (
+  purchase_token text        primary key,
+  player_id      uuid        not null references players (id),
+  skin_id        text        not null,
+  order_id       text        not null default '',
+  state          text        not null default 'granted' check (state in ('granted', 'voided')),
+  test           boolean     not null default false,
+  purchased_at   timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+create index if not exists skin_purchases_player on skin_purchases (player_id);
+
 -- Video premiado confirmado pelo GOOGLE (SSV). Uma linha por transacao: a chave
 -- primaria faz o mesmo aviso repetido — o Google tenta de novo quando nao
 -- recebe resposta — valer uma vez so. O app troca cada linha por um premio
