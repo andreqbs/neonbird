@@ -206,6 +206,17 @@ create table if not exists skin_purchases (
 
 create index if not exists skin_purchases_player on skin_purchases (player_id);
 
+-- Premios da rodada (prizes.go): uma linha por colocacao premiada de cada
+-- rodada. A chave e o que impede pagar duas vezes o mesmo premio.
+create table if not exists season_prizes (
+  season_id text        not null,
+  rank      integer     not null,
+  player_id uuid        not null references players (id),
+  coins     integer     not null,
+  paid_at   timestamptz not null default now(),
+  primary key (season_id, rank)
+);
+
 -- Video premiado confirmado pelo GOOGLE (SSV). Uma linha por transacao: a chave
 -- primaria faz o mesmo aviso repetido — o Google tenta de novo quando nao
 -- recebe resposta — valer uma vez so. O app troca cada linha por um premio

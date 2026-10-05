@@ -202,8 +202,15 @@ export async function myGroup() {
 
 // -------------------------------------------------------------------- ranking
 
-export async function topPlayers(limit = 50) {
-  return request('GET', `/v1/rankings/players?limit=${limit}`, { auth: false });
+/**
+ * Ranking individual. Sem opcao: a rodada de agora. `season`: uma rodada
+ * passada (o id dela). `scope: 'all'`: o geral, que soma todas as rodadas.
+ */
+export async function topPlayers(limit = 50, { season, scope } = {}) {
+  let path = `/v1/rankings/players?limit=${limit}`;
+  if (scope === 'all') path += '&scope=all';
+  else if (season) path += `&season=${encodeURIComponent(season)}`;
+  return request('GET', path, { auth: false });
 }
 
 export async function topGroups(limit = 50) {

@@ -249,7 +249,12 @@
     "noRuns": "Nenhum voo registrado ainda. Jogue uma partida e ela aparece aqui.",
     "portrait": "retrato",
     "landscape": "paisagem",
-    "seePlayer": "Ver o pássaro e as skins de {name}"
+    "seePlayer": "Ver o pássaro e as skins de {name}",
+    "viewRound": "Rodada",
+    "viewAll": "Geral",
+    "roundOver": "Rodada encerrada",
+    "prizes": "Prêmios da rodada: 1º {first} · 2º {second} · 3º {third} moedas, pagos quando ela fecha.",
+    "allTimeNote": "A soma de todas as rodadas — nunca zera."
   },
   "playerCard": {
     "flies": "Voa de {bird}",

@@ -249,7 +249,12 @@
     "noRuns": "Nessun volo registrato. Gioca una partita e comparirà qui.",
     "portrait": "verticale",
     "landscape": "orizzontale",
-    "seePlayer": "Vedi l'uccello e le skin di {name}"
+    "seePlayer": "Vedi l'uccello e le skin di {name}",
+    "viewRound": "Turno",
+    "viewAll": "Di sempre",
+    "roundOver": "Turno concluso",
+    "prizes": "Premi del turno: 1º {first} · 2º {second} · 3º {third} monete, pagati alla chiusura.",
+    "allTimeNote": "La somma di tutti i turni — non si azzera mai."
   },
   "playerCard": {
     "flies": "Vola con {bird}",

@@ -1648,6 +1648,10 @@ function seasonSection() {
   check('domingo 20h01 comeca a rodada nova', em('2026-09-13T23:01:00Z').id === '2026-09-13');
 
   const uma = em('2026-09-09T15:00:00Z');
+  check(
+    'a rodada anterior e a seguinte, para navegar no ranking',
+    season.previousSeason(uma).id === '2026-08-30' && season.nextSeason(uma).id === '2026-09-13'
+  );
   const dias = (uma.nextOpensAt - uma.startsAt) / 86400000;
   check('cada rodada dura uma semana cheia', Math.abs(dias - 7) < 1e-9, `${dias} dias`);
   const janela = (uma.nextOpensAt - uma.endsAt) / 3600000;

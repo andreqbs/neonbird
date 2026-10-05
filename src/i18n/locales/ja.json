@@ -249,7 +249,12 @@
     "noRuns": "まだ飛行記録がありません。プレイするとここに表示されます。",
     "portrait": "縦向き",
     "landscape": "横向き",
-    "seePlayer": "{name}の鳥とスキンを見る"
+    "seePlayer": "{name}の鳥とスキンを見る",
+    "viewRound": "ラウンド",
+    "viewAll": "総合",
+    "roundOver": "ラウンド終了",
+    "prizes": "ラウンド賞品：1位 {first}・2位 {second}・3位 {third}コイン（終了時に付与）。",
+    "allTimeNote": "全ラウンドの合計。リセットされません。"
   },
   "playerCard": {
     "flies": "使用中の鳥：{bird}",

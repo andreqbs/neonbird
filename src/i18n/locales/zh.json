@@ -249,7 +249,12 @@
     "noRuns": "还没有飞行记录。玩一局，它就会出现在这里。",
     "portrait": "竖屏",
     "landscape": "横屏",
-    "seePlayer": "查看{name}的小鸟和皮肤"
+    "seePlayer": "查看{name}的小鸟和皮肤",
+    "viewRound": "本轮",
+    "viewAll": "总榜",
+    "roundOver": "本轮已结束",
+    "prizes": "本轮奖励：第1名 {first} · 第2名 {second} · 第3名 {third} 金币，结束时发放。",
+    "allTimeNote": "所有轮次的总和——永不清零。"
   },
   "playerCard": {
     "flies": "驾驶：{bird}",

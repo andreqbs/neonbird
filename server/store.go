@@ -68,6 +68,9 @@ type RankRow struct {
 	Total int        `json:"total"`
 	Best  int        `json:"best"`
 	Look  PlayerLook `json:"look"`
+	// As moedas que esta posicao ganha quando a rodada fecha (so no ranking de
+	// uma rodada, e so para as posicoes premiadas).
+	Prize int `json:"prize,omitempty"`
 }
 
 // PlayerLook: como o jogador aparece para os outros quando tocam no nome dele
@@ -461,6 +464,8 @@ func (s *Store) MyGroup(ctx context.Context, playerID string, season Season) (*G
 
 // ------------------------------------------------------------------- ranking
 
+// TopPlayers e o ranking individual de uma rodada — ou o GERAL, de todas as
+// rodadas somadas, que nunca zera, com seasonID vazio.
 func (s *Store) TopPlayers(ctx context.Context, seasonID string, limit int) ([]RankRow, error) {
 	linhas, err := s.pool.Query(ctx, `
 		select p.id::text, p.name,
@@ -468,7 +473,7 @@ func (s *Store) TopPlayers(ctx context.Context, seasonID string, limit int) ([]R
 		       max(r.points)::int as best
 		  from runs r
 		  join players p on p.id = r.player_id
-		 where r.season_id = $1
+		 where ($1 = '' or r.season_id = $1)
 		 group by p.id, p.name
 		 order by total desc, best desc, min(r.created_at) asc
 		 limit $2`, seasonID, limit)

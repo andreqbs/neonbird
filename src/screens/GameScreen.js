@@ -494,10 +494,13 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   /**
    * Da para oferecer a nova chance? So em partida do servidor, com a chance
    * ainda nao usada e ao menos um jeito de pagar: guardada, moedas ou video.
+   * Caiu sem marcar ponto nenhum: nao ha o que salvar — o painel vai direto ao
+   * fim, com o jogar de novo, sem oferta nem video.
    */
   const canOfferContinue = useCallback(() => {
     const rs = runRef.current;
     if (training || !rs.run) return false;
+    if (world.score <= 0) return false;
     if (world.continuesUsed >= (rs.run.maxContinues || 0)) return false;
     if (extraChanceNeedsVideo(world)) return ads.canShow('rewarded');
     const w = economy.economyNow().wallet;

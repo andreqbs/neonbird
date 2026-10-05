@@ -249,7 +249,12 @@
     "noRuns": "Aucun vol enregistré pour l'instant. Joue une partie et elle apparaîtra ici.",
     "portrait": "portrait",
     "landscape": "paysage",
-    "seePlayer": "Voir l'oiseau et les skins de {name}"
+    "seePlayer": "Voir l'oiseau et les skins de {name}",
+    "viewRound": "Manche",
+    "viewAll": "Général",
+    "roundOver": "Manche terminée",
+    "prizes": "Prix de la manche : 1er {first} · 2e {second} · 3e {third} pièces, versés à la clôture.",
+    "allTimeNote": "La somme de toutes les manches — elle ne repart jamais à zéro."
   },
   "playerCard": {
     "flies": "Vole avec {bird}",

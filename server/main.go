@@ -197,6 +197,9 @@ func main() {
 
 	// O registro de acesso com mais de 6 meses sai do banco (access.go).
 	go purgeAccessLoop(ctx, store, log)
+
+	// Rodada fechada: os tres primeiros ganham moedas (prizes.go).
+	go seasonPrizesLoop(ctx, store, log)
 	limite := newLimiter(cfg.RatePerMinute, cfg.RateBurst)
 
 	handler := recoverPanic(log,

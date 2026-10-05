@@ -64,7 +64,7 @@ func novoAmbiente(t *testing.T, ajusta func(*Config)) *ambiente {
 	// falso positivo dos bons (passa por acaso).
 	if _, err := store.pool.Exec(ctx, `
 		truncate player_access, ad_views, ledger, game_sessions, bird_purchases, owned_birds,
-		         skin_purchases, equipped_skins, owned_skins, wallets,
+		         skin_purchases, equipped_skins, owned_skins, season_prizes, wallets,
 		         runs, group_members, groups, players
 		restart identity cascade`); err != nil {
 		t.Fatalf("limpar: %v", err)

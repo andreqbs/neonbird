@@ -65,5 +65,17 @@ func SeasonAt(t time.Time) Season {
 	}
 }
 
+// seasonByID devolve a rodada pelo id (o domingo em que abriu, "2026-09-27").
+// Data que nao e domingo, ou texto torto, nao e rodada.
+func seasonByID(id string) (Season, bool) {
+	dia, err := time.Parse("2006-01-02", id)
+	if err != nil {
+		return Season{}, false
+	}
+	// Domingo 21h em Brasilia: uma hora depois da abertura, dentro da rodada.
+	s := SeasonAt(dia.Add(time.Duration(seasonOpenHour+1-seasonTZOffsetHours) * time.Hour))
+	return s, s.ID == id
+}
+
 // CurrentSeason e a rodada de agora.
 func CurrentSeason() Season { return SeasonAt(time.Now()) }

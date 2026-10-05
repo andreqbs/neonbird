@@ -47,6 +47,11 @@ const (
 	MaxBirdLevel = 5
 )
 
+// SeasonPrizes: as moedas que o 1º, o 2º e o 3º do ranking individual ganham
+// quando a rodada fecha (prizes.go). Mais posicoes premiadas = mais numeros na
+// lista; 0 tira o premio daquela posicao. Muda com redeploy, sem build nova.
+var SeasonPrizes = []int{4000, 2000, 500}
+
 // UpgradePrices: quanto custa, em moedas, cada estrela — a primeira, a segunda,
 // ate a quinta. Precos de teste.
 var UpgradePrices = [MaxBirdLevel]int{10, 20, 40, 80, 160}
@@ -426,6 +431,8 @@ type Rules struct {
 	StageBonus         int `json:"stageBonus"`
 	MaxContinuesPerRun int `json:"maxContinuesPerRun"`
 	MaxStock           int `json:"maxStock"`
+	// Os premios da rodada, do 1º lugar em diante.
+	SeasonPrizes []int `json:"seasonPrizes"`
 }
 
 type Catalog struct {
@@ -461,6 +468,7 @@ func CurrentCatalog() Catalog {
 			StageBonus:         StageBonus,
 			MaxContinuesPerRun: MaxContinuesPerRun,
 			MaxStock:           MaxStock,
+			SeasonPrizes:       SeasonPrizes,
 		},
 	}
 }

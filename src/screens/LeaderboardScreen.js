@@ -22,6 +22,8 @@ import {
   currentSeason,
   formatRemaining,
   msUntilNext,
+  nextSeason,
+  previousSeason,
   seasonLabel,
 } from '../services/season';
 
@@ -44,6 +46,11 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
   const [myGroup, setMyGroup] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
+  // O ranking individual: de uma rodada ('round', a de agora ou uma passada) ou
+  // o geral ('all'), que soma todas as rodadas e nunca zera.
+  const [visao, setVisao] = useState('round');
+  const [rodada, setRodada] = useState(currentSeason);
+  const [premios, setPremios] = useState([]);
   // O jogador cujo cartao esta aberto (tocado no ranking ou no grupo).
   const [aberto, setAberto] = useState(null);
 
@@ -60,16 +67,18 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
     setCarregando(true);
     setErro(null);
     const [rp, rg, rm] = await Promise.all([
-      cloud.topPlayers(50),
+      cloud.topPlayers(50, visao === 'all' ? { scope: 'all' } : { season: rodada.id }),
       cloud.topGroups(50),
       cloud.myGroup(),
     ]);
-    if (rp.ok) setPlayers(rp.data?.rows ?? []);
-    else setErro(rp.error);
+    if (rp.ok) {
+      setPlayers(rp.data?.rows ?? []);
+      if (rp.data?.prizes) setPremios(rp.data.prizes);
+    } else setErro(rp.error);
     if (rg.ok) setGroups(rg.data?.rows ?? []);
     if (rm.ok) setMyGroup(rm.data?.group ?? null);
     setCarregando(false);
-  }, [online, player]);
+  }, [online, player, visao, rodada.id]);
 
   useEffect(() => {
     atualizar();
@@ -79,10 +88,46 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
     <Screen title={t('leaderboard.title')} onBack={onBack}>
       <Tabs tabs={tabs()} value={tab} onChange={setTab} />
 
-      {tab !== 'local' && <SeasonBar season={season} />}
+      {tab === 'groups' && <SeasonBar season={season} />}
+
+      {tab === 'players' && (
+        <>
+          <Tabs
+            tabs={[
+              { id: 'round', label: t('leaderboard.viewRound') },
+              { id: 'all', label: t('leaderboard.viewAll') },
+            ]}
+            value={visao}
+            onChange={(v) => {
+              setPlayers(null);
+              setVisao(v);
+            }}
+            style={styles.subTabs}
+          />
+          {visao === 'round' ? (
+            <SeasonBar
+              season={rodada}
+              onPrev={() => {
+                setPlayers(null);
+                setRodada(previousSeason(rodada));
+              }}
+              onNext={
+                rodada.id === season.id
+                  ? null
+                  : () => {
+                      setPlayers(null);
+                      setRodada(nextSeason(rodada));
+                    }
+              }
+            />
+          ) : null}
+        </>
+      )}
 
       {tab === 'players' && (
         <PlayersTab
+          visao={visao}
+          premios={premios}
           online={online}
           rows={players}
           me={player}
@@ -120,22 +165,43 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
  * A faixa da rodada. Diz de quando ate quando ela vale e quanto falta — sem
  * isso o ranking e um numero solto, e ninguem sabe se ainda da tempo de jogar.
  */
-function SeasonBar({ season }) {
-  const apurando = season.state === SEASON_STATE.COUNTING;
+function SeasonBar({ season, onPrev, onNext }) {
+  // Rodada passada: ja fechou e ja foi apurada. A de agora diz quanto falta.
+  const passada = season.nextOpensAt.getTime() <= Date.now();
+  const apurando = !passada && season.state === SEASON_STATE.COUNTING;
   const falta = formatRemaining(msUntilNext(season));
+  const navega = Boolean(onPrev);
 
   return (
     <View style={[styles.season, apurando && styles.seasonCounting]}>
+      {navega ? <Seta texto="‹" onPress={onPrev} /> : null}
       <View style={{ flex: 1 }}>
         <Text style={styles.seasonLabel}>{t('leaderboard.season', { label: seasonLabel(season) })}</Text>
         <Text style={styles.seasonHint}>
-          {apurando
-            ? t('leaderboard.seasonCounting', { time: falta })
-            : t('leaderboard.seasonEnds', { time: falta })}
+          {passada
+            ? t('leaderboard.roundOver')
+            : apurando
+              ? t('leaderboard.seasonCounting', { time: falta })
+              : t('leaderboard.seasonEnds', { time: falta })}
         </Text>
       </View>
       {apurando ? <Text style={styles.seasonBadge}>{t('leaderboard.counting')}</Text> : null}
+      {navega ? <Seta texto="›" onPress={onNext} /> : null}
     </View>
+  );
+}
+
+/** Seta de trocar de rodada. Sem `onPress` (a rodada de agora), fica apagada. */
+function Seta({ texto, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress || undefined}
+      disabled={!onPress}
+      hitSlop={10}
+      style={({ pressed }) => [styles.arrow, !onPress && { opacity: 0.25 }, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={styles.arrowText}>{texto}</Text>
+    </Pressable>
   );
 }
 
@@ -159,7 +225,7 @@ function OfflineNotice({ onOpenSettings }) {
 
 // --------------------------------------------------------- ranking individual
 
-function PlayersTab({ online, rows, me, loading, erro, onRefresh, onOpenSettings, onOpen }) {
+function PlayersTab({ visao, premios, online, rows, me, loading, erro, onRefresh, onOpenSettings, onOpen }) {
   if (!online) return <OfflineNotice onOpenSettings={onOpenSettings} />;
   if (loading && rows === null) return <Loading />;
 
@@ -190,13 +256,24 @@ function PlayersTab({ online, rows, me, loading, erro, onRefresh, onOpenSettings
             rank={i + 1}
             name={row.name}
             score={row.total}
-            badge={t('leaderboard.best', { n: row.best })}
+            badge={
+              row.prize
+                ? `${t('leaderboard.best', { n: row.best })} · 🏆 ${t('common.coins', { count: row.prize })}`
+                : t('leaderboard.best', { n: row.best })
+            }
             highlight={me && row.id === me.id}
             last={i === rows.length - 1}
             onPress={() => onOpen(row)}
           />
         ))}
       </Card>
+      {visao === 'all' ? (
+        <Text style={styles.footnote}>{t('leaderboard.allTimeNote')}</Text>
+      ) : premios.length >= 3 ? (
+        <Text style={styles.footnote}>
+          {t('leaderboard.prizes', { first: premios[0], second: premios[1], third: premios[2] })}
+        </Text>
+      ) : null}
       <Text style={styles.footnote}>{t('leaderboard.footnote')}</Text>
       <View style={styles.actions}>
         <Button title={t('common.refresh')} variant="ghost" compact onPress={onRefresh} />
@@ -541,6 +618,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(46,230,197,0.25)',
     marginBottom: 14,
   },
+  subTabs: { marginTop: 0, marginBottom: 10 },
+  arrow: { paddingHorizontal: 6, paddingVertical: 4 },
+  arrowText: { color: theme.pillar, fontSize: 28, fontWeight: '700', marginTop: -4 },
   seasonCounting: {
     backgroundColor: 'rgba(255,213,74,0.08)',
     borderColor: 'rgba(255,213,74,0.35)',

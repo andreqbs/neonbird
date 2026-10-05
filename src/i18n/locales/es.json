@@ -249,7 +249,12 @@
     "noRuns": "Todavía no hay vuelos registrados. Juega una partida y aparecerá aquí.",
     "portrait": "vertical",
     "landscape": "horizontal",
-    "seePlayer": "Ver el pájaro y las skins de {name}"
+    "seePlayer": "Ver el pájaro y las skins de {name}",
+    "viewRound": "Ronda",
+    "viewAll": "Histórico",
+    "roundOver": "Ronda terminada",
+    "prizes": "Premios de la ronda: 1.º {first} · 2.º {second} · 3.º {third} monedas, pagados al cerrar.",
+    "allTimeNote": "La suma de todas las rondas — nunca se reinicia."
   },
   "playerCard": {
     "flies": "Vuela con {bird}",

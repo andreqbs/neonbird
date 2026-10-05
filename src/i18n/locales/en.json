@@ -249,7 +249,12 @@
     "noRuns": "No flights recorded yet. Play a run and it shows up here.",
     "portrait": "portrait",
     "landscape": "landscape",
-    "seePlayer": "See {name}'s bird and skins"
+    "seePlayer": "See {name}'s bird and skins",
+    "viewRound": "Round",
+    "viewAll": "All time",
+    "roundOver": "Round over",
+    "prizes": "Round prizes: 1st {first} · 2nd {second} · 3rd {third} coins, paid when it closes.",
+    "allTimeNote": "The sum of every round — it never resets."
   },
   "playerCard": {
     "flies": "Flying: {bird}",

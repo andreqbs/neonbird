@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 // A API do jogo: conta, economia, grupos e ranking.
@@ -278,14 +279,40 @@ func limitParam(r *http.Request, padrao, teto int) int {
 	return n
 }
 
+// topPlayers: o ranking individual da rodada de agora; de uma rodada passada
+// (?season=2026-09-27, o domingo em que ela abriu); ou o geral, que soma todas
+// as rodadas e nunca zera (?scope=all).
 func (a *API) topPlayers(w http.ResponseWriter, r *http.Request) {
+	limite := limitParam(r, 50, 200)
+	if r.URL.Query().Get("scope") == "all" {
+		rows, err := a.store.TopPlayers(r.Context(), "", limite)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"rows": rows, "scope": "all"})
+		return
+	}
+
 	season := CurrentSeason()
-	rows, err := a.store.TopPlayers(r.Context(), season.ID, limitParam(r, 50, 200))
+	if id := r.URL.Query().Get("season"); id != "" {
+		var ok bool
+		if season, ok = seasonByID(id); !ok || season.StartsAt.After(time.Now()) {
+			badRequest(w, "rodada inválida")
+			return
+		}
+	}
+	rows, err := a.store.TopPlayers(r.Context(), season.ID, limite)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rows": rows, "season": season})
+	for i := range rows {
+		if i < len(SeasonPrizes) {
+			rows[i].Prize = SeasonPrizes[i]
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows, "season": season, "prizes": SeasonPrizes})
 }
 
 func (a *API) topGroups(w http.ResponseWriter, r *http.Request) {

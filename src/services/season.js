@@ -75,6 +75,16 @@ export function seasonAt(when = new Date()) {
   };
 }
 
+/** A rodada anterior a esta. */
+export function previousSeason(season) {
+  return seasonAt(new Date(season.startsAt.getTime() - 60000));
+}
+
+/** A rodada seguinte a esta (pode ainda nao ter comecado). */
+export function nextSeason(season) {
+  return seasonAt(new Date(season.nextOpensAt.getTime() + 60000));
+}
+
 /** Atalho: a rodada de agora. */
 export function currentSeason() {
   return seasonAt(new Date());
