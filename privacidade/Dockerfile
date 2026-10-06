@@ -20,6 +20,10 @@ COPY nginx.conf /etc/nginx/conf.d/privacidade.conf
 
 COPY index.html /usr/share/nginx/html/index.html
 
+# Lista de vendedores autorizados do AdMob: tem que estar na raiz do dominio
+# que esta como site do desenvolvedor no Play Console (dominio.com/app-ads.txt).
+COPY app-ads.txt /usr/share/nginx/html/app-ads.txt
+
 # Falha cedo: build quebrado por erro de sintaxe e melhor do que container que
 # sobe e cai em producao.
 RUN nginx -t
