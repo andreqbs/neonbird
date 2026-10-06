@@ -43,6 +43,13 @@ export const BILLING_MESSAGES = {
 let iap; // o modulo nativo: undefined = ainda nao procurei; null = nao ha
 let conexao = null;
 const precos = new Map(); // productId -> preco escrito ("R$ 4,99")
+// Produtos que o Google Play ja respondeu (com preco ou sem): os que estao aqui
+// e nao tem preco nao existem para ele — produto inativo, recem-criado que ainda
+// nao chegou, id diferente do Play Console. Esses nao ficam "carregando".
+const respondidos = new Set();
+
+/** Quanto a loja espera o Google Play responder os precos antes de desistir. */
+export const PRICE_TIMEOUT_MS = 15000;
 const esperando = new Map(); // productId -> quem espera a compra em curso
 const ouvintes = new Set();
 
@@ -65,6 +72,7 @@ export function __setIap(fake) {
   iap = fake === undefined ? undefined : fake;
   conexao = null;
   precos.clear();
+  respondidos.clear();
   esperando.clear();
 }
 
@@ -116,18 +124,36 @@ function itemOfProduct(productId) {
 }
 
 /** Busca no Google Play o preco de cada item (passaro ou skin) que se compra com dinheiro. */
+//
+// Chamado a cada vez que a loja abre: produto que o Google ainda nao tinha
+// (recem-criado no Play Console) aparece na proxima abertura, sem reiniciar o app.
 export async function loadPrices(items) {
   const ids = (items || []).map((b) => b.productId).filter(Boolean);
-  if (ids.length === 0 || !(await conecta())) return;
+  if (ids.length === 0) return;
   try {
-    const produtos = await nativeIap().fetchProducts({ skus: ids, type: 'in-app' });
+    if (!(await conecta())) return;
+    const produtos = await Promise.race([
+      nativeIap().fetchProducts({ skus: ids, type: 'in-app' }),
+      new Promise((_, falha) => setTimeout(() => falha(new Error('o Google Play nao respondeu')), PRICE_TIMEOUT_MS)),
+    ]);
     for (const p of produtos || []) {
       if (p && p.id && p.displayPrice) precos.set(p.id, p.displayPrice);
     }
-    avisaOuvintes();
   } catch (e) {
-    // Sem preco, o botao de dinheiro so nao aparece.
+    // Sem resposta: o botao de dinheiro so nao aparece (as moedas continuam).
+  } finally {
+    // Respondeu, falhou ou demorou: ninguem fica girando para sempre.
+    for (const id of ids) respondidos.add(id);
+    avisaOuvintes();
   }
+}
+
+/**
+ * O preco deste produto ainda pode chegar? So enquanto o Google Play nao
+ * respondeu. Depois, sem preco = sem compra com dinheiro para ele.
+ */
+export function priceLoading(productId) {
+  return Boolean(productId && isAvailable() && !precos.has(productId) && !respondidos.has(productId));
 }
 
 /** O preco escrito de um produto ("R$ 4,99"), ou null antes de chegar. */
@@ -260,6 +286,7 @@ export default {
   isAvailable,
   subscribeBilling,
   loadPrices,
+  priceLoading,
   priceOf,
   buyItem,
   buyBird,

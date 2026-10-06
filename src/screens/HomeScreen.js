@@ -1,20 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CoinFace } from '../game/render/Coin';
 import useAds from '../hooks/useAds';
 import useEconomy from '../hooks/useEconomy';
-import { t } from '../i18n';
+import useFitScale from '../hooks/useFitScale';
+import { getLanguage, t } from '../i18n';
 import economy from '../services/economy';
 import AdCover from '../ui/AdCover';
 import { formatFlightTime } from '../ui/flightTime';
@@ -40,11 +33,13 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
   // No celular o app fica em retrato; paisagem so aparece na web.
   const side = width > height;
 
-  // A altura que sobra de fato. No Android a barra de navegacao do sistema come
-  // o rodape, e num celular comum (360x800) nao cabem arte grande, textos e
-  // quatro botoes com folga: ali tudo aperta um pouco, em vez de o menu encostar
-  // nos botoes do sistema. Se nem assim couber (tela bem pequena), a Home rola.
-  const compact = !side && height - insets.top - insets.bottom < 760;
+  // A Home nunca rola: ela cabe em qualquer tela. A altura que sobra de fato
+  // (tirando barra de status, barra de navegacao e a margem) vai para o
+  // useFitScale, que mede o conteudo e devolve a escala — fontes, arte e
+  // espacos encolhem juntos ate caber. Num celular grande fica tudo no tamanho
+  // de projeto (escala 1); num pequeno, tudo proporcionalmente menor.
+  const margem = side ? 12 : 16;
+  const disponivel = height - insets.top - insets.bottom - margem * 2;
 
   const wallet = eco.wallet;
   const ready = eco.status === 'ready' && Boolean(wallet);
@@ -96,88 +91,118 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
     { id: 'settings', title: t('home.settings') },
   ];
 
+  // O que muda o tamanho do conteudo sem mudar a tela: idioma, aviso, faixa de
+  // sem conexao. Mudou, mede de novo.
+  const { scale, ready: medido, onLayout } = useFitScale(
+    disponivel,
+    `${getLanguage()}|${offline}|${notice || ''}|${primary.title}|${side}`
+  );
+  const z = (n) => n * scale;
+  // O titulo tambem cabe na LARGURA: "MAJOR FLYER" ocupa ~8,6 vezes o tamanho
+  // da fonte (com o espacamento). Numa tela estreita ele encolhe ate caber numa
+  // linha so, em vez de quebrar em duas.
+  const titulo = Math.min(z(36), (width - insets.left - insets.right - 48) / 8.6);
+
   return (
     <View style={styles.root}>
       <LinearGradient colors={SKY_GRADIENT} locations={[0, 0.3, 0.56, 0.8, 1]} style={StyleSheet.absoluteFill} />
       <View style={styles.vignette} />
 
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
+      <View
+        style={[
           styles.content,
-          side && styles.contentSide,
           {
-            paddingTop: insets.top + (side || compact ? 12 : 32),
-            paddingBottom: insets.bottom + (compact ? 12 : 24),
+            paddingTop: insets.top + margem,
+            paddingBottom: insets.bottom + margem,
             paddingLeft: insets.left + 24,
             paddingRight: insets.right + 24,
           },
         ]}
       >
-        <View style={[styles.brand, compact && styles.brandCompact, side && styles.brandSide]}>
-          {/* Mesma arte do icone/splash do app, em vez de um desenho paralelo. */}
-          <Image
-            source={require('../../assets/splash-icon.png')}
-            style={[styles.badge, compact && styles.badgeCompact, side && styles.badgeSide]}
-            resizeMode="contain"
-          />
-          <Text style={styles.title}>MAJOR FLYER</Text>
-          <Text style={styles.subtitle}>{t('home.tagline')}</Text>
+        <View
+          onLayout={onLayout}
+          style={[styles.fit, side && styles.fitSide, { gap: side ? 44 : 0, opacity: medido ? 1 : 0 }]}
+        >
+          <View style={[styles.brand, side && styles.brandSide, { marginBottom: side ? 0 : z(28) }]}>
+            {/* Mesma arte do icone/splash do app, em vez de um desenho paralelo. */}
+            <Image
+              source={require('../../assets/splash-icon.png')}
+              style={{ width: z(side ? 108 : 148), height: z(side ? 108 : 148), marginBottom: -z(side ? 8 : 14) }}
+              resizeMode="contain"
+            />
+            <Text style={[styles.title, { fontSize: titulo, letterSpacing: titulo / 9, textShadowRadius: titulo / 2 }]}>
+              MAJOR FLYER
+            </Text>
+            <Text style={[styles.subtitle, { fontSize: z(13), lineHeight: z(19), marginTop: z(10) }]}>
+              {t('home.tagline')}
+            </Text>
 
-          <View style={[styles.pills, compact && styles.pillsCompact]}>
-            <View style={styles.pill}>
-              <Text style={styles.pillLabel}>{t('home.recordLabel')}</Text>
-              <Text style={styles.pillValue}>{best}</Text>
+            <View style={[styles.pills, { marginTop: z(20), gap: z(10) }]}>
+              <View style={[styles.pill, pilula(z)]}>
+                <Text style={[styles.pillLabel, { fontSize: z(11) }]}>{t('home.recordLabel')}</Text>
+                <Text style={[styles.pillValue, { fontSize: z(20) }]}>{best}</Text>
+              </View>
+              {/* Moedas e vidas sao do servidor: sem ele, a pilula mostra traco em
+                  vez de um numero que ninguem confirmou. */}
+              <View style={[styles.pill, pilula(z), !ready && styles.pillWaiting]}>
+                <CoinFace size={z(18)} />
+                <Text style={[styles.pillValue, { fontSize: z(20) }]}>{ready ? wallet.coins : '—'}</Text>
+              </View>
             </View>
-            {/* Moedas e vidas sao do servidor: sem ele, a pilula mostra traco em
-                vez de um numero que ninguem confirmou. */}
-            <View style={[styles.pill, !ready && styles.pillWaiting]}>
-              <CoinFace size={18} />
-              <Text style={styles.pillValue}>{ready ? wallet.coins : '—'}</Text>
+
+            <View style={[styles.pill, pilula(z), { marginTop: z(10), gap: z(12) }, !ready && styles.pillWaiting]}>
+              <Text style={[styles.pillLabel, { fontSize: z(11) }]}>{t('common.livesLabel')}</Text>
+              <LifeBirds lives={ready ? lives : 0} total={maxLives} size={z(20)} gap={z(7)} />
             </View>
+
+            {/* Tempo de voo: so o tempo voando de fato, somado pelo servidor a cada
+                partida fechada. */}
+            <View style={[styles.pill, pilula(z), { marginTop: z(10), gap: z(12) }, !ready && styles.pillWaiting]}>
+              <Text style={[styles.pillLabel, { fontSize: z(11) }]}>{t('home.flightLabel')}</Text>
+              <Text style={[styles.flightValue, { fontSize: z(18) }]}>
+                {ready ? formatFlightTime(wallet.flightMs) : '—'}
+              </Text>
+            </View>
+
+            {offline ? (
+              <Pressable
+                onPress={retry}
+                style={({ pressed }) => [
+                  styles.offline,
+                  { marginTop: z(14), paddingVertical: z(8) },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={[styles.offlineTitle, { fontSize: z(11) }]}>{t('home.offlineTitle')}</Text>
+                <Text style={[styles.offlineAction, { fontSize: z(11) }]}>{t('home.offlineAction')}</Text>
+              </Pressable>
+            ) : null}
+
+            {notice ? (
+              <Text style={[styles.notice, { fontSize: z(12), lineHeight: z(17), marginTop: z(12) }]}>{notice}</Text>
+            ) : null}
           </View>
 
-          <View
-            style={[styles.pill, styles.stacked, compact && styles.stackedCompact, !ready && styles.pillWaiting]}
-          >
-            <Text style={styles.pillLabel}>{t('common.livesLabel')}</Text>
-            <LifeBirds lives={ready ? lives : 0} total={maxLives} size={20} gap={7} />
+          <View style={[styles.menu, side && styles.menuSide, { gap: z(12) }]}>
+            <MenuButton item={primary} primary z={z} onPress={primary.onPress} />
+            {items.map((item) => (
+              <MenuButton key={item.id} item={item} z={z} onPress={() => onNavigate(item.id)} />
+            ))}
           </View>
-
-          {/* Tempo de voo: so o tempo voando de fato, somado pelo servidor a cada
-              partida fechada. */}
-          <View
-            style={[styles.pill, styles.stacked, compact && styles.stackedCompact, !ready && styles.pillWaiting]}
-          >
-            <Text style={styles.pillLabel}>{t('home.flightLabel')}</Text>
-            <Text style={styles.flightValue}>{ready ? formatFlightTime(wallet.flightMs) : '—'}</Text>
-          </View>
-
-          {offline ? (
-            <Pressable onPress={retry} style={({ pressed }) => [styles.offline, pressed && { opacity: 0.7 }]}>
-              <Text style={styles.offlineTitle}>{t('home.offlineTitle')}</Text>
-              <Text style={styles.offlineAction}>{t('home.offlineAction')}</Text>
-            </Pressable>
-          ) : null}
-
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </View>
-
-        <View style={[styles.menu, compact && styles.menuCompact, side && styles.menuSide]}>
-          <MenuButton item={primary} primary compact={compact} onPress={primary.onPress} />
-          {items.map((item) => (
-            <MenuButton key={item.id} item={item} compact={compact} onPress={() => onNavigate(item.id)} />
-          ))}
-        </View>
-      </ScrollView>
+      </View>
 
       <AdCover state={adState} seconds={adSeconds} />
     </View>
   );
 }
 
-function MenuButton({ item, primary, compact, onPress }) {
+/** Os espacos de dentro de uma pilula, na escala da tela. */
+function pilula(z) {
+  return { paddingVertical: z(8), paddingHorizontal: z(18), gap: z(10) };
+}
+
+function MenuButton({ item, primary, z, onPress }) {
   const disabled = !onPress;
   return (
     <Pressable
@@ -185,16 +210,16 @@ function MenuButton({ item, primary, compact, onPress }) {
       disabled={disabled}
       style={({ pressed }) => [
         styles.item,
-        compact && styles.itemCompact,
+        { paddingVertical: z(16), paddingHorizontal: z(20), borderRadius: z(18) },
         primary ? styles.itemPrimary : styles.itemGhost,
         disabled && { opacity: 0.6 },
         pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
       ]}
     >
-      <Text style={[styles.itemTitle, primary && styles.itemTitlePrimary]} numberOfLines={1}>
+      <Text style={[styles.itemTitle, { fontSize: z(18) }, primary && styles.itemTitlePrimary]} numberOfLines={1}>
         {item.title}
       </Text>
-      <Text style={[styles.itemChevron, primary && styles.itemTitlePrimary]}>›</Text>
+      <Text style={[styles.itemChevron, { fontSize: z(26) }, primary && styles.itemTitlePrimary]}>›</Text>
     </Pressable>
   );
 }
@@ -203,22 +228,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.skyTop },
   vignette: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6,9,26,0.45)' },
 
-  // flexGrow: com folga, o conteudo fica no centro; sem folga, rola.
-  scroll: { flex: 1 },
-  content: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
-  contentSide: { flexDirection: 'row', gap: 44 },
+  // A tela inteira, sem rolagem: o bloco medido (fit) fica no centro.
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  fit: { width: '100%', alignItems: 'center' },
+  fitSide: { flexDirection: 'row', justifyContent: 'center' },
 
-  brand: { alignItems: 'center', maxWidth: 400, marginBottom: 30 },
-  brandCompact: { marginBottom: 18 },
-  brandSide: { marginBottom: 0, flex: 1, maxWidth: 340 },
-
-  // A arte ja traz o halo, entao nada de sombra por cima (que no Android
-  // viraria `elevation` e mudaria a ordem de desenho). Ela tambem tem uma faixa
-  // transparente embaixo do passaro: a margem negativa encosta o titulo nele,
-  // e nao no fim da imagem.
-  badge: { width: 148, height: 148, marginBottom: -14 },
-  badgeCompact: { width: 120, height: 120, marginBottom: -12 },
-  badgeSide: { width: 108, height: 108, marginBottom: -8 },
+  brand: { alignItems: 'center', maxWidth: 400 },
+  brandSide: { flex: 1, maxWidth: 340 },
 
   title: {
     color: theme.text,
@@ -237,14 +253,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  pills: { flexDirection: 'row', gap: 10, marginTop: 20 },
-  pillsCompact: { marginTop: 14 },
+  pills: { flexDirection: 'row' },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1,
@@ -253,9 +265,6 @@ const styles = StyleSheet.create({
   pillWaiting: { opacity: 0.45 },
   pillLabel: { color: theme.textDim, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
   pillValue: { color: theme.bird, fontSize: 20, fontWeight: '900' },
-  // Vidas e tempo de voo: uma pilula embaixo da outra.
-  stacked: { marginTop: 10, gap: 12 },
-  stackedCompact: { marginTop: 8 },
   flightValue: { color: theme.bird, fontSize: 18, fontWeight: '900' },
 
   offline: {
@@ -281,18 +290,13 @@ const styles = StyleSheet.create({
   },
 
   menu: { width: '100%', maxWidth: 380, gap: 12 },
-  menuCompact: { gap: 10 },
   menuSide: { flex: 1, maxWidth: 340 },
 
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 18,
     borderWidth: 1.5,
   },
-  itemCompact: { paddingVertical: 12 },
   itemPrimary: {
     backgroundColor: theme.pillar,
     borderColor: theme.pillarLight,

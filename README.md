@@ -67,7 +67,7 @@ cd server && docker compose -f docker-compose.test.yml run --rm --build test
 
 | Tela | O que tem |
 |------|-----------|
-| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações — só o título em cada card, para caber sem rolar; recorde, moedas, as 5 vidas e o tempo de voo |
+| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações — sem rolagem: o hook [useFitScale](src/hooks/useFitScale.js) mede a tela e encolhe textos, arte e espaços até caber em qualquer altura; recorde, moedas, as 5 vidas e o tempo de voo |
 | **Loja** | Abas *Birds* (5 pássaros novos, escudos e novas chances) e *Skins* (bonés, asas, óculos e colares) |
 | **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (histórico local); tocar num jogador mostra o pássaro e as skins dele |
 | **Configurações** | Idioma, música de fundo, som do toque, efeitos, nome e código do jogador, apagar recordes |

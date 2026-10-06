@@ -2355,7 +2355,10 @@ async function billingSection() {
     purchaseUpdatedListener: (cb) => (aoComprar = cb),
     purchaseErrorListener: (cb) => (aoErrar = cb),
     fetchProducts: async ({ skus }) =>
-      skus.map((id) => ({ id, displayPrice: id === 'bird_comet' ? 'R$ 19,90' : 'R$ 4,99' })),
+      // O Google so devolve o que existe (e esta ativo) no Play Console.
+      skus
+        .filter((id) => !id.includes('nao_tem'))
+        .map((id) => ({ id, displayPrice: id === 'bird_comet' ? 'R$ 19,90' : 'R$ 4,99' })),
     requestPurchase: async (args) => {
       pedidosAoGoogle.push(args);
       const sku = args.request.google.skus[0];
@@ -2416,6 +2419,12 @@ async function billingSection() {
     const skinPaga = await billing.buySkin(bone);
     const skinAoServidor = pedidos.find((p) => p.path === '/v1/shop/purchase');
     check('o preco da skin tambem vem do Google Play', billing.priceOf('skin_cap_red') === 'R$ 4,99');
+    await billing.loadPrices([{ productId: 'skin_que_o_google_nao_tem' }]);
+    check(
+      'produto que o Google Play nao devolve (inativo, recem-criado) nao fica carregando para sempre',
+      billing.priceLoading('skin_que_o_google_nao_tem') === false && billing.priceOf('skin_que_o_google_nao_tem') === null
+    );
+    check('...e produto ainda nao consultado espera o preco', billing.priceLoading('skin_nunca_consultada') === true);
     check(
       'skin paga: chega pela resposta do servidor, que recebe o id da skin e o token',
       skinPaga.ok === true &&

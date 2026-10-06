@@ -257,7 +257,7 @@ export default function ShopScreen({ onBack }) {
                       )
                     }
                     moneyPrice={billing.priceOf(bird.productId)}
-                    moneyReady={billing.isAvailable()}
+                    moneyLoading={billing.priceLoading(bird.productId)}
                     moneyBusy={busy === `money:${bird.id}`}
                     onBuyMoney={() =>
                       buyWithMoney(bird, t('shop.birdBought', { name: birdName(bird) }))
@@ -360,7 +360,7 @@ function BirdRow({
   upgradeBusy,
   onUpgrade,
   moneyPrice,
-  moneyReady,
+  moneyLoading,
   moneyBusy,
   last,
   onBuy,
@@ -392,7 +392,7 @@ function BirdRow({
         armed={armed}
         busy={busy}
         moneyPrice={moneyPrice}
-        moneyReady={moneyReady}
+        moneyLoading={moneyLoading}
         moneyBusy={moneyBusy}
         onBuy={onBuy}
         onBuyMoney={onBuyMoney}
@@ -506,7 +506,7 @@ function SkinsTab({ catalog, wallet, armed, busy, onBuy, onBuyMoney, onEquip, on
                     armed={armed === id}
                     busy={busy === id}
                     moneyPrice={billing.priceOf(skin.productId)}
-                    moneyReady={billing.isAvailable()}
+                    moneyLoading={billing.priceLoading(skin.productId)}
                     moneyBusy={busy === `money:${skin.id}`}
                     last={i === doEncaixe.length - 1}
                     onBuy={() => onBuy(skin)}
@@ -534,7 +534,7 @@ function SkinRow({
   armed,
   busy,
   moneyPrice,
-  moneyReady,
+  moneyLoading,
   moneyBusy,
   last,
   onBuy,
@@ -569,7 +569,7 @@ function SkinRow({
         armed={armed}
         busy={busy}
         moneyPrice={moneyPrice}
-        moneyReady={moneyReady}
+        moneyLoading={moneyLoading}
         moneyBusy={moneyBusy}
         onBuy={onBuy}
         onBuyMoney={onBuyMoney}
@@ -601,14 +601,15 @@ function BuyOptions({
   armed,
   busy,
   moneyPrice,
-  moneyReady,
+  moneyLoading,
   moneyBusy,
   onBuy,
   onBuyMoney,
 }) {
   const comMoedas = price > 0;
   const comDinheiro = Boolean(productId && moneyPrice);
-  const esperandoPreco = Boolean(productId && moneyReady && !moneyPrice);
+  // Girando so enquanto o Google Play ainda nao respondeu o preco.
+  const esperandoPreco = Boolean(productId && !moneyPrice && moneyLoading);
   return (
     <View style={styles.buyOptions}>
       {comMoedas ? (
