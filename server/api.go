@@ -57,6 +57,7 @@ func (a *API) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/rankings/players", a.topPlayers)
 	mux.HandleFunc("GET /v1/rankings/groups", a.topGroups)
 	mux.HandleFunc("GET /v1/me/standing", a.standing)
+	mux.HandleFunc("GET /v1/me/flights", a.myFlights)
 
 	return mux
 }
@@ -337,4 +338,20 @@ func (a *API) standing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"standing": st, "season": season})
+}
+
+// myFlights: a aba "Seus voos" — os melhores voos do jogador, de todas as
+// rodadas. Vem daqui, e nao do aparelho, para valer o mesmo em qualquer
+// celular e continuar depois de reinstalar o jogo.
+func (a *API) myFlights(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	voos, err := a.store.Flights(r.Context(), p.ID, MyFlightsLimit)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"flights": voos})
 }

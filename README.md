@@ -69,8 +69,8 @@ cd server && docker compose -f docker-compose.test.yml run --rm --build test
 |------|-----------|
 | **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações — sem rolagem: o hook [useFitScale](src/hooks/useFitScale.js) mede a tela e encolhe textos, arte e espaços até caber em qualquer altura; recorde, moedas, as 5 vidas e o tempo de voo |
 | **Loja** | Abas *Birds* (5 pássaros novos, escudos e novas chances) e *Skins* (bonés, asas, óculos e colares) |
-| **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (histórico local); tocar num jogador mostra o pássaro e as skins dele |
-| **Configurações** | Idioma, música de fundo, som do toque, efeitos, nome e código do jogador, apagar recordes |
+| **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (os melhores voos do jogador, do servidor); tocar num jogador mostra o pássaro e as skins dele |
+| **Configurações** | Idioma, música de fundo, som do toque, efeitos, nome e código do jogador, privacidade (abre o site da política) e a versão do app no rodapé (lida do `version` do app.json) |
 | **Jogo** | Partida, placar e moedas ao vivo, escudo guardado, nova chance, pausa e fim de jogo |
 
 ---
@@ -80,10 +80,11 @@ cd server && docker compose -f docker-compose.test.yml run --rm --build test
 O jogo fala **dez idiomas**: português, inglês, espanhol, italiano, alemão,
 francês, russo, chinês (simplificado), japonês e árabe.
 
-- **Qual vale:** em *Configurações → Idioma*, o jogador escolhe um, ou deixa no
-  **Automático**, que é o padrão: aí vale o idioma do celular, se for um dos dez
-  (o primeiro da lista de idiomas do aparelho que o jogo tiver). Celular em outro
-  idioma, ou leitura que falhou: **inglês**. A troca vale na hora, sem reiniciar.
+- **Qual vale:** sem escolha, o idioma do celular, se for um dos dez (o
+  primeiro da lista de idiomas do aparelho que o jogo tiver). Celular em outro
+  idioma, ou leitura que falhou: **inglês**. Em *Configurações → Idioma* a lista
+  mostra marcado o que está em uso, e o jogador pode trocar por outro — a troca
+  vale na hora, sem reiniciar.
 - **Os textos** moram em [src/i18n/locales/](src/i18n/locales), um arquivo JSON
   por idioma, todos com as mesmas chaves. Mudar uma frase é editar o arquivo do
   idioma; frase nova entra nos dez. O `npm test` confere que nenhum arquivo
@@ -316,9 +317,9 @@ sem internet, não conta.
 ### Sem internet: modo treino
 
 Sem servidor, a Home troca *Jogar* por **Treinar**: o voo é o mesmo, mas sem
-moedas, vidas, escudo, nova chance, loja ou ranking — e a tela diz isso. Recorde
-e *Seus voos* continuam funcionando, porque moram no aparelho e não são moeda de
-troca.
+moedas, vidas, escudo, nova chance, loja ou ranking — e a tela diz isso. O treino
+também não conta recorde nem entra em *Seus voos*: os dois vêm das partidas
+fechadas no servidor, como o ranking.
 
 ### Os pássaros e os poderes
 
@@ -529,11 +530,16 @@ npm run icons
 
 ## Ranking
 
-### Aba "Seus voos" — funciona sempre
+### Aba "Seus voos" e o recorde — o servidor
 
-Histórico das 25 melhores partidas do aparelho, com data e orientação, salvo em
-`AsyncStorage`. É a fonte do recorde mostrado no menu. Não precisa de conta nem
-de internet.
+As 25 melhores partidas do jogador, de todas as rodadas, com data e placar
+(`GET /v1/me/flights`). O recorde da Home é a maior delas e chega na carteira
+(`best`); cada fechamento de partida diz se ela bateu o recorde (`newBest`), e é
+daí que sai o "Novo recorde!" no fim do voo. Como o ranking, vale em qualquer
+celular e continua depois de reinstalar o jogo — e treino sem internet não entra.
+
+As versões antigas guardavam esse histórico no aparelho (`AsyncStorage`); o app
+apaga o que sobrou na abertura ([scores.js](src/services/scores.js)).
 
 ### Abas "Individual" e "Grupo" — o servidor
 
@@ -890,7 +896,7 @@ src/
     LeaderboardScreen.js     abas Individual, Grupo e Seus voos
     SettingsScreen.js        som, jogador e dados
   services/
-    scores.js                historico local de partidas
+    scores.js                apaga o historico local das versoes antigas
     identity.js              codigo publico + segredo do jogador, e o apelido
     season.js                a rodada da semana (domingo 20h -> domingo 18h)
     cloud.js                 transporte, grupos e ranking; sem endereco, "offline"
@@ -900,7 +906,6 @@ src/
     adsSdk.js                carrega o SDK nativo (.web.js devolve null)
   state/SettingsContext.js   preferencias persistidas
   hooks/
-    useScores.js             recorde + historico local
     useEconomy.js            a carteira, para as telas redesenharem
     useAds.js                o video premiado e o premio confirmado no servidor
     usePlayer.js             o jogador deste aparelho, para as telas

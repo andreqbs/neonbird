@@ -1,16 +1,25 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
 
 import Screen, { Card, SectionTitle } from '../ui/Screen';
 import { ActionRow, ChoiceRow, InputRow, ToggleRow } from '../ui/Row';
 import { theme } from '../ui/theme';
 import { useSettings } from '../state/SettingsContext';
 import usePlayer from '../hooks/usePlayer';
-import { AUTO, LANGUAGES, detectDeviceLanguage, languageName, t } from '../i18n';
+import { LANGUAGES, getLanguage, languageName, t } from '../i18n';
 import { NAME_MAX } from '../services/identity';
-import { clearRuns } from '../services/scores';
 
-export default function SettingsScreen({ onBack, onScoresCleared }) {
+/** O site da politica de privacidade (o mesmo da ficha do Google Play). */
+export const PRIVACY_URL = 'https://majorflyer.aqbs.cloud/';
+
+/**
+ * A versao do app, lida do app.json ("version") no build — nao precisa mexer no
+ * codigo a cada versao, so no app.json.
+ */
+const VERSAO = (Constants.expoConfig && Constants.expoConfig.version) || '';
+
+export default function SettingsScreen({ onBack }) {
   const { settings, setSetting } = useSettings();
   const { player, rename } = usePlayer();
   const [enviado, setEnviado] = useState(false);
@@ -31,54 +40,32 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
       // o jogador fechou a folha de compartilhamento: nao ha o que fazer
     }
   }, [player]);
-  const handleClear = useCallback(() => {
-    Alert.alert(t('settings.clearConfirmTitle'), t('settings.clearConfirmBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('settings.clear'),
-        style: 'destructive',
-        onPress: async () => {
-          await clearRuns();
-          onScoresCleared?.();
-        },
-      },
-    ]);
-  }, [onScoresCleared]);
 
-  // O idioma. Escolher um faz o app redesenhar as telas ja no idioma novo (a
-  // raiz assina a troca) — e esta lista fecha sozinha nessa hora.
-  const escolhido = settings.language || AUTO;
-  const doCelular = languageName(detectDeviceLanguage());
+  // O idioma. Sem escolha, vale o do celular (ou ingles, se o jogo nao o tiver):
+  // a lista mostra marcado o que esta em uso. Escolher um faz o app redesenhar
+  // as telas ja no idioma novo — e esta lista fecha sozinha nessa hora.
+  const emUso = getLanguage();
 
   return (
     <Screen title={t('settings.title')} onBack={onBack}>
       <SectionTitle>{`🌐 ${t('settings.language')}`}</SectionTitle>
       <Card>
         <ActionRow
-          label={escolhido === AUTO ? t('settings.languageAuto') : languageName(escolhido)}
-          description={escolhido === AUTO ? t('settings.languageAutoDesc', { name: doCelular }) : undefined}
+          label={languageName(emUso)}
           onPress={() => setIdiomas((aberto) => !aberto)}
           last={!idiomas}
         />
-        {idiomas ? (
-          <>
-            <ChoiceRow
-              label={t('settings.languageAuto')}
-              description={t('settings.languageAutoDesc', { name: doCelular })}
-              selected={escolhido === AUTO}
-              onPress={() => setSetting('language', AUTO)}
-            />
-            {LANGUAGES.map((l, i) => (
+        {idiomas
+          ? LANGUAGES.map((l, i) => (
               <ChoiceRow
                 key={l.code}
                 label={l.name}
-                selected={escolhido === l.code}
+                selected={emUso === l.code}
                 onPress={() => setSetting('language', l.code)}
                 last={i === LANGUAGES.length - 1}
               />
-            ))}
-          </>
-        ) : null}
+            ))
+          : null}
       </Card>
 
       <SectionTitle>{t('settings.sound')}</SectionTitle>
@@ -135,16 +122,15 @@ export default function SettingsScreen({ onBack, onScoresCleared }) {
       <SectionTitle>{t('settings.data')}</SectionTitle>
       <Card>
         <ActionRow
-          label={t('settings.clearRecords')}
-          description={t('settings.clearRecordsDesc')}
-          onPress={handleClear}
-          danger
+          label={t('settings.privacy')}
+          description={t('settings.privacyDesc')}
+          onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})}
           last
         />
       </Card>
 
       <View style={styles.about}>
-        <Text style={styles.aboutText}>Major Flyer</Text>
+        <Text style={styles.aboutText}>{VERSAO ? `Major Flyer · ${VERSAO}` : 'Major Flyer'}</Text>
       </View>
     </Screen>
   );
@@ -180,6 +166,6 @@ const styles = StyleSheet.create({
   codeButtonLabel: { color: theme.pillar, fontSize: 14, fontWeight: '800' },
 
   about: { marginTop: 32, alignItems: 'center', gap: 6, paddingHorizontal: 12 },
-  aboutText: { color: theme.text, fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  aboutText: { color: theme.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   aboutDim: { color: theme.textDim, fontSize: 11, textAlign: 'center', lineHeight: 16 },
 });

@@ -225,7 +225,7 @@
     "loadError": "无法加载排行榜（{error}）。",
     "empty": "本轮还没有人得分。来当第一个吧。",
     "best": "最佳飞行：{n}",
-    "footnote": "本轮分数是你在本轮所有游戏的总和。点击玩家可查看他的小鸟和皮肤。",
+    "footnote": "本轮分数是你在本轮所有游戏的总和。",
     "groupsRanking": "小组排行榜",
     "groupBadge": "{players} · 队长 {leader}",
     "nameTooShort": "名称至少需要2个字符。",
@@ -247,8 +247,6 @@
     "addToGroup": "加入小组",
     "leaveGroup": "退出小组",
     "noRuns": "还没有飞行记录。玩一局，它就会出现在这里。",
-    "portrait": "竖屏",
-    "landscape": "横屏",
     "seePlayer": "查看{name}的小鸟和皮肤",
     "viewRound": "本轮",
     "viewAll": "总榜",
@@ -267,8 +265,6 @@
   "settings": {
     "title": "设置",
     "language": "语言",
-    "languageAuto": "自动",
-    "languageAutoDesc": "跟随手机语言——当前：{name}",
     "sound": "声音",
     "music": "背景音乐",
     "musicDesc": "游戏中的配乐",
@@ -285,12 +281,9 @@
     "share": "分享",
     "shared": "已发送",
     "shareMessage": "邀请我加入你在Major Flyer的小组吧！我的玩家代码是：\n\n{code}",
-    "data": "数据",
-    "clearRecords": "删除本地记录",
-    "clearRecordsDesc": "清除本设备上的游戏历史。",
-    "clearConfirmTitle": "删除本地记录？",
-    "clearConfirmBody": "本设备上保存的游戏历史将会丢失，且无法撤销。",
-    "clear": "删除"
+    "data": "信息",
+    "privacy": "隐私",
+    "privacyDesc": "游戏的隐私政策"
   },
   "ads": {
     "loadingTitle": "广告加载中...",

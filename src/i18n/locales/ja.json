@@ -225,7 +225,7 @@
     "loadError": "ランキングを読み込めませんでした（{error}）。",
     "empty": "このラウンドではまだ誰も得点していません。一番乗りを目指そう。",
     "best": "ベスト飛行：{n}",
-    "footnote": "ラウンドのスコアは、そのラウンドの全プレイの合計です。プレイヤーをタップすると、その鳥とスキンが見られます。",
+    "footnote": "ラウンドのスコアは、そのラウンドの全プレイの合計です。",
     "groupsRanking": "グループランキング",
     "groupBadge": "{players} · リーダー {leader}",
     "nameTooShort": "2文字以上の名前にしてください。",
@@ -247,8 +247,6 @@
     "addToGroup": "グループに追加",
     "leaveGroup": "グループを抜ける",
     "noRuns": "まだ飛行記録がありません。プレイするとここに表示されます。",
-    "portrait": "縦向き",
-    "landscape": "横向き",
     "seePlayer": "{name}の鳥とスキンを見る",
     "viewRound": "ラウンド",
     "viewAll": "総合",
@@ -267,8 +265,6 @@
   "settings": {
     "title": "設定",
     "language": "言語",
-    "languageAuto": "自動",
-    "languageAutoDesc": "スマホの言語に合わせます（現在：{name}）",
     "sound": "サウンド",
     "music": "BGM",
     "musicDesc": "プレイ中の音楽",
@@ -285,12 +281,9 @@
     "share": "共有",
     "shared": "送信しました",
     "shareMessage": "Major Flyerのグループに招待して！私のプレイヤーコードは：\n\n{code}",
-    "data": "データ",
-    "clearRecords": "ローカル記録を削除",
-    "clearRecordsDesc": "この端末のプレイ履歴を消去します。",
-    "clearConfirmTitle": "ローカル記録を削除しますか？",
-    "clearConfirmBody": "この端末に保存されたプレイ履歴は失われます。元に戻せません。",
-    "clear": "削除"
+    "data": "情報",
+    "privacy": "プライバシー",
+    "privacyDesc": "ゲームのプライバシーポリシー"
   },
   "ads": {
     "loadingTitle": "広告を読み込み中...",

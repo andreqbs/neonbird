@@ -54,6 +54,7 @@ import useAds from '../hooks/useAds';
 import useEconomy from '../hooks/useEconomy';
 import ads from '../services/ads';
 import economy from '../services/economy';
+import { submitScore as submitToPlayGames } from '../services/playGames';
 import AdCover from '../ui/AdCover';
 import Button from '../ui/Button';
 import LifeBirds from '../ui/LifeBirds';
@@ -78,7 +79,7 @@ const PANEL_ESTIMATE = { hint: 112, pause: 128, over: 380, stage: 300, win: 420,
  * novas chances); `training` e o voo sem servidor — sem moeda, vida, escudo,
  * nova chance nem ranking.
  */
-export default function GameScreen({ onExit, best, onScore, initialRun = null, training = false }) {
+export default function GameScreen({ onExit, initialRun = null, training = false }) {
   // O jogo sempre ocupa a tela inteira (desenha ate a borda e o HUD respeita os
   // recortes), entao a janela ja e a area de jogo. `useWindowDimensions` reage
   // sozinho a rotacao, sem depender de onLayout — que nao dispara em toda
@@ -108,8 +109,6 @@ export default function GameScreen({ onExit, best, onScore, initialRun = null, t
         width={width}
         height={height}
         onExit={onExit}
-        best={best}
-        onScore={onScore}
         carry={carry}
         runRef={runRef}
         liveArea={liveArea}
@@ -119,11 +118,14 @@ export default function GameScreen({ onExit, best, onScore, initialRun = null, t
   );
 }
 
-function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveArea, training }) {
+function GameArea({ width, height, onExit, carry, runRef, liveArea, training }) {
   const layout = useMemo(() => computeLayout(width, height), [width, height]);
   const insets = useSafeAreaInsets();
   const eco = useEconomy();
   const wallet = eco.wallet;
+  // O recorde e o do servidor (a maior partida fechada la), que chega na
+  // carteira — ja com esta partida, quando ela fecha.
+  const best = (wallet && wallet.best) || 0;
   const [, redraw] = useReducer((n) => n + 1, 0);
 
   // O passaro da partida: visual e poderes, lidos uma vez por montagem. E o
@@ -294,8 +296,6 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
   const lastHeavyWarnRef = useRef(0);
   const busyRef = useRef(null);
   const mountedRef = useRef(true);
-  const onScoreRef = useRef(onScore);
-  onScoreRef.current = onScore;
   const onRunOverRef = useRef(null);
 
   useEffect(() => {
@@ -529,21 +529,15 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     const collected = world.coins;
     const flightMs = world.flightMs;
 
-    // Historico local: vai para o proximo tick, gravar em disco nao pode
-    // atrasar o painel.
-    setTimeout(() => {
-      Promise.resolve(onScoreRef.current?.(score, { landscape: layout.landscape }))
-        .then((newBest) => {
-          if (mountedRef.current) setIsNewBest(Boolean(newBest));
-        })
-        .catch(() => {});
-    }, 0);
-
     let result;
     if (!rs.run) {
       result = { training: true };
     } else {
       const r = await economy.finishRun(rs.run.id, { points: score, coinOrdinals, flightMs });
+      // Recorde novo e o servidor quem diz: comparado com as partidas fechadas
+      // la, de qualquer aparelho do jogador.
+      if (r.ok && r.result.newBest && mountedRef.current) setIsNewBest(true);
+      if (r.ok && r.result.points > 0) submitToPlayGames(r.result.points);
       result = r.ok
         ? {
             coins: r.result.coins,
@@ -559,7 +553,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
     rs.result = result;
     rs.finishing = false;
     liveArea.current?.redraw();
-  }, [layout.landscape, liveArea, redraw, runRef, world]);
+  }, [liveArea, redraw, runRef, world]);
 
   /** O passaro caiu: oferece a nova chance, ou fecha a partida direto. */
   const onRunOver = useCallback(() => {
@@ -1216,7 +1210,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
                 <View style={styles.statsRow}>
                   <Stat label={t('game.obstacles')} value={world.score} highlight />
                   <View style={styles.divider} />
-                  <Stat label={t('common.record')} value={Math.max(best, world.score)} />
+                  <Stat label={t('common.record')} value={training ? best : Math.max(best, world.score)} />
                 </View>
               </>
             ) : (
@@ -1317,7 +1311,7 @@ function GameArea({ width, height, onExit, best, onScore, carry, runRef, liveAre
               <View style={styles.statsRow}>
                 <Stat label={t('game.points')} value={world.score} highlight />
                 <View style={styles.divider} />
-                <Stat label={t('common.record')} value={Math.max(best, world.score)} />
+                <Stat label={t('common.record')} value={training ? best : Math.max(best, world.score)} />
               </View>
 
               {training || !result ? (

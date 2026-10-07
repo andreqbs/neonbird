@@ -14,7 +14,7 @@ import { formatFlightTime } from '../ui/flightTime';
 import LifeBirds from '../ui/LifeBirds';
 import { SKY_GRADIENT, theme } from '../ui/theme';
 
-export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
+export default function HomeScreen({ onNavigate, onPlay, onTrain }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const eco = useEconomy();
@@ -138,12 +138,12 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain, best }) {
             </Text>
 
             <View style={[styles.pills, { marginTop: z(20), gap: z(10) }]}>
-              <View style={[styles.pill, pilula(z)]}>
+              {/* Recorde, moedas e vidas sao do servidor: sem ele, a pilula mostra
+                  traco em vez de um numero que ninguem confirmou. */}
+              <View style={[styles.pill, pilula(z), !ready && styles.pillWaiting]}>
                 <Text style={[styles.pillLabel, { fontSize: z(11) }]}>{t('home.recordLabel')}</Text>
-                <Text style={[styles.pillValue, { fontSize: z(20) }]}>{best}</Text>
+                <Text style={[styles.pillValue, { fontSize: z(20) }]}>{ready ? wallet.best || 0 : '—'}</Text>
               </View>
-              {/* Moedas e vidas sao do servidor: sem ele, a pilula mostra traco em
-                  vez de um numero que ninguem confirmou. */}
               <View style={[styles.pill, pilula(z), !ready && styles.pillWaiting]}>
                 <CoinFace size={z(18)} />
                 <Text style={[styles.pillValue, { fontSize: z(20) }]}>{ready ? wallet.coins : '—'}</Text>

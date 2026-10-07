@@ -225,7 +225,7 @@
     "loadError": "Não deu para carregar o ranking ({error}).",
     "empty": "Ninguém pontuou nesta rodada ainda. Seja o primeiro.",
     "best": "melhor voo: {n}",
-    "footnote": "A pontuação da rodada é a soma de todas as suas partidas nela. Toque num jogador para ver o pássaro e as skins dele.",
+    "footnote": "A pontuação da rodada é a soma de todas as suas partidas nela.",
     "groupsRanking": "RANKING DOS GRUPOS",
     "groupBadge": "{players} · líder {leader}",
     "nameTooShort": "Dê um nome com pelo menos 2 letras.",
@@ -247,8 +247,6 @@
     "addToGroup": "Adicionar ao grupo",
     "leaveGroup": "Sair do grupo",
     "noRuns": "Nenhum voo registrado ainda. Jogue uma partida e ela aparece aqui.",
-    "portrait": "retrato",
-    "landscape": "paisagem",
     "seePlayer": "Ver o pássaro e as skins de {name}",
     "viewRound": "Rodada",
     "viewAll": "Geral",
@@ -267,8 +265,6 @@
   "settings": {
     "title": "Configurações",
     "language": "Idioma",
-    "languageAuto": "Automático",
-    "languageAutoDesc": "Segue o idioma do celular — agora: {name}",
     "sound": "Som",
     "music": "Música de fundo",
     "musicDesc": "Trilha musical durante a partida",
@@ -285,12 +281,9 @@
     "share": "Compartilhar",
     "shared": "Enviado",
     "shareMessage": "Me chama para o seu grupo no Major Flyer! Meu código de jogador é:\n\n{code}",
-    "data": "Dados",
-    "clearRecords": "Apagar recordes locais",
-    "clearRecordsDesc": "Limpa o histórico de partidas neste aparelho.",
-    "clearConfirmTitle": "Apagar recordes locais?",
-    "clearConfirmBody": "O histórico de partidas guardado neste aparelho será perdido. Não dá para desfazer.",
-    "clear": "Apagar"
+    "data": "Informações",
+    "privacy": "Privacidade",
+    "privacyDesc": "A política de privacidade do jogo"
   },
   "ads": {
     "loadingTitle": "Carregando anúncio...",

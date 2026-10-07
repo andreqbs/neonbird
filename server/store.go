@@ -116,6 +116,15 @@ type Standing struct {
 	Players int `json:"players"`
 }
 
+// Flight e um voo do jogador na aba "Seus voos": o placar e quando fechou.
+type Flight struct {
+	Points int       `json:"points"`
+	At     time.Time `json:"at"`
+}
+
+// MyFlightsLimit: quantos voos a aba "Seus voos" mostra.
+const MyFlightsLimit = 25
+
 // --------------------------------------------------------------- utilidades
 
 var (
@@ -606,4 +615,30 @@ func (s *Store) Standing(ctx context.Context, playerID, seasonID string) (Standi
 		return Standing{}, nil // ainda nao jogou nesta rodada
 	}
 	return st, err
+}
+
+// Flights sao os melhores voos do jogador, de todas as rodadas: as partidas
+// fechadas no servidor que marcaram ponto, do maior placar para o menor (o
+// empate vai para o mais recente). O primeiro e o recorde da carteira.
+func (s *Store) Flights(ctx context.Context, playerID string, limit int) ([]Flight, error) {
+	linhas, err := s.pool.Query(ctx, `
+		select points, ended_at
+		  from game_sessions
+		 where player_id = $1 and status = 'finished' and points > 0
+		 order by points desc, ended_at desc
+		 limit $2`, playerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer linhas.Close()
+
+	saida := []Flight{}
+	for linhas.Next() {
+		var f Flight
+		if err := linhas.Scan(&f.Points, &f.At); err != nil {
+			return nil, err
+		}
+		saida = append(saida, f)
+	}
+	return saida, linhas.Err()
 }

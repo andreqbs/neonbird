@@ -9,10 +9,10 @@ import HomeScreen from './src/screens/HomeScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import ShopScreen from './src/screens/ShopScreen';
-import useScores from './src/hooks/useScores';
 import usePlayer from './src/hooks/usePlayer';
 import billing from './src/services/billing';
 import economy from './src/services/economy';
+import { forgetLocalRuns } from './src/services/scores';
 import integrity from './src/services/integrity';
 import audio from './src/audio/AudioManager';
 import ads from './src/services/ads';
@@ -36,7 +36,6 @@ function Root() {
   const [screen, setScreen] = useState('home');
   // A partida que a tela de jogo abre: a do servidor (`run`) ou um treino.
   const [game, setGame] = useState(null);
-  const { best, refresh, submit } = useScores();
   const lang = useLanguage();
 
   // O idioma: o escolhido em Configuracoes ou, no automatico, o do celular (se
@@ -78,6 +77,12 @@ function Root() {
     return economy.subscribeEconomy(confere);
   }, []);
 
+  // O historico de partidas que as versoes antigas guardavam no aparelho: o
+  // recorde e "Seus voos" agora vem do servidor, entao o que sobrou sai.
+  useEffect(() => {
+    forgetLocalRuns();
+  }, []);
+
   // Liga o AdMob. O primeiro video premiado so carrega quando o jogador existe
   // (ver ads.setRewardUser). Sem SDK ou sem IDs isso nao faz nada.
   useEffect(() => {
@@ -106,10 +111,6 @@ function Root() {
     });
     return () => sub.remove();
   }, []);
-
-  // Recorde e historico continuam no aparelho: nao sao moeda de troca. Moedas e
-  // ranking entram pelo fechamento da partida no servidor (GameScreen).
-  const handleScore = useCallback((score, meta) => submit(score, meta), [submit]);
 
   const goHome = useCallback(() => setScreen('home'), []);
 
@@ -140,7 +141,7 @@ function Root() {
           textos novos. A tela aberta continua a mesma (ela mora fora daqui). */}
       <Fragment key={lang}>
         {screen === 'home' && (
-          <HomeScreen onNavigate={setScreen} onPlay={startGame} onTrain={startTraining} best={best} />
+          <HomeScreen onNavigate={setScreen} onPlay={startGame} onTrain={startTraining} />
         )}
 
         {screen === 'game' && game && (
@@ -149,8 +150,6 @@ function Root() {
             initialRun={game.run}
             training={game.training}
             onExit={goHome}
-            best={best}
-            onScore={handleScore}
           />
         )}
 
@@ -161,7 +160,7 @@ function Root() {
         )}
 
         {screen === 'settings' && (
-          <SettingsScreen onBack={goHome} onScoresCleared={refresh} />
+          <SettingsScreen onBack={goHome} />
         )}
       </Fragment>
     </View>

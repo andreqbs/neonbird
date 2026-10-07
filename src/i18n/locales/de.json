@@ -225,7 +225,7 @@
     "loadError": "Rangliste konnte nicht geladen werden ({error}).",
     "empty": "In dieser Runde hat noch niemand gepunktet. Sei der Erste.",
     "best": "bester Flug: {n}",
-    "footnote": "Deine Rundenpunkte sind die Summe all deiner Runden darin. Tippe auf einen Spieler, um seinen Vogel und seine Skins zu sehen.",
+    "footnote": "Deine Rundenpunkte sind die Summe all deiner Runden darin.",
     "groupsRanking": "GRUPPENRANGLISTE",
     "groupBadge": "{players} · Anführer {leader}",
     "nameTooShort": "Wähle einen Namen mit mindestens 2 Buchstaben.",
@@ -247,8 +247,6 @@
     "addToGroup": "Zur Gruppe hinzufügen",
     "leaveGroup": "Gruppe verlassen",
     "noRuns": "Noch keine Flüge gespeichert. Spiel eine Runde, dann erscheint sie hier.",
-    "portrait": "Hochformat",
-    "landscape": "Querformat",
     "seePlayer": "Vogel und Skins von {name} ansehen",
     "viewRound": "Runde",
     "viewAll": "Gesamt",
@@ -267,8 +265,6 @@
   "settings": {
     "title": "Einstellungen",
     "language": "Sprache",
-    "languageAuto": "Automatisch",
-    "languageAutoDesc": "Folgt der Sprache deines Handys — gerade: {name}",
     "sound": "Ton",
     "music": "Hintergrundmusik",
     "musicDesc": "Soundtrack während der Runde",
@@ -285,12 +281,9 @@
     "share": "Teilen",
     "shared": "Gesendet",
     "shareMessage": "Lade mich in deine Gruppe in Major Flyer ein! Mein Spielercode ist:\n\n{code}",
-    "data": "Daten",
-    "clearRecords": "Lokale Rekorde löschen",
-    "clearRecordsDesc": "Löscht den Rundenverlauf auf diesem Gerät.",
-    "clearConfirmTitle": "Lokale Rekorde löschen?",
-    "clearConfirmBody": "Der auf diesem Gerät gespeicherte Rundenverlauf geht verloren. Das lässt sich nicht rückgängig machen.",
-    "clear": "Löschen"
+    "data": "Informationen",
+    "privacy": "Datenschutz",
+    "privacyDesc": "Die Datenschutzerklärung des Spiels"
   },
   "ads": {
     "loadingTitle": "Werbung wird geladen...",

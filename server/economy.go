@@ -42,6 +42,10 @@ type Wallet struct {
 	// Tempo de voo somado de todas as partidas, em ms. Nao e saldo — nao se
 	// gasta nem se compra —, mas mora aqui porque a Home ja busca a carteira.
 	FlightMs int64 `json:"flightMs"`
+	// O recorde: o maior placar entre as partidas fechadas no servidor. Pelo
+	// mesmo motivo do FlightMs mora aqui — e todo fechamento ja devolve a
+	// carteira, entao o recorde novo chega na Home sem pedido a mais.
+	Best int `json:"best"`
 }
 
 type RunSession struct {
@@ -76,6 +80,8 @@ type FinishResult struct {
 	// Por quanto as moedas do voo foram multiplicadas (poder do passaro); o
 	// `Coins` acima ja vem multiplicado.
 	CoinMultiplier int `json:"coinMultiplier"`
+	// Este voo bateu o recorde do jogador (o das partidas fechadas antes dele).
+	NewBest bool `json:"newBest"`
 }
 
 // AdViewTTL: quanto tempo um video confirmado espera o app troca-lo por premio.
@@ -137,6 +143,11 @@ func readWallet(ctx context.Context, q querier, playerID string) (Wallet, error)
 		select coins, lives, shields, continues, equipped_bird, flight_ms
 		  from wallets where player_id = $1`, playerID))
 	if err != nil {
+		return Wallet{}, err
+	}
+	if err := q.QueryRow(ctx, `
+		select coalesce(max(points), 0)::int
+		  from game_sessions where player_id = $1 and status = 'finished'`, playerID).Scan(&w.Best); err != nil {
 		return Wallet{}, err
 	}
 
@@ -388,6 +399,9 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 		case "open":
 		case "finished":
 			res = r.result
+			if res.NewBest, err = beatsBest(ctx, tx, playerID, runID, res.Points); err != nil {
+				return err
+			}
 			wallet, err = readWallet(ctx, tx, playerID)
 			return err
 		case "rejected":
@@ -433,6 +447,9 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 			Ranked:   points > 0 && season.Open,
 			FlightMs: flightTime(flightMs, r.elapsed),
 		}
+		if res.NewBest, err = beatsBest(ctx, tx, playerID, runID, points); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `
 			update game_sessions
 			   set status = 'finished', ended_at = now(),
@@ -470,6 +487,26 @@ func (s *Store) FinishRun(ctx context.Context, playerID, runID string, points in
 		return FinishResult{}, Wallet{}, recusa
 	}
 	return res, wallet, nil
+}
+
+// beatsBest: `points` passa do recorde que o jogador tinha antes desta partida?
+//
+// Conta so as partidas fechadas ANTES dela — inclusive quando ela ja esta
+// fechada e o app so repete o pedido: a repeticao responde o mesmo "recorde!"
+// da primeira vez.
+func beatsBest(ctx context.Context, tx pgx.Tx, playerID, runID string, points int) (bool, error) {
+	if points <= 0 {
+		return false, nil
+	}
+	var antes int
+	err := tx.QueryRow(ctx, `
+		select coalesce(max(points), 0)::int
+		  from game_sessions
+		 where player_id = $1 and status = 'finished' and id <> $2
+		   and ended_at < coalesce(
+		         (select ended_at from game_sessions where id = $2 and status = 'finished'),
+		         'infinity'::timestamptz)`, playerID, runID).Scan(&antes)
+	return points > antes, err
 }
 
 // flightTime e o tempo de voo que o servidor aceita: o que o aparelho mediu,

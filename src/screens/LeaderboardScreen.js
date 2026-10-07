@@ -12,11 +12,11 @@ import Screen, { Card } from '../ui/Screen';
 import Button from '../ui/Button';
 import PlayerCard from '../ui/PlayerCard';
 import Tabs from '../ui/Tabs';
+import Trophy from '../ui/Trophy';
 import { theme } from '../ui/theme';
 import usePlayer from '../hooks/usePlayer';
 import { localeTag, t } from '../i18n';
 import cloud from '../services/cloud';
-import { loadRuns } from '../services/scores';
 import {
   SEASON_STATE,
   currentSeason,
@@ -40,7 +40,10 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
   const [tab, setTab] = useState('players');
   const { player } = usePlayer();
 
-  const [runs, setRuns] = useState(null);
+  // Os voos do jogador (aba "Seus voos"): vem do servidor, como o ranking.
+  const [voos, setVoos] = useState(null);
+  const [voosErro, setVoosErro] = useState(null);
+  const [voosCarregando, setVoosCarregando] = useState(false);
   const [players, setPlayers] = useState(null);
   const [groups, setGroups] = useState(null);
   const [myGroup, setMyGroup] = useState(null);
@@ -56,10 +59,6 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
 
   const season = currentSeason();
   const online = cloud.isConfigured();
-
-  useEffect(() => {
-    loadRuns().then(setRuns).catch(() => setRuns([]));
-  }, []);
 
   /** Busca as tres listas de uma vez: quem abre o ranking quer ver tudo. */
   const atualizar = useCallback(async () => {
@@ -83,6 +82,21 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
   useEffect(() => {
     atualizar();
   }, [atualizar]);
+
+  /** Os melhores voos do jogador, de todas as rodadas. */
+  const atualizarVoos = useCallback(async () => {
+    if (!online || !player) return;
+    setVoosCarregando(true);
+    setVoosErro(null);
+    const r = await cloud.myFlights();
+    if (r.ok) setVoos(r.data?.flights ?? []);
+    else setVoosErro(r.error);
+    setVoosCarregando(false);
+  }, [online, player]);
+
+  useEffect(() => {
+    atualizarVoos();
+  }, [atualizarVoos]);
 
   return (
     <Screen title={t('leaderboard.title')} onBack={onBack}>
@@ -152,7 +166,16 @@ export default function LeaderboardScreen({ onBack, onOpenSettings }) {
         />
       )}
 
-      {tab === 'local' && <LocalTab runs={runs} />}
+      {tab === 'local' && (
+        <LocalTab
+          online={online}
+          flights={voos}
+          loading={voosCarregando}
+          erro={voosErro}
+          onRefresh={atualizarVoos}
+          onOpenSettings={onOpenSettings}
+        />
+      )}
 
       <PlayerCard player={aberto} onClose={() => setAberto(null)} />
     </Screen>
@@ -499,33 +522,53 @@ function Crest({ name, crest }) {
   );
 }
 
-// -------------------------------------------------------------------- local
+// --------------------------------------------------------------- seus voos
 
-function LocalTab({ runs }) {
-  if (runs === null) return <Loading />;
+/**
+ * Os melhores voos do jogador, do servidor: valem em qualquer celular e
+ * continuam depois de reinstalar o jogo. O primeiro e o recorde da Home. Treino
+ * sem internet nao entra — ele tambem nao vale no ranking.
+ */
+function LocalTab({ online, flights, loading, erro, onRefresh, onOpenSettings }) {
+  if (!online) return <OfflineNotice onOpenSettings={onOpenSettings} />;
+  if (loading && flights === null) return <Loading />;
 
-  if (runs.length === 0) {
+  if (erro) {
+    return (
+      <Card style={styles.centerCard}>
+        <Text style={styles.emptyText}>{t('leaderboard.loadError', { error: erro })}</Text>
+        <Button title={t('common.retry')} variant="ghost" compact onPress={onRefresh} style={{ marginTop: 14 }} />
+      </Card>
+    );
+  }
+
+  if (!flights || flights.length === 0) {
     return (
       <Card style={styles.centerCard}>
         <Text style={styles.emptyText}>{t('leaderboard.noRuns')}</Text>
+        <Button title={t('common.refresh')} variant="ghost" compact onPress={onRefresh} style={{ marginTop: 14 }} />
       </Card>
     );
   }
 
   return (
-    <Card>
-      {runs.map((run, i) => (
-        <Entry
-          key={`${run.at}-${i}`}
-          rank={i + 1}
-          name={formatDate(run.at)}
-          score={run.score}
-          badge={run.landscape ? t('leaderboard.landscape') : t('leaderboard.portrait')}
-          highlight={i === 0}
-          last={i === runs.length - 1}
-        />
-      ))}
-    </Card>
+    <>
+      <Card>
+        {flights.map((voo, i) => (
+          <Entry
+            key={`${voo.at}-${i}`}
+            rank={i + 1}
+            name={formatDate(voo.at)}
+            score={voo.points}
+            highlight={i === 0}
+            last={i === flights.length - 1}
+          />
+        ))}
+      </Card>
+      <View style={styles.actions}>
+        <Button title={t('common.refresh')} variant="ghost" compact onPress={onRefresh} />
+      </View>
+    </>
   );
 }
 
@@ -553,8 +596,6 @@ function Loading() {
   );
 }
 
-const MEDALS = ['#FFD54A', '#D8DEF2', '#E2913F'];
-
 /**
  * O texto da chave com pedacos de tela no lugar dos {marcadores} — para frase
  * traduzida que leva um trecho em outro estilo (o caminho de um arquivo, por
@@ -571,13 +612,17 @@ function comPecas(key, pecas) {
 
 /** Uma linha de ranking. Com `onPress`, ela abre o cartao do jogador. */
 function Entry({ rank, name, score, badge, highlight, last, crest, onPress }) {
-  const medal = rank <= 3 ? MEDALS[rank - 1] : null;
   const estilo = [styles.entry, last && { borderBottomWidth: 0 }, highlight && styles.entryHighlight];
   const corpo = (
     <>
-      <View style={[styles.rank, medal && { backgroundColor: medal }]}>
-        <Text style={[styles.rankText, medal && { color: '#1A1330' }]}>{rank}</Text>
-      </View>
+      {/* Podio: trofeu de ouro, prata e cobre; do 4º em diante, o numero. */}
+      {rank <= 3 ? (
+        <Trophy rank={rank} size={30} />
+      ) : (
+        <View style={styles.rank}>
+          <Text style={styles.rankText}>{rank}</Text>
+        </View>
+      )}
       <View style={{ flex: 1 }}>
         <Text style={styles.entryName} numberOfLines={1}>
           {name}
@@ -731,9 +776,9 @@ const styles = StyleSheet.create({
   entryPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
   chevron: { color: 'rgba(150,161,206,0.7)', fontSize: 20, fontWeight: '700', marginLeft: -4 },
   rank: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',

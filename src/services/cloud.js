@@ -221,6 +221,14 @@ export async function myStanding() {
   return requestRegistered('GET', '/v1/me/standing');
 }
 
+/**
+ * A aba "Seus voos": os melhores voos do jogador, de todas as rodadas, do
+ * maior placar para o menor — `{ flights: [{ points, at }] }`.
+ */
+export async function myFlights() {
+  return requestRegistered('GET', '/v1/me/flights');
+}
+
 export default {
   isConfigured,
   apiUrl,
@@ -234,4 +242,5 @@ export default {
   topPlayers,
   topGroups,
   myStanding,
+  myFlights,
 };

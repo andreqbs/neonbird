@@ -303,6 +303,82 @@ func TestFecharDeNovoDevolveOMesmoResultado(t *testing.T) {
 	}
 }
 
+// O recorde e a aba "Seus voos" vem das partidas fechadas no servidor: o
+// recorde viaja na carteira, cada fechamento diz se bateu o recorde, e a lista
+// e so do jogador — sem os voos zerados e sem os de mais ninguem.
+func TestRecordeESeusVoosVemDoServidor(t *testing.T) {
+	a := novoAmbiente(t, nil)
+	ana := a.registra(t, "Ana")
+	bia := a.registra(t, "Bia")
+
+	_, body := a.chama(t, &ana, "GET", "/v1/me/wallet", nil)
+	if got := num(t, carteira(t, body)["best"]); got != 0 {
+		t.Fatalf("recorde de quem nunca jogou: %d, esperava 0", got)
+	}
+
+	voa := func(quem jogador, pontos int) (string, bool, int) {
+		t.Helper()
+		id, _ := a.abrePartida(t, quem)
+		st, body := a.fechaPartida(t, quem, id, pontos, nil)
+		if st != http.StatusOK {
+			t.Fatalf("%s fechar com %d: status %d (%v)", quem.nome, pontos, st, body)
+		}
+		res, _ := body["result"].(map[string]any)
+		return id, res["newBest"] == true, num(t, carteira(t, body)["best"])
+	}
+
+	primeiro, novo, best := voa(ana, 30)
+	if !novo || best != 30 {
+		t.Errorf("primeiro voo (30): newBest=%v best=%d, esperava true e 30", novo, best)
+	}
+	menor, novo, best := voa(ana, 12)
+	if novo || best != 30 {
+		t.Errorf("voo abaixo do recorde (12): newBest=%v best=%d, esperava false e 30", novo, best)
+	}
+	if _, novo, best = voa(ana, 45); !novo || best != 45 {
+		t.Errorf("voo acima do recorde (45): newBest=%v best=%d, esperava true e 45", novo, best)
+	}
+	if _, novo, _ = voa(ana, 0); novo {
+		t.Error("voo sem ponto nao pode ser recorde")
+	}
+	voa(bia, 99)
+
+	// A repeticao do fechamento responde o mesmo "recorde!" da primeira vez,
+	// mesmo com voos melhores fechados depois.
+	for _, c := range []struct {
+		id   string
+		nome string
+		novo bool
+	}{{primeiro, "30", true}, {menor, "12", false}} {
+		_, body := a.fechaPartida(t, ana, c.id, 0, nil)
+		res, _ := body["result"].(map[string]any)
+		if (res["newBest"] == true) != c.novo {
+			t.Errorf("repetir o fechamento do voo %s: newBest=%v, esperava %v", c.nome, res["newBest"], c.novo)
+		}
+	}
+
+	st, body := a.chama(t, &ana, "GET", "/v1/me/flights", nil)
+	if st != http.StatusOK {
+		t.Fatalf("seus voos: status %d (%v)", st, body)
+	}
+	voos, _ := body["flights"].([]any)
+	var pontos []int
+	for _, v := range voos {
+		f, _ := v.(map[string]any)
+		if at, _ := f["at"].(string); at == "" {
+			t.Errorf("voo sem data: %v", f)
+		}
+		pontos = append(pontos, num(t, f["points"]))
+	}
+	if len(pontos) != 3 || pontos[0] != 45 || pontos[1] != 30 || pontos[2] != 12 {
+		t.Errorf("seus voos: %v, esperava [45 30 12] (do maior para o menor, sem o zero e sem os da Bia)", pontos)
+	}
+
+	if st, _ := a.chama(t, nil, "GET", "/v1/me/flights", nil); st != http.StatusUnauthorized {
+		t.Errorf("seus voos sem identificacao: status %d, esperava 401", st)
+	}
+}
+
 // envelhecePartida empurra a abertura da partida `segundos` para o passado —
 // atalho para testar o que depende do relogio sem esperar de verdade.
 func (a *ambiente) envelhecePartida(t *testing.T, id string, segundos float64) {

@@ -574,9 +574,9 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | `GET /health` | Diz se o banco responde e qual é a rodada. É o exame do Docker. |
 | `POST /v1/players` | Cadastra o aparelho ou troca o apelido. Corpo: `{id, secret, name}`. |
 | `GET /v1/catalog` | Pássaros, skins (`skins` e os encaixes em `skinSlots`), preços e regras. Público. |
-| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros (com as estrelas de cada um em `birdLevels`), skins (`ownedSkins` e as em uso por encaixe em `equippedSkins`) e tempo de voo (`flightMs`) do jogador. |
+| `GET /v1/me/wallet` | Moedas, vidas, escudos, novas chances, pássaros (com as estrelas de cada um em `birdLevels`), skins (`ownedSkins` e as em uso por encaixe em `equippedSkins`) tempo de voo (`flightMs`) e recorde (`best`, a maior partida fechada) do jogador. |
 | `POST /v1/runs/start` | Abre uma partida: desconta uma vida e devolve a semente das moedas, o pássaro (`bird`), os poderes dele (`powers`) e quantas novas chances cabem (`maxContinues`). |
-| `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals, flightMs}` — os números dos obstáculos das moedas pegas e o tempo voando de fato, em ms. Fechar de novo devolve o mesmo resultado. Partida que rendeu algo leva também o cabeçalho `X-Integrity-Token` ([passo 12](#12-o-projeto-no-google-cloud)). |
+| `POST /v1/runs/{id}/finish` | Fecha a partida. Corpo: `{points, coinOrdinals, flightMs}` — os números dos obstáculos das moedas pegas e o tempo voando de fato, em ms. Fechar de novo devolve o mesmo resultado. O resultado diz se a partida bateu o recorde do jogador (`newBest`). Partida que rendeu algo leva também o cabeçalho `X-Integrity-Token` ([passo 12](#12-o-projeto-no-google-cloud)). |
 | `POST /v1/runs/{id}/continue` | Nova chance. Corpo: `{method}` — `stock` (guardada) ou `coins`. |
 | `POST /v1/runs/{id}/shield` | Usa um escudo guardado na partida. |
 | `POST /v1/shop/buy` | Compra em moedas. Corpo: `{item}` — `bird` (com `birdId`), `skin` (com `skinId`), `shield` ou `continue`. Pássaro ou skin sem preço em moedas (o Cometa) responde `coins_not_accepted`. |
@@ -598,6 +598,7 @@ Tudo responde JSON. As que escrevem exigem os cabeçalhos `X-Player-Id` e
 | `GET /v1/rankings/players` | Ranking individual da rodada. `?limit=50` (teto 200). Cada linha traz a aparência do jogador em `look`: `{bird, skins, ownedSkins}` — o pássaro em uso, as skins por encaixe e a coleção. Só o visual: nada de moeda nem de compra. |
 | `GET /v1/rankings/groups` | Ranking dos grupos da rodada. |
 | `GET /v1/me/standing` | A posição do jogador, para quem ficou fora da lista. |
+| `GET /v1/me/flights` | A aba *Seus voos*: as 25 melhores partidas fechadas do jogador, de todas as rodadas — `{flights: [{points, at}]}`, do maior placar para o menor. |
 
 Erro nunca volta cru: vem `{"error": "texto em português", "code": "..."}`. O
 texto vai direto para a tela (*"moedas insuficientes"*, *"a nova chance desta

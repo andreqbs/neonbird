@@ -123,6 +123,11 @@ alter table game_sessions add column if not exists bird text not null default 'c
 
 create index if not exists game_sessions_open on game_sessions (player_id) where status = 'open';
 
+-- O recorde (na carteira) e a aba "Seus voos": as partidas fechadas de cada
+-- jogador, do maior placar para o menor.
+create index if not exists game_sessions_flights
+  on game_sessions (player_id, points desc, ended_at desc) where status = 'finished';
+
 -- Livro-razao: cada entrada e uma mudanca de saldo, com o motivo e a referencia
 -- (partida, passaro, transacao do anuncio). Nunca e apagado nem editado. E o que
 -- responde "de onde vieram essas moedas?" quando alguem reclamar — ou quando

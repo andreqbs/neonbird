@@ -225,7 +225,7 @@
     "loadError": "Impossible de charger le classement ({error}).",
     "empty": "Personne n'a encore marqué dans cette manche. Sois le premier.",
     "best": "meilleur vol : {n}",
-    "footnote": "Ton score de la manche est la somme de toutes tes parties. Touche un joueur pour voir son oiseau et ses skins.",
+    "footnote": "Ton score de la manche est la somme de toutes tes parties.",
     "groupsRanking": "CLASSEMENT DES GROUPES",
     "groupBadge": "{players} · chef {leader}",
     "nameTooShort": "Choisis un nom d'au moins 2 lettres.",
@@ -247,8 +247,6 @@
     "addToGroup": "Ajouter au groupe",
     "leaveGroup": "Quitter le groupe",
     "noRuns": "Aucun vol enregistré pour l'instant. Joue une partie et elle apparaîtra ici.",
-    "portrait": "portrait",
-    "landscape": "paysage",
     "seePlayer": "Voir l'oiseau et les skins de {name}",
     "viewRound": "Manche",
     "viewAll": "Général",
@@ -267,8 +265,6 @@
   "settings": {
     "title": "Paramètres",
     "language": "Langue",
-    "languageAuto": "Automatique",
-    "languageAutoDesc": "Suit la langue du téléphone — actuellement : {name}",
     "sound": "Son",
     "music": "Musique de fond",
     "musicDesc": "Bande-son pendant la partie",
@@ -285,12 +281,9 @@
     "share": "Partager",
     "shared": "Envoyé",
     "shareMessage": "Invite-moi dans ton groupe sur Major Flyer ! Mon code joueur est :\n\n{code}",
-    "data": "Données",
-    "clearRecords": "Effacer les records locaux",
-    "clearRecordsDesc": "Efface l'historique des parties sur cet appareil.",
-    "clearConfirmTitle": "Effacer les records locaux ?",
-    "clearConfirmBody": "L'historique des parties enregistré sur cet appareil sera perdu. C'est irréversible.",
-    "clear": "Effacer"
+    "data": "Informations",
+    "privacy": "Confidentialité",
+    "privacyDesc": "La politique de confidentialité du jeu"
   },
   "ads": {
     "loadingTitle": "Chargement de la pub...",

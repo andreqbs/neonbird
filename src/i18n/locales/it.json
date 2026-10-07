@@ -225,7 +225,7 @@
     "loadError": "Impossibile caricare la classifica ({error}).",
     "empty": "Nessuno ha ancora fatto punti in questo turno. Sii il primo.",
     "best": "volo migliore: {n}",
-    "footnote": "Il punteggio del turno è la somma di tutte le tue partite. Tocca un giocatore per vedere il suo uccello e le sue skin.",
+    "footnote": "Il punteggio del turno è la somma di tutte le tue partite.",
     "groupsRanking": "CLASSIFICA DEI GRUPPI",
     "groupBadge": "{players} · leader {leader}",
     "nameTooShort": "Usa un nome di almeno 2 lettere.",
@@ -247,8 +247,6 @@
     "addToGroup": "Aggiungi al gruppo",
     "leaveGroup": "Esci dal gruppo",
     "noRuns": "Nessun volo registrato. Gioca una partita e comparirà qui.",
-    "portrait": "verticale",
-    "landscape": "orizzontale",
     "seePlayer": "Vedi l'uccello e le skin di {name}",
     "viewRound": "Turno",
     "viewAll": "Di sempre",
@@ -267,8 +265,6 @@
   "settings": {
     "title": "Impostazioni",
     "language": "Lingua",
-    "languageAuto": "Automatica",
-    "languageAutoDesc": "Segue la lingua del telefono — ora: {name}",
     "sound": "Audio",
     "music": "Musica di sottofondo",
     "musicDesc": "Colonna sonora durante la partita",
@@ -285,12 +281,9 @@
     "share": "Condividi",
     "shared": "Inviato",
     "shareMessage": "Invitami nel tuo gruppo su Major Flyer! Il mio codice giocatore è:\n\n{code}",
-    "data": "Dati",
-    "clearRecords": "Cancella record locali",
-    "clearRecordsDesc": "Cancella lo storico delle partite su questo dispositivo.",
-    "clearConfirmTitle": "Cancellare i record locali?",
-    "clearConfirmBody": "Lo storico delle partite salvato su questo dispositivo andrà perso. Non si può annullare.",
-    "clear": "Cancella"
+    "data": "Informazioni",
+    "privacy": "Privacy",
+    "privacyDesc": "L'informativa sulla privacy del gioco"
   },
   "ads": {
     "loadingTitle": "Caricamento pubblicità...",

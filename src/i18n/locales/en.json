@@ -225,7 +225,7 @@
     "loadError": "Couldn't load the leaderboard ({error}).",
     "empty": "No one has scored this round yet. Be the first.",
     "best": "best flight: {n}",
-    "footnote": "Your round score is the sum of all your runs in it. Tap a player to see their bird and skins.",
+    "footnote": "Your round score is the sum of all your runs in it.",
     "groupsRanking": "GROUP LEADERBOARD",
     "groupBadge": "{players} · leader {leader}",
     "nameTooShort": "Use a name with at least 2 letters.",
@@ -247,8 +247,6 @@
     "addToGroup": "Add to group",
     "leaveGroup": "Leave group",
     "noRuns": "No flights recorded yet. Play a run and it shows up here.",
-    "portrait": "portrait",
-    "landscape": "landscape",
     "seePlayer": "See {name}'s bird and skins",
     "viewRound": "Round",
     "viewAll": "All time",
@@ -267,8 +265,6 @@
   "settings": {
     "title": "Settings",
     "language": "Language",
-    "languageAuto": "Automatic",
-    "languageAutoDesc": "Follows your phone's language — now: {name}",
     "sound": "Sound",
     "music": "Background music",
     "musicDesc": "Soundtrack during the run",
@@ -285,12 +281,9 @@
     "share": "Share",
     "shared": "Sent",
     "shareMessage": "Invite me to your group in Major Flyer! My player code is:\n\n{code}",
-    "data": "Data",
-    "clearRecords": "Delete local records",
-    "clearRecordsDesc": "Clears the run history on this device.",
-    "clearConfirmTitle": "Delete local records?",
-    "clearConfirmBody": "The run history saved on this device will be lost. This can't be undone.",
-    "clear": "Delete"
+    "data": "Information",
+    "privacy": "Privacy",
+    "privacyDesc": "The game's privacy policy"
   },
   "ads": {
     "loadingTitle": "Loading ad...",
