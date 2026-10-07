@@ -13,7 +13,9 @@
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://backend.majorflyer.aqbs.cloud" }
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://backend.majorflyer.aqbs.cloud",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"}
     }
   },
   "submit": {

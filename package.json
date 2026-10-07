@@ -15,7 +15,7 @@
     "total-clear": "rm -rf node_modules && rm -rf package-lock.json && rm -rf yarn.lock && rm -rf .expo && rm -rf .expo-shared && rm -rf .vscode && rm -rf android && rm -rf ios",
     "icons": "node tools/generate-icons.js",
     "assets": "node tools/generate-audio.js && node tools/generate-icons.js",
-    "aab": "eas build --platform android --profile production"
+    "aab": "eas build --platform android --profile production --auto-submit"
   },
   "dependencies": {
     "@expo/app-integrity": "^57.0.2",
