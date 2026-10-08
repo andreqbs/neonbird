@@ -43,6 +43,15 @@
     "players": { "one": "{count} joueur", "other": "{count} joueurs" }
   },
   "identity": { "defaultName": "Pilote {n}" },
+  "boot": {
+    "settings": "Chargement des préférences...",
+    "player": "Ton pilote se prépare...",
+    "server": "Récupération de tes données...",
+    "slow": "Le serveur met du temps. Encore un instant...",
+    "menu": "Préparation du menu...",
+    "ready": "Tout est prêt !",
+    "offline": "Pas de connexion : ouverture du mode entraînement..."
+  },
   "home": {
     "tagline": "Touche pour battre des ailes. Relâche, et la gravité te le fait payer.",
     "recordLabel": "RECORD",

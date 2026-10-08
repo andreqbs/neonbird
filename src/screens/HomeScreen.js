@@ -14,7 +14,7 @@ import { formatFlightTime } from '../ui/flightTime';
 import LifeBirds from '../ui/LifeBirds';
 import { SKY_GRADIENT, theme } from '../ui/theme';
 
-export default function HomeScreen({ onNavigate, onPlay, onTrain }) {
+export default function HomeScreen({ onNavigate, onPlay, onTrain, onReady }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const eco = useEconomy();
@@ -92,11 +92,20 @@ export default function HomeScreen({ onNavigate, onPlay, onTrain }) {
   ];
 
   // O que muda o tamanho do conteudo sem mudar a tela: idioma, aviso, faixa de
-  // sem conexao. Mudou, mede de novo.
+  // sem conexao. Mudou, mede de novo. O titulo do botao principal nao entra:
+  // ele ocupa uma linha so, entao trocar "Conectando..." por "Jogar" nao muda
+  // altura nenhuma.
   const { scale, ready: medido, onLayout } = useFitScale(
     disponivel,
-    `${getLanguage()}|${offline}|${notice || ''}|${primary.title}|${side}`
+    `${getLanguage()}|${offline}|${notice || ''}|${side}`
   );
+
+  // Avisa a tela de carregamento da abertura que a Home ja esta desenhada no
+  // tamanho certo — so entao ela sai da frente.
+  useEffect(() => {
+    if (medido && onReady) onReady();
+  }, [medido, onReady]);
+
   const z = (n) => n * scale;
   // O titulo tambem cabe na LARGURA: "MAJOR FLYER" ocupa ~8,6 vezes o tamanho
   // da fonte (com o espacamento). Numa tela estreita ele encolhe ate caber numa

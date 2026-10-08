@@ -37,6 +37,8 @@ const MODULES = [
   'src/services/economy.js',
   'src/services/billing.js',
   'src/ui/flightTime.js',
+  'src/ui/bootProgress.js',
+  'src/hooks/useFitScale.js',
   'src/i18n/index.js',
   'src/i18n/catalog.js',
   'src/i18n/locales/pt.json',
@@ -2774,12 +2776,383 @@ function languagesSection() {
   }
 }
 
+// ------------------------------------------- 15. a Home nunca fica so com o fundo
+
+/**
+ * Um React de mentira, so o bastante para rodar UM hook no Node: estado, refs,
+ * callbacks e os dois tipos de efeito, na ordem do React de verdade — os de
+ * layout junto com o desenho; os comuns depois, mas sempre antes do desenho
+ * seguinte, com as atualizacoes deles entrando no FIM da fila.
+ */
+function reactDeMentira() {
+  let c = null; // o componente desenhando agora
+  const iguais = (a, b) =>
+    Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
+  const roda = (lista) => {
+    for (const f of lista.splice(0)) f();
+  };
+  const efeito = (tipo) => (fn, deps) => {
+    const i = c.cursor++;
+    const antes = c.slots[i];
+    if (antes && iguais(antes.deps, deps)) return;
+    const slot = { deps, limpa: antes ? antes.limpa : null };
+    c.slots[i] = slot;
+    c[tipo].push(() => {
+      if (slot.limpa) slot.limpa();
+      const r = fn();
+      slot.limpa = typeof r === 'function' ? r : null;
+    });
+  };
+
+  const React = {
+    useState(inicial) {
+      const i = c.cursor++;
+      if (!(i in c.slots)) {
+        const comp = c;
+        const slot = { valor: typeof inicial === 'function' ? inicial() : inicial };
+        slot.set = (v) => comp.fila.push([slot, v]);
+        c.slots[i] = slot;
+      }
+      return [c.slots[i].valor, c.slots[i].set];
+    },
+    useRef(inicial) {
+      const i = c.cursor++;
+      if (!(i in c.slots)) c.slots[i] = { current: inicial };
+      return c.slots[i];
+    },
+    useCallback(fn, deps) {
+      const i = c.cursor++;
+      const s = c.slots[i];
+      if (s && iguais(s.deps, deps)) return s.fn;
+      c.slots[i] = { fn, deps };
+      return fn;
+    },
+    useEffect: efeito('passivos'),
+    useLayoutEffect: efeito('layout'),
+  };
+
+  function monta(hook, args) {
+    const comp = { slots: [], fila: [], layout: [], passivos: [], args, saida: null };
+    comp.rodaPassivos = () => roda(comp.passivos);
+    comp.desenha = () => {
+      roda(comp.passivos); // o React esvazia os efeitos pendentes antes de desenhar de novo
+      for (let volta = 0; volta < 50; volta++) {
+        for (const [slot, v] of comp.fila.splice(0)) slot.valor = typeof v === 'function' ? v(slot.valor) : v;
+        c = comp;
+        comp.cursor = 0;
+        comp.saida = hook(...comp.args);
+        c = null;
+        roda(comp.layout);
+        if (comp.fila.length === 0) return; // efeito de layout que mexe em estado desenha de novo na hora
+      }
+      throw new Error('desenho sem fim');
+    };
+    comp.desmonta = () => {
+      roda(comp.passivos);
+      for (const s of comp.slots) if (s && s.limpa) s.limpa();
+    };
+    comp.desenha();
+    return comp;
+  }
+
+  return { React, monta };
+}
+
+/** Carrega um modulo ja compilado com o React de mentira no lugar do de verdade (e sem cache). */
+function comReactDeMentira(arquivo, React) {
+  const caminhoReact = require.resolve('react', { paths: [path.dirname(arquivo)] });
+  const antes = require.cache[caminhoReact];
+  require.cache[caminhoReact] = { id: caminhoReact, filename: caminhoReact, loaded: true, exports: React };
+  delete require.cache[require.resolve(arquivo)];
+  try {
+    return require(arquivo);
+  } finally {
+    if (antes) require.cache[caminhoReact] = antes;
+    else delete require.cache[caminhoReact];
+  }
+}
+
+/**
+ * A tela de mentira em volta do useFitScale: desenha o bloco na escala pedida e
+ * manda o onLayout SO quando a altura muda — como o Android e a web fazem.
+ * `ordem` decide quem chega primeiro depois de cada desenho: os efeitos comuns
+ * ('efeitos') ou a medida ('medida'). No celular acontecem as duas.
+ */
+function telaDeMentira(useFitScale, monta, { alturaEm, disponivel, chave = 'a', ordem = 'efeitos', mede = true }) {
+  const comp = monta(useFitScale, [disponivel, chave]);
+  let medida = null;
+  const t = {
+    get escala() {
+      return comp.saida.scale;
+    },
+    get visivel() {
+      return comp.saida.ready;
+    },
+    get altura() {
+      return alturaEm(comp.saida.scale);
+    },
+    /** Um quadro: efeitos e medida (na ordem pedida) e, se algo mudou, um desenho novo. */
+    quadro() {
+      if (ordem === 'efeitos') comp.rodaPassivos();
+      const h = alturaEm(comp.saida.scale);
+      const mediu = mede && h !== medida;
+      if (mediu) {
+        medida = h;
+        comp.saida.onLayout({ nativeEvent: { layout: { height: h } } });
+      }
+      const mexeu = comp.fila.length > 0 || comp.passivos.length > 0;
+      if (mexeu) comp.desenha();
+      return mediu || mexeu;
+    },
+    /** Quadros ate nada mais mudar. Falso se nao assentou (a escala ficou pulando). */
+    estabiliza(max = 30) {
+      for (let i = 0; i < max; i++) if (!t.quadro()) return true;
+      return false;
+    },
+    /** A tela de cima desenha de novo: outra altura disponivel, outra chave, outro conteudo. */
+    muda({ disponivel: d = comp.args[0], chave: k = comp.args[1], conteudo } = {}) {
+      if (conteudo) alturaEm = conteudo;
+      comp.args = [d, k];
+      comp.desenha();
+    },
+    desmonta: () => comp.desmonta(),
+  };
+  return t;
+}
+
+/**
+ * O useFitScale (src/hooks/useFitScale.js), que encolhe a Home ate ela caber na
+ * tela sem rolagem. A Home fica invisivel ate a primeira medida — e foi assim
+ * que ela ficou SO COM O FUNDO para os jogadores: o hook escondia a tela de novo
+ * a cada mudanca e esperava uma medida que nunca vinha (o onLayout so dispara
+ * quando o tamanho muda), ou uma medida chegava antes do efeito que zerava a
+ * conta e era apagada por ele. Aqui as duas corridas rodam de proposito.
+ */
+function fitScaleSection() {
+  section('A Home sempre aparece inteira (useFitScale)');
+
+  const arquivo = path.join(BUILD, 'src/hooks/useFitScale.js');
+  const { React, monta } = reactDeMentira();
+  const carrega = () => comReactDeMentira(arquivo, React);
+
+  // Relogio de mentira: o prazo da primeira medida corre na hora que o teste quer.
+  const reais = { setTimeout: global.setTimeout, clearTimeout: global.clearTimeout };
+  let agora = 0;
+  let timers = [];
+  let proximoId = 0;
+  global.setTimeout = (fn, ms = 0) => {
+    timers.push({ id: ++proximoId, fn, quando: agora + ms });
+    return proximoId;
+  };
+  global.clearTimeout = (id) => {
+    timers = timers.filter((x) => x.id !== id);
+  };
+  const avanca = (ms) => {
+    agora += ms;
+    for (const x of timers.filter((y) => y.quando <= agora)) {
+      timers = timers.filter((y) => y !== x);
+      x.fn();
+    }
+  };
+
+  try {
+    const { nextFitScale, MIN_SCALE, REVEAL_TIMEOUT_MS } = carrega();
+    check(
+      'a escala fica entre o minimo legivel e o tamanho de projeto',
+      nextFitScale(1, { altura: 10000, escala: 1 }, 600, true) === MIN_SCALE &&
+        nextFitScale(0.5, { altura: 100, escala: 0.5 }, 600, true) === 1 &&
+        nextFitScale(0.8, { altura: 100, escala: 0.8 }, 600, false) === 0.8 &&
+        nextFitScale(1, null, 600, true) === 1 &&
+        nextFitScale(1, { altura: 700, escala: 1 }, 0, true) === 1
+    );
+
+    // Celular grande (412x915): a Home cabe inteira na escala 1. A carteira chega
+    // e o conteudo muda sem mudar de altura — nenhuma medida nova vem.
+    {
+      const t = telaDeMentira(carrega().default, monta, { alturaEm: (s) => Math.round(704 * s), disponivel: 883 });
+      t.estabiliza();
+      const antes = t.visivel;
+      t.muda({ chave: 'carteira-chegou' });
+      t.estabiliza();
+      check(
+        'celular grande: a carteira chega, o conteudo muda sem mudar de altura e a Home continua visivel',
+        antes && t.visivel && t.escala === 1,
+        `antes ${antes}, depois ${t.visivel}`
+      );
+    }
+
+    // A corrida: a primeira medida chega ANTES dos efeitos comuns rodarem.
+    {
+      const t = telaDeMentira(carrega().default, monta, {
+        alturaEm: (s) => Math.round(723 * s),
+        disponivel: 608,
+        ordem: 'medida',
+      });
+      t.estabiliza();
+      check(
+        'a medida que chega antes dos efeitos (a corrida do celular) nao apaga a Home',
+        t.visivel && t.altura <= 608,
+        `visivel ${t.visivel}, ${t.altura}px de 608`
+      );
+    }
+
+    // Celular pequeno (360x640): encolhe ate caber, sem encolher demais.
+    {
+      const t = telaDeMentira(carrega().default, monta, { alturaEm: (s) => Math.round(723 * s), disponivel: 608 });
+      const assentou = t.estabiliza();
+      check(
+        'celular pequeno: encolhe ate caber, em poucas medidas, sem sobrar espaco',
+        assentou && t.visivel && t.altura <= 608 && t.altura >= 600,
+        `${t.altura}px de 608, escala ${t.escala.toFixed(3)}`
+      );
+    }
+
+    // Letra menor quebra menos linha: a 98% a frase cabe numa linha so e a
+    // altura despenca — a conta manda crescer, a frase volta a quebrar...
+    {
+      const quebra = (s) => Math.round(700 * s + (s > 0.98 ? 19 * s : 0));
+      const t = telaDeMentira(carrega().default, monta, { alturaEm: quebra, disponivel: 700 });
+      const assentou = t.estabiliza();
+      check(
+        'texto que deixa de quebrar linha nao faz a escala pular para sempre',
+        assentou && t.visivel && t.altura <= 700,
+        `${assentou ? 'assentou' : 'nao assentou'}, ${t.altura}px de 700`
+      );
+    }
+
+    // Um aviso aparece (a Home encolhe) e depois some: ela volta a crescer.
+    {
+      const t = telaDeMentira(carrega().default, monta, { alturaEm: (s) => Math.round(900 * s), disponivel: 800 });
+      t.estabiliza();
+      const comAviso = t.escala;
+      t.muda({ chave: 'sem-aviso', conteudo: (s) => Math.round(700 * s) });
+      t.estabiliza();
+      check(
+        'o aviso some e a Home volta ao tamanho de projeto',
+        comAviso < 0.9 && t.escala === 1 && t.visivel,
+        `${comAviso.toFixed(3)} -> ${t.escala.toFixed(3)}`
+      );
+    }
+
+    // A altura disponivel muda (barras do sistema, rotacao) sem o bloco mudar de
+    // tamanho: a conta e refeita na hora, sem esperar uma medida que nao viria.
+    {
+      const t = telaDeMentira(carrega().default, monta, { alturaEm: (s) => Math.round(704 * s), disponivel: 883 });
+      t.estabiliza();
+      t.muda({ disponivel: 600 });
+      const naHora = t.altura;
+      t.estabiliza();
+      check(
+        'a altura disponivel diminui: a Home encolhe na hora e continua visivel',
+        naHora <= 600 && t.altura <= 600 && t.visivel,
+        `${naHora}px, depois ${t.altura}px de 600`
+      );
+    }
+
+    // A medida nunca chega: a Home aparece no prazo, um pouco grande se preciso.
+    {
+      const t = telaDeMentira(carrega().default, monta, {
+        alturaEm: (s) => Math.round(723 * s),
+        disponivel: 608,
+        mede: false,
+      });
+      t.estabiliza();
+      const antesDoPrazo = t.visivel;
+      avanca(REVEAL_TIMEOUT_MS);
+      t.estabiliza();
+      check(
+        `sem medida nenhuma, a Home aparece em ${REVEAL_TIMEOUT_MS} ms mesmo assim`,
+        !antesDoPrazo && t.visivel
+      );
+    }
+
+    // Voltando da partida, da loja ou do ranking: a Home monta de novo.
+    {
+      const { default: useFitScale } = carrega();
+      const opcoes = { alturaEm: (s) => Math.round(723 * s), disponivel: 608 };
+      const primeira = telaDeMentira(useFitScale, monta, opcoes);
+      primeira.estabiliza();
+      const escala = primeira.escala;
+      primeira.desmonta();
+      const volta = telaDeMentira(useFitScale, monta, opcoes);
+      check(
+        'voltando a Home, ela ja nasce visivel e no tamanho certo, sem esperar medida',
+        volta.visivel && volta.escala === escala,
+        `escala ${volta.escala.toFixed(3)}`
+      );
+      volta.desmonta();
+    }
+  } finally {
+    global.setTimeout = reais.setTimeout;
+    global.clearTimeout = reais.clearTimeout;
+  }
+}
+
+// ---------------------------------------------- 16. a tela de carregamento
+
+/**
+ * A abertura (src/ui/bootProgress.js e LoadingScreen): a barra so anda para a
+ * frente, enche quando tudo chega, e a tela sai quando a Home esta pronta — ou
+ * no teto da espera, para um servidor mudo nunca prender o jogador.
+ */
+function bootSection() {
+  section('A tela de carregamento da abertura');
+
+  const boot = require(path.join(BUILD, 'src/ui/bootProgress.js'));
+  const nada = { settings: false, player: false, server: false, home: false };
+  const tudo = { settings: true, player: true, server: true, home: true };
+  const semServidor = { ...tudo, server: false };
+
+  const serie = [0, 200, 1000, 3000, 8000, 60000].map((ms) => boot.bootProgress(semServidor, ms));
+  check(
+    'sem resposta do servidor a barra anda sozinha, so para a frente, e nunca enche',
+    serie.every((v, i) => i === 0 || v > serie[i - 1]) && serie[serie.length - 1] < 0.95,
+    serie.map((v) => v.toFixed(2)).join(' ')
+  );
+  check(
+    'cada passo que chega enche mais a barra, e tudo pronto a completa',
+    boot.bootProgress(nada, 0) === 0 &&
+      boot.bootProgress({ ...nada, settings: true }, 0) > 0 &&
+      boot.bootProgress({ ...nada, settings: true, player: true }, 0) > boot.bootProgress({ ...nada, settings: true }, 0) &&
+      boot.bootProgress(tudo, 0) === 1
+  );
+  check(
+    'tudo pronto num instante: a tela ainda fica o minimo, para nao piscar',
+    !boot.bootFinished(tudo, 100) && boot.bootFinished(tudo, boot.BOOT_MIN_MS)
+  );
+  check('a Home ainda nao se mediu: a tela espera', !boot.bootFinished({ ...tudo, home: false }, 2000));
+  check(
+    `servidor mudo: no teto da espera (${boot.BOOT_MAX_MS / 1000} s) a Home abre assim mesmo`,
+    !boot.bootFinished(semServidor, boot.BOOT_MAX_MS - 1) &&
+      boot.bootFinished(semServidor, boot.BOOT_MAX_MS) &&
+      boot.bootFinished(nada, boot.BOOT_MAX_MS)
+  );
+  check(
+    'a frase acompanha o passo que falta, e o servidor lento ganha aviso',
+    boot.bootStep(nada, 0) === 'settings' &&
+      boot.bootStep({ ...nada, settings: true }, 0) === 'player' &&
+      boot.bootStep({ ...nada, settings: true, player: true }, 0) === 'server' &&
+      boot.bootStep({ ...nada, settings: true, player: true }, boot.BOOT_SLOW_MS) === 'slow' &&
+      boot.bootStep({ ...tudo, home: false }, 0) === 'menu' &&
+      boot.bootStep(tudo, 0) === 'ready' &&
+      boot.bootStep({ ...tudo, offline: true }, 0) === 'offline'
+  );
+  const frases = ['settings', 'player', 'server', 'slow', 'menu', 'ready', 'offline'];
+  check(
+    'toda frase da abertura tem texto',
+    frases.every((f) => i18n.has(`boot.${f}`)),
+    frases.filter((f) => !i18n.has(`boot.${f}`)).join(', ')
+  );
+}
+
 seasonSection();
 identitySection();
 coinsSection();
 skinsSection();
 languagesSection();
 androidThemeSection();
+fitScaleSection();
+bootSection();
 
 economySection()
   .then(cloudSection)

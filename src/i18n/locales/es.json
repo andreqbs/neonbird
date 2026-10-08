@@ -43,6 +43,15 @@
     "players": { "one": "{count} jugador", "other": "{count} jugadores" }
   },
   "identity": { "defaultName": "Piloto {n}" },
+  "boot": {
+    "settings": "Cargando preferencias...",
+    "player": "Preparando a tu piloto...",
+    "server": "Buscando tus datos...",
+    "slow": "El servidor está tardando. Un momento más...",
+    "menu": "Preparando el menú...",
+    "ready": "¡Todo listo!",
+    "offline": "Sin conexión: abriendo el modo práctica..."
+  },
   "home": {
     "tagline": "Toca para batir las alas. Suelta y la gravedad pasa factura.",
     "recordLabel": "RÉCORD",

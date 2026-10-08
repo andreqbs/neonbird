@@ -43,6 +43,15 @@
     "players": { "one": "{count} player", "other": "{count} players" }
   },
   "identity": { "defaultName": "Pilot {n}" },
+  "boot": {
+    "settings": "Loading preferences...",
+    "player": "Getting your pilot ready...",
+    "server": "Fetching your data...",
+    "slow": "The server is taking a while. Just a moment...",
+    "menu": "Setting up the menu...",
+    "ready": "All set!",
+    "offline": "No connection: opening practice mode..."
+  },
   "home": {
     "tagline": "Tap to flap your wings. Let go and gravity takes its toll.",
     "recordLabel": "BEST",

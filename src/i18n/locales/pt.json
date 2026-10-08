@@ -43,6 +43,15 @@
     "players": { "one": "{count} jogador", "other": "{count} jogadores" }
   },
   "identity": { "defaultName": "Piloto {n}" },
+  "boot": {
+    "settings": "Carregando preferências...",
+    "player": "Preparando seu piloto...",
+    "server": "Buscando seus dados...",
+    "slow": "O servidor está demorando. Só mais um instante...",
+    "menu": "Montando o menu...",
+    "ready": "Tudo pronto!",
+    "offline": "Sem conexão: abrindo o modo treino..."
+  },
   "home": {
     "tagline": "Toque para bater as asas. Solte e a gravidade cobra o preço.",
     "recordLabel": "RECORDE",

@@ -43,6 +43,15 @@
     "players": { "one": "{count} giocatore", "other": "{count} giocatori" }
   },
   "identity": { "defaultName": "Pilota {n}" },
+  "boot": {
+    "settings": "Caricamento delle preferenze...",
+    "player": "Preparo il tuo pilota...",
+    "server": "Recupero i tuoi dati...",
+    "slow": "Il server ci sta mettendo un po'. Ancora un istante...",
+    "menu": "Preparo il menu...",
+    "ready": "Tutto pronto!",
+    "offline": "Nessuna connessione: apro la modalità allenamento..."
+  },
   "home": {
     "tagline": "Tocca per battere le ali. Lascia andare e la gravità presenta il conto.",
     "recordLabel": "RECORD",

@@ -7,6 +7,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import GameScreen from './src/screens/GameScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
+import LoadingScreen from './src/screens/LoadingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import ShopScreen from './src/screens/ShopScreen';
 import usePlayer from './src/hooks/usePlayer';
@@ -16,7 +17,7 @@ import { forgetLocalRuns } from './src/services/scores';
 import integrity from './src/services/integrity';
 import audio from './src/audio/AudioManager';
 import ads from './src/services/ads';
-import { resolveLanguage, setLanguage } from './src/i18n';
+import { getLanguage, resolveLanguage, setLanguage } from './src/i18n';
 import useLanguage from './src/i18n/useLanguage';
 import { SettingsProvider, useSettings } from './src/state/SettingsContext';
 import { theme } from './src/ui/theme';
@@ -37,6 +38,16 @@ function Root() {
   // A partida que a tela de jogo abre: a do servidor (`run`) ou um treino.
   const [game, setGame] = useState(null);
   const lang = useLanguage();
+
+  // A abertura: a tela de carregamento fica na frente ate a Home estar pronta
+  // de verdade — preferencias, jogador, carteira do servidor e a propria Home
+  // medida (ver LoadingScreen). A Home monta por tras desde o primeiro instante.
+  const [booting, setBooting] = useState(true);
+  const endBoot = useCallback(() => setBooting(false), []);
+  // O idioma da Home que ja se mediu: trocar de idioma monta a Home de novo
+  // (a chave do Fragment abaixo), e ai e a nova que precisa se medir.
+  const [homeMedida, setHomeMedida] = useState(null);
+  const marcaHome = useCallback(() => setHomeMedida(getLanguage()), []);
 
   // O idioma: o escolhido em Configuracoes ou, no automatico, o do celular (se
   // for um dos do jogo; senao, ingles). Antes de as preferencias chegarem do
@@ -137,36 +148,44 @@ function Root() {
     <View style={styles.root}>
       <StatusBar style="light" hidden={screen === 'game'} />
 
-      {/* A chave do idioma: trocar de idioma monta as telas de novo, ja com os
-          textos novos. A tela aberta continua a mesma (ela mora fora daqui). */}
-      <Fragment key={lang}>
-        {screen === 'home' && (
-          <HomeScreen onNavigate={setScreen} onPlay={startGame} onTrain={startTraining} />
-        )}
+      {/* Enquanto a abertura cobre as telas, o leitor de tela tambem nao as le. */}
+      <View style={styles.screens} aria-hidden={booting}>
+        {/* A chave do idioma: trocar de idioma monta as telas de novo, ja com os
+            textos novos. A tela aberta continua a mesma (ela mora fora daqui). */}
+        <Fragment key={lang}>
+          {screen === 'home' && (
+            <HomeScreen onNavigate={setScreen} onPlay={startGame} onTrain={startTraining} onReady={marcaHome} />
+          )}
 
-        {screen === 'game' && game && (
-          <GameScreen
-            key={game.key}
-            initialRun={game.run}
-            training={game.training}
-            onExit={goHome}
-          />
-        )}
+          {screen === 'game' && game && (
+            <GameScreen
+              key={game.key}
+              initialRun={game.run}
+              training={game.training}
+              onExit={goHome}
+            />
+          )}
 
-        {screen === 'shop' && <ShopScreen onBack={goHome} />}
+          {screen === 'shop' && <ShopScreen onBack={goHome} />}
 
-        {screen === 'leaderboard' && (
-          <LeaderboardScreen onBack={goHome} onOpenSettings={() => setScreen('settings')} />
-        )}
+          {screen === 'leaderboard' && (
+            <LeaderboardScreen onBack={goHome} onOpenSettings={() => setScreen('settings')} />
+          )}
 
-        {screen === 'settings' && (
-          <SettingsScreen onBack={goHome} />
-        )}
-      </Fragment>
+          {screen === 'settings' && (
+            <SettingsScreen onBack={goHome} />
+          )}
+        </Fragment>
+      </View>
+
+      {booting && (
+        <LoadingScreen settingsLoaded={loaded} homeReady={homeMedida === lang} onDone={endBoot} />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.skyTop },
+  screens: { flex: 1 },
 });

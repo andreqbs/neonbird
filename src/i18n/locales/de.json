@@ -43,6 +43,15 @@
     "players": { "one": "{count} Spieler", "other": "{count} Spieler" }
   },
   "identity": { "defaultName": "Pilot {n}" },
+  "boot": {
+    "settings": "Einstellungen werden geladen...",
+    "player": "Dein Pilot macht sich bereit...",
+    "server": "Deine Daten werden geladen...",
+    "slow": "Der Server braucht etwas länger. Nur einen Moment...",
+    "menu": "Menü wird vorbereitet...",
+    "ready": "Alles bereit!",
+    "offline": "Keine Verbindung: Übungsmodus wird geöffnet..."
+  },
   "home": {
     "tagline": "Tippen, um mit den Flügeln zu schlagen. Loslassen, und die Schwerkraft fordert ihren Preis.",
     "recordLabel": "REKORD",

@@ -43,6 +43,15 @@
     "players": { "other": "{count}名玩家" }
   },
   "identity": { "defaultName": "飞行员{n}" },
+  "boot": {
+    "settings": "正在加载设置...",
+    "player": "正在准备你的飞行员...",
+    "server": "正在获取你的数据...",
+    "slow": "服务器响应较慢，请稍候...",
+    "menu": "正在准备菜单...",
+    "ready": "准备就绪！",
+    "offline": "无网络连接：正在打开练习模式..."
+  },
   "home": {
     "tagline": "点击拍打翅膀。一松手，重力就会让你付出代价。",
     "recordLabel": "最高分",

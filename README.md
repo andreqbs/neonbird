@@ -67,7 +67,8 @@ cd server && docker compose -f docker-compose.test.yml run --rm --build test
 
 | Tela | O que tem |
 |------|-----------|
-| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações — sem rolagem: o hook [useFitScale](src/hooks/useFitScale.js) mede a tela e encolhe textos, arte e espaços até caber em qualquer altura; recorde, moedas, as 5 vidas e o tempo de voo |
+| **Carregamento** | Na abertura, na frente da Home: um pássaro do bando (sorteado a cada abertura) voa na ponta de uma barra de progresso enquanto chegam as preferências, o jogador, a carteira do servidor e a própria Home medida. Só sai com o menu inteiro pronto — ou no teto de 8 s, para um servidor mudo nunca prender ninguém (a Home abre em "Conectando..." e segue esperando). Ver [LoadingScreen](src/screens/LoadingScreen.js) e [bootProgress](src/ui/bootProgress.js) |
+| **Início** | Jogar (ou Treinar, sem internet), Loja, Ranking e Configurações — sem rolagem: o hook [useFitScale](src/hooks/useFitScale.js) mede a tela e encolhe textos, arte e espaços até caber em qualquer altura, sem nunca esconder a Home esperando uma medida que pode não vir; recorde, moedas, as 5 vidas e o tempo de voo |
 | **Loja** | Abas *Birds* (5 pássaros novos, escudos e novas chances) e *Skins* (bonés, asas, óculos e colares) |
 | **Ranking** | Abas *Individual*, *Grupo* e *Seus voos* (os melhores voos do jogador, do servidor); tocar num jogador mostra o pássaro e as skins dele |
 | **Configurações** | Idioma, música de fundo, som do toque, efeitos, nome e código do jogador, privacidade (abre o site da política) e a versão do app no rodapé (lida do `version` do app.json) |
@@ -890,6 +891,7 @@ src/
     session.js               o que sobrevive a uma rotacao no meio da partida
     render/                  ceu, passaro, moeda, colunas, chao e placar (so Views)
   screens/
+    LoadingScreen.js         a abertura: passaro na barra de progresso, na frente da Home
     HomeScreen.js            Jogar ou Treinar / Loja / Ranking / Configuracoes
     GameScreen.js            game loop, HUD, escudo, nova chance e fim de jogo
     ShopScreen.js            passaros, escudos e novas chances
@@ -909,8 +911,10 @@ src/
     useEconomy.js            a carteira, para as telas redesenharem
     useAds.js                o video premiado e o premio confirmado no servidor
     usePlayer.js             o jogador deste aparelho, para as telas
+    useFitScale.js           a escala que faz a Home caber na tela, sem rolagem
   ui/                        tema, botao, passaros de vida e da loja, cobertura do anuncio,
-                             e o PowerHud (os poderes no canto da tela)
+                             o PowerHud (os poderes no canto da tela) e bootProgress.js
+                             (a conta da barra da abertura)
 server/                      o servidor do jogo (Go + Postgres, docker)
   main.go                    configuracao, subida e encerramento limpo
   api.go                     rotas de conta, grupos e ranking
@@ -927,7 +931,8 @@ server/                      o servidor do jogo (Go + Postgres, docker)
 tools/
   generate-audio.js          sintetiza assets/audio
   generate-icons.js          desenha icone, splash e favicon
-  selftest.js                fisica, proporcao, rotacao, moedas e a conversa com o servidor
+  selftest.js                fisica, proporcao, rotacao, moedas, a conversa com o servidor,
+                             a Home sempre visivel e a abertura
 ```
 
 ### Física
