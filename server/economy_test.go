@@ -594,7 +594,9 @@ func TestPoderValeDoPassaroDaAbertura(t *testing.T) {
 func TestNovaChanceUmaVezPorPartida(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
-	a.daMoedas(t, ana, 250)
+	// Uma nova chance paga na partida e outra comprada na loja, e sobra troco.
+	saldo := 2*ContinuePrice + 50
+	a.daMoedas(t, ana, saldo)
 
 	id, _ := a.abrePartida(t, ana)
 
@@ -607,8 +609,8 @@ func TestNovaChanceUmaVezPorPartida(t *testing.T) {
 	if st != http.StatusOK {
 		t.Fatalf("nova chance paga: status %d (%v)", st, body)
 	}
-	if got := num(t, carteira(t, body)["coins"]); got != 250-ContinuePrice {
-		t.Errorf("saldo depois da nova chance: %d, esperava %d", got, 250-ContinuePrice)
+	if got := num(t, carteira(t, body)["coins"]); got != saldo-ContinuePrice {
+		t.Errorf("saldo depois da nova chance: %d, esperava %d", got, saldo-ContinuePrice)
 	}
 
 	st, body = a.chama(t, &ana, "POST", "/v1/runs/"+id+"/continue", map[string]any{"method": "coins"})
@@ -655,19 +657,19 @@ func TestEscudoSoComEstoque(t *testing.T) {
 func TestLojaDePassaros(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
-	// Da para a Geada, e sobra uma moeda a menos do que a Brasa custa: o teste
+	// Da para a Geada, e sobra uma moeda a menos do que a Toxina custa: o teste
 	// vale com qualquer preco do catalogo (catalog.go).
 	geada, _ := birdByID("frost")
-	brasa, _ := birdByID("ember")
-	a.daMoedas(t, ana, geada.Price+brasa.Price-1)
+	toxina, _ := birdByID("toxic")
+	a.daMoedas(t, ana, geada.Price+toxina.Price-1)
 
 	st, body := a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": "frost"})
 	if st != http.StatusOK {
 		t.Fatalf("comprar Geada: status %d (%v)", st, body)
 	}
 	w := carteira(t, body)
-	if num(t, w["coins"]) != brasa.Price-1 {
-		t.Errorf("saldo depois da compra: %v, esperava %d", w["coins"], brasa.Price-1)
+	if num(t, w["coins"]) != toxina.Price-1 {
+		t.Errorf("saldo depois da compra: %v, esperava %d", w["coins"], toxina.Price-1)
 	}
 
 	st, body = a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": "frost"})
@@ -675,7 +677,7 @@ func TestLojaDePassaros(t *testing.T) {
 		t.Errorf("comprar o mesmo passaro de novo: status %d (%v)", st, body)
 	}
 
-	st, body = a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": "ember"})
+	st, body = a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": "toxic"})
 	if st != http.StatusConflict || codigoDe(body) != "not_enough_coins" {
 		t.Errorf("comprar sem saldo: status %d (%v)", st, body)
 	}
@@ -685,7 +687,7 @@ func TestLojaDePassaros(t *testing.T) {
 		t.Errorf("comprar o passaro de graca: status %d (%v)", st, body)
 	}
 
-	st, body = a.chama(t, &ana, "POST", "/v1/me/bird", map[string]any{"birdId": "ember"})
+	st, body = a.chama(t, &ana, "POST", "/v1/me/bird", map[string]any{"birdId": "toxic"})
 	if st != http.StatusForbidden || codigoDe(body) != "not_owned" {
 		t.Errorf("usar passaro nao comprado: status %d (%v)", st, body)
 	}

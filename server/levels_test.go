@@ -91,7 +91,12 @@ func TestEstrelaEsticaOTempoDoPoder(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
 	a.daPassaro(t, ana, "frost")
-	a.daMoedas(t, ana, 1000)
+	// O bastante para as cinco estrelas.
+	saldo := 0
+	for _, preco := range UpgradePrices {
+		saldo += preco
+	}
+	a.daMoedas(t, ana, saldo)
 
 	// Recem-comprado: nenhuma estrela, e o poder no tempo de sempre.
 	st, body := a.chama(t, &ana, "GET", "/v1/me/wallet", nil)
@@ -103,14 +108,14 @@ func TestEstrelaEsticaOTempoDoPoder(t *testing.T) {
 		t.Errorf("camera lenta sem estrela: %v s, esperava 2", got)
 	}
 
-	// Duas estrelas: 10 + 20 moedas, e o poder vai a 3 s.
+	// Duas estrelas: o preco da primeira mais o da segunda, e o poder vai a 3 s.
 	for i := 1; i <= 2; i++ {
 		st, body = a.chama(t, &ana, "POST", "/v1/shop/upgrade", map[string]any{"birdId": "frost"})
 		if st != http.StatusOK || estrelas(t, body, "frost") != i {
 			t.Fatalf("estrela %d: status %d (%v)", i, st, body)
 		}
 	}
-	if got := num(t, carteira(t, body)["coins"]); got != 1000-UpgradePrices[0]-UpgradePrices[1] {
+	if got := num(t, carteira(t, body)["coins"]); got != saldo-UpgradePrices[0]-UpgradePrices[1] {
 		t.Errorf("saldo depois de duas estrelas: %d", got)
 	}
 	_, body = a.chama(t, &ana, "POST", "/v1/runs/start", nil)

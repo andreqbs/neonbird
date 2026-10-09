@@ -215,10 +215,10 @@ moedas compram, na **Loja**:
 
 | Item | O que é | Como se consegue |
 |---|---|---|
-| **5 pássaros** | Geada, Brasa, Toxina, Fantasma e Cometa, cada um com um poder | moedas **ou dinheiro** (Google Play); o **Cometa, só dinheiro** |
+| **5 pássaros** | Geada, Toxina, Fantasma, Brasa e Cometa, cada um com um poder | moedas **ou dinheiro** (Google Play); **Brasa e Cometa, só dinheiro** |
 | **12 skins** | bonés, asas, óculos e colares de ouro — só visual, em qualquer pássaro | moedas **ou dinheiro** (Google Play) |
-| **Escudo** | o anel que perdoa as batidas enquanto se dissipa | moedas ou vídeo premiado |
-| **Nova chance** | ao cair, continuar do mesmo ponto — uma por partida | moedas ou vídeo premiado |
+| **Escudo** | o anel que perdoa as batidas enquanto se dissipa | 300 moedas ou vídeo premiado |
+| **Nova chance** | ao cair, continuar do mesmo ponto — uma por partida | 300 moedas ou vídeo premiado |
 
 A loja tem duas abas: **Birds** (pássaros, escudo e nova chance) e **Skins**.
 
@@ -333,17 +333,18 @@ Views. **Nome, preço e poderes vêm do servidor** ([catalog.go](server/catalog.
 | --- | --- | --- | --- |
 | Major | grátis | — | O de sempre, sem poder. |
 | Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
-| Brasa | moedas ou dinheiro | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
 | Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 4 s (8 s com 5 estrelas); depois recarrega 10 s. |
 | Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
+| Brasa | **só dinheiro** | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
 | Cometa | **só dinheiro** | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
 
 ### As estrelas
 
 Cada pássaro com poder de **tempo** evolui até **5 estrelas**, e cada estrela
 **estica o tempo do poder**. As estrelas se compram com **moedas**, na loja, e
-custam **10 · 20 · 40 · 80 · 160** (preços de teste). Pássaro recém-comprado
-começa sem estrela nenhuma.
+custam **100 · 300 · 500 · 700 · 1000**. Pássaro recém-comprado começa sem
+estrela nenhuma. Na loja, o botão **Upgrade** fica na linha das estrelas, com uma
+barra embaixo: as moedas do jogador contra o preço da próxima estrela.
 
 | Pássaro | Sem estrela | ★ | ★★ | ★★★ | ★★★★ | ★★★★★ |
 | --- | --- | --- | --- | --- | --- | --- |

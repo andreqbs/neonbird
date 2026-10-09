@@ -33,9 +33,9 @@ func TestCatalogoDizComoSeCompraCadaPassaro(t *testing.T) {
 			if b.Price != 0 || b.ProductID != "" {
 				t.Errorf("o de sempre vem de graca, sem produto: %+v", b)
 			}
-		case b.ID == "comet":
+		case b.ID == "comet" || b.ID == "ember":
 			if b.Price != 0 || b.ProductID == "" {
-				t.Errorf("o Cometa e so com dinheiro: preco %d, produto %q", b.Price, b.ProductID)
+				t.Errorf("%s e so com dinheiro: preco %d, produto %q", b.ID, b.Price, b.ProductID)
 			}
 		default:
 			if b.Price <= 0 || b.ProductID == "" {
@@ -45,18 +45,20 @@ func TestCatalogoDizComoSeCompraCadaPassaro(t *testing.T) {
 	}
 }
 
-func TestCometaNaoSeCompraComMoedas(t *testing.T) {
+func TestCometaEBrasaNaoSeCompramComMoedas(t *testing.T) {
 	a := novoAmbiente(t, nil)
 	ana := a.registra(t, "Ana")
 	a.daMoedas(t, ana, 100000)
 
-	st, body := a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": "comet"})
-	if st != http.StatusConflict || codigoDe(body) != "coins_not_accepted" {
-		t.Fatalf("comprar o Cometa com moedas: status %d (%v), esperava 409 coins_not_accepted", st, body)
-	}
-	_, body = a.chama(t, &ana, "GET", "/v1/me/wallet", nil)
-	if possui(t, body, "comet") || num(t, carteira(t, body)["coins"]) != 100000 {
-		t.Errorf("a recusa mexeu na carteira: %v", carteira(t, body))
+	for _, id := range []string{"comet", "ember"} {
+		st, body := a.chama(t, &ana, "POST", "/v1/shop/buy", map[string]any{"item": "bird", "birdId": id})
+		if st != http.StatusConflict || codigoDe(body) != "coins_not_accepted" {
+			t.Fatalf("comprar %s com moedas: status %d (%v), esperava 409 coins_not_accepted", id, st, body)
+		}
+		_, body = a.chama(t, &ana, "GET", "/v1/me/wallet", nil)
+		if possui(t, body, id) || num(t, carteira(t, body)["coins"]) != 100000 {
+			t.Errorf("a recusa de %s mexeu na carteira: %v", id, carteira(t, body))
+		}
 	}
 }
 

@@ -31,9 +31,9 @@ const (
 	// e sem limite o ranking viraria disputa de quem guardou mais moeda.
 	MaxContinuesPerRun = 1
 
-	// Precos de TESTE, em moedas.
-	ShieldPrice   = 5 //60
-	ContinuePrice = 5 //100
+	// Escudo e nova chance guardados, em moedas.
+	ShieldPrice   = 300
+	ContinuePrice = 300
 
 	// Teto de escudos e novas chances guardados. So existe para nenhum saldo
 	// virar numero absurdo por engano.
@@ -50,11 +50,11 @@ const (
 // SeasonPrizes: as moedas que o 1º, o 2º e o 3º do ranking individual ganham
 // quando a rodada fecha (prizes.go). Mais posicoes premiadas = mais numeros na
 // lista; 0 tira o premio daquela posicao. Muda com redeploy, sem build nova.
-var SeasonPrizes = []int{4000, 2000, 500}
+var SeasonPrizes = []int{2000, 1000, 250}
 
 // UpgradePrices: quanto custa, em moedas, cada estrela — a primeira, a segunda,
-// ate a quinta. Precos de teste.
-var UpgradePrices = [MaxBirdLevel]int{10, 20, 40, 80, 160}
+// ate a quinta.
+var UpgradePrices = [MaxBirdLevel]int{100, 300, 500, 700, 1000}
 
 // ==================================================================== PODERES
 //
@@ -245,20 +245,17 @@ type BirdOffer struct {
 // QUEM TEM QUAL PODER: a lista `Powers` de cada passaro. Trocar o poder de um
 // passaro e trocar o nome entre as chaves; dar mais de um e separar por
 // virgula — por exemplo `Powers: []Power{PowerMagnet, PowerDoubleCoins}`.
-// Precos de teste.
+//
+// A ORDEM da lista e a ordem da loja. A Brasa e o Cometa, so com dinheiro,
+// ficam no fim.
 // ----------------------------------------------------------------------------
 var Birds = []BirdOffer{
 	{ID: DefaultBird, Name: "Major", Tagline: "O piloto de sempre.", Price: 0},
-	{ID: "frost", Name: "Geada", Tagline: "Cristais no topete, asa de neve.", Price: 10, ProductID: "bird_frost", Powers: []Power{PowerSlow}, Upgradable: true},
-// 	{ID: "frost", Name: "Geada", Tagline: "Cristais no topete, asa de neve.", Price: 150, ProductID: "bird_frost", Powers: []Power{PowerSlow}, Upgradable: true},
-	{ID: "ember", Name: "Brasa", Tagline: "Topete em chamas, humor idem.", Price: 12, ProductID: "bird_ember", Powers: []Power{PowerSecondChance}},
-// 	{ID: "ember", Name: "Brasa", Tagline: "Topete em chamas, humor idem.", Price: 320, ProductID: "bird_ember", Powers: []Power{PowerSecondChance}},
-	{ID: "toxic", Name: "Toxina", Tagline: "Máscara roxa, antena ligada.", Price: 16, ProductID: "bird_toxic", Powers: []Power{PowerMagnet}, Upgradable: true},
-// 	{ID: "toxic", Name: "Toxina", Tagline: "Máscara roxa, antena ligada.", Price: 480, ProductID: "bird_toxic", Powers: []Power{PowerMagnet}, Upgradable: true},
-	{ID: "phantom", Name: "Fantasma", Tagline: "Meio transparente, todo visor.", Price: 18, ProductID: "bird_phantom", Powers: []Power{PowerGhost}, Upgradable: true},
-// 	{ID: "phantom", Name: "Fantasma", Tagline: "Meio transparente, todo visor.", Price: 750, ProductID: "bird_phantom", Powers: []Power{PowerGhost}, Upgradable: true},
+	{ID: "frost", Name: "Geada", Tagline: "Cristais no topete, asa de neve.", Price: 500, ProductID: "bird_frost", Powers: []Power{PowerSlow}, Upgradable: true},
+	{ID: "toxic", Name: "Toxina", Tagline: "Máscara roxa, antena ligada.", Price: 900, ProductID: "bird_toxic", Powers: []Power{PowerMagnet}, Upgradable: true},
+	{ID: "phantom", Name: "Fantasma", Tagline: "Meio transparente, todo visor.", Price: 1800, ProductID: "bird_phantom", Powers: []Power{PowerGhost}, Upgradable: true},
+	{ID: "ember", Name: "Brasa", Tagline: "Topete em chamas, humor idem.", Price: 0, ProductID: "bird_ember", Powers: []Power{PowerSecondChance}},
 	{ID: "comet", Name: "Cometa", Tagline: "Deixa um rastro por onde passa.", Price: 0, ProductID: "bird_comet", Powers: []Power{PowerDoubleCoins}},
-// 	{ID: "comet", Name: "Cometa", Tagline: "Deixa um rastro por onde passa.", Price: 0, ProductID: "bird_comet", Powers: []Power{PowerDoubleCoins}},
 }
 
 func birdByID(id string) (BirdOffer, bool) {

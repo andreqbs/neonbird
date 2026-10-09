@@ -21,6 +21,9 @@ import { theme } from '../ui/theme';
 /** Quanto tempo o botao de compra fica esperando o segundo toque. */
 const CONFIRM_MS = 3500;
 
+/** Largura do "Upgrade" e da barra embaixo dele (a mesma, um sobre o outro). */
+const UPGRADE_WIDTH = 104;
+
 const tabs = () => [
   { id: 'birds', label: t('shop.tabBirds') },
   { id: 'skins', label: t('shop.tabSkins') },
@@ -43,7 +46,12 @@ const tabs = () => [
  * ESTRELAS: cada passaro com poder de tempo evolui ate cinco estrelas, compradas
  * com moedas — e cada uma estica o tempo do poder. A Brasa e o Cometa ja nascem
  * com as cinco: o poder deles nao e de tempo. Quem guarda o nivel e faz a conta
- * e o servidor; aqui so se mostram as estrelas e se manda o pedido.
+ * e o servidor; aqui so se mostram as estrelas e se manda o pedido. O botao
+ * "Upgrade" fica na linha das estrelas, com a barra das moedas que o jogador
+ * tem contra o preco da proxima estrela logo abaixo.
+ *
+ * SEM SALDO, o botao de moedas fica escuro — e o de dinheiro, ao lado, continua
+ * aceso: e o caminho para quem nao quer esperar juntar.
  *
  * ABAS: "Birds" e a loja de sempre (passaros, escudo, nova chance); "Skins" sao
  * os enfeites — bone, asas, oculos e colar —, que valem em qualquer passaro e
@@ -228,6 +236,10 @@ export default function ShopScreen({ onBack }) {
         ) : (
           <>
             <SectionTitle>{t('shop.birdsSection')}</SectionTitle>
+            <View style={styles.payNote}>
+              <CoinFace size={16} />
+              <Text style={styles.payNoteText}>{t('shop.payNote')}</Text>
+            </View>
             <Card>
               {catalog.birds.map((bird, i) => {
                 const id = `bird:${bird.id}`;
@@ -400,48 +412,59 @@ function BirdRow({
     );
   }
 
-  if (owned && proximaEstrela !== null && proximaEstrela !== undefined) {
-    action = (
-      <View style={styles.buyOptions}>
-        {action}
-        <PriceButton
-          price={proximaEstrela}
-          armed={upgradeArmed}
-          busy={upgradeBusy}
-          short={coins < proximaEstrela}
-          onPress={() => onUpgrade(proximaEstrela)}
-          label="★"
-        />
-      </View>
-    );
-  }
+  const evolui = owned && proximaEstrela !== null && proximaEstrela !== undefined;
 
   return (
-    <View style={[styles.row, last && styles.last, equipped && styles.rowActive]}>
-      <BirdAvatar birdId={bird.id} size={30} />
-      <View style={styles.rowTexts}>
-        <Text style={styles.rowTitle}>{birdName(bird)}</Text>
-        <Text style={styles.rowDesc}>{birdTagline(bird)}</Text>
-        {bird.powers && bird.powers.length > 0 ? (
-          bird.powers.map((p) => (
-            <Text key={p.id} style={styles.ability}>
-              {describePower(p)}
-            </Text>
-          ))
-        ) : (
-          <Text style={[styles.ability, styles.noPower]}>{t('shop.noPower')}</Text>
-        )}
-        {maxStars > 0 ? <Stars level={stars} total={maxStars} /> : null}
-        {poderDeTempo && owned && stars < maxStars ? (
-          <Text style={styles.nextStar}>
-            {t('shop.starNow', {
-              now: formatSeconds(poderDeTempo.levelValues[stars]),
-              next: formatSeconds(poderDeTempo.levelValues[stars + 1]),
-            })}
-          </Text>
-        ) : null}
+    <View style={[styles.birdRow, last && styles.last, equipped && styles.rowActive]}>
+      <View style={styles.birdTop}>
+        <BirdAvatar birdId={bird.id} size={30} />
+        <View style={styles.rowTexts}>
+          <Text style={styles.rowTitle}>{birdName(bird)}</Text>
+          <Text style={styles.rowDesc}>{birdTagline(bird)}</Text>
+          {bird.powers && bird.powers.length > 0 ? (
+            bird.powers.map((p) => (
+              <Text key={p.id} style={styles.ability}>
+                {describePower(p)}
+              </Text>
+            ))
+          ) : (
+            <Text style={[styles.ability, styles.noPower]}>{t('shop.noPower')}</Text>
+          )}
+        </View>
+        {action}
       </View>
-      {action}
+
+      {/* As estrelas e, na mesma linha, o "Upgrade" da proxima — com a barra das
+          moedas contra o preco dela logo abaixo do botao. */}
+      {maxStars > 0 ? (
+        <View style={styles.starsBlock}>
+          <View style={styles.starsLine}>
+            <Stars level={stars} total={maxStars} style={styles.starsInLine} />
+            {evolui ? (
+              <UpgradeButton
+                price={proximaEstrela}
+                armed={upgradeArmed}
+                busy={upgradeBusy}
+                short={coins < proximaEstrela}
+                onPress={() => onUpgrade(proximaEstrela)}
+              />
+            ) : null}
+          </View>
+          {evolui || (poderDeTempo && owned && stars < maxStars) ? (
+            <View style={styles.starsLine}>
+              <Text style={[styles.nextStar, styles.rowTexts]}>
+                {poderDeTempo && owned && stars < maxStars
+                  ? t('shop.starNow', {
+                      now: formatSeconds(poderDeTempo.levelValues[stars]),
+                      next: formatSeconds(poderDeTempo.levelValues[stars + 1]),
+                    })
+                  : ''}
+              </Text>
+              {evolui ? <UpgradeProgress coins={coins} price={proximaEstrela} /> : null}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -662,15 +685,19 @@ function MoneyButton({ price, busy, onPress }) {
   );
 }
 
-/** Botao de preco. Primeiro toque arma, segundo compra; sem saldo, fica apagado. */
-function PriceButton({ price, armed, busy, short, onPress, label }) {
+/**
+ * Botao de preco. Primeiro toque arma, segundo compra. Sem saldo, fica ESCURO:
+ * ainda responde ao toque (diz quanto falta), mas nao chama atencao — quem
+ * chama e o botao de dinheiro, quando o item tem.
+ */
+function PriceButton({ price, armed, busy, short, onPress }) {
   return (
     <Pressable
       onPress={busy ? undefined : onPress}
       style={({ pressed }) => [
         styles.price,
         armed && styles.priceArmed,
-        short && styles.priceShort,
+        short && !armed && styles.priceShort,
         pressed && { opacity: 0.75 },
       ]}
     >
@@ -680,11 +707,64 @@ function PriceButton({ price, armed, busy, short, onPress, label }) {
         <Text style={styles.priceArmedText}>{t('common.confirmPrice', { price })}</Text>
       ) : (
         <>
-          {label ? <Text style={styles.priceText}>{label}</Text> : <CoinFace size={14} />}
-          <Text style={styles.priceText}>{price}</Text>
+          <View style={short && styles.coinShort}>
+            <CoinFace size={14} />
+          </View>
+          <Text style={[styles.priceText, short && styles.priceTextShort]}>{price}</Text>
         </>
       )}
     </Pressable>
+  );
+}
+
+/**
+ * O "Upgrade" da proxima estrela: os mesmos dois toques do botao de preco — o
+ * primeiro arma e mostra o preco, o segundo compra. Sem saldo, escuro.
+ */
+function UpgradeButton({ price, armed, busy, short, onPress }) {
+  return (
+    <Pressable
+      onPress={busy ? undefined : onPress}
+      style={({ pressed }) => [
+        styles.price,
+        styles.upgrade,
+        armed && styles.priceArmed,
+        short && !armed && styles.priceShort,
+        pressed && { opacity: 0.75 },
+      ]}
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color={theme.bird} />
+      ) : armed ? (
+        <Text style={styles.priceArmedText}>{t('common.confirmPrice', { price })}</Text>
+      ) : (
+        <Text style={[styles.priceText, short && styles.priceTextShort]}>{t('shop.upgrade')}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+/**
+ * A barra embaixo do "Upgrade": as moedas do jogador contra o preco da proxima
+ * estrela. Cheia (e verde) quando ja da para comprar.
+ */
+function UpgradeProgress({ coins, price }) {
+  const tem = Math.max(0, Math.min(coins, price));
+  const cheia = coins >= price;
+  return (
+    <View
+      style={styles.progress}
+      accessibilityLabel={t('shop.upgradeProgress', { coins: tem, price })}
+    >
+      <View
+        style={[
+          styles.progressFill,
+          cheia && styles.progressFull,
+          { width: `${price > 0 ? (tem / price) * 100 : 0}%` },
+        ]}
+      />
+      <Text style={styles.progressText}>{`${tem}/${price}`}</Text>
+    </View>
   );
 }
 
@@ -771,6 +851,33 @@ const styles = StyleSheet.create({
   rowTitle: { color: theme.text, fontSize: 15, fontWeight: '800' },
   rowDesc: { color: theme.textDim, fontSize: 12, lineHeight: 17, marginTop: 2 },
   ability: { color: 'rgba(46,230,197,0.85)', fontSize: 11, marginTop: 3, fontWeight: '700', lineHeight: 15 },
+
+  payNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(46,230,197,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(46,230,197,0.3)',
+  },
+  payNoteText: { flex: 1, color: theme.text, fontSize: 12, lineHeight: 17, fontWeight: '600' },
+
+  birdRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  birdTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // Alinhado com os textos do passaro: avatar (30) + espaco (10).
+  starsBlock: { paddingLeft: 40, gap: 6 },
+  starsLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  starsInLine: { flex: 1, marginTop: 0 },
   noPower: { color: 'rgba(150,161,206,0.7)' },
   inUse: { color: theme.pillar, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
 
@@ -806,8 +913,26 @@ const styles = StyleSheet.create({
   buyOptions: { alignItems: 'flex-end', gap: 6 },
   unavailable: { color: theme.textDim, fontSize: 11, textAlign: 'right', lineHeight: 15 },
   nextStar: { color: theme.textDim, fontSize: 11, marginTop: 3 },
-  priceShort: { opacity: 0.45 },
+  // Sem saldo: escuro, sem o dourado — o botao de dinheiro ao lado e que chama.
+  priceShort: { backgroundColor: 'rgba(6,8,20,0.6)', borderColor: 'rgba(255,255,255,0.1)' },
+  priceTextShort: { color: 'rgba(150,161,206,0.55)' },
+  coinShort: { opacity: 0.35 },
   priceText: { color: theme.bird, fontSize: 14, fontWeight: '900' },
+  // Do tamanho da barra; armado ("Confirmar 1000"), cresce para a esquerda.
+  upgrade: { minWidth: UPGRADE_WIDTH, paddingHorizontal: 10 },
+  progress: {
+    width: UPGRADE_WIDTH,
+    height: 18,
+    borderRadius: 9,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,213,74,0.35)',
+  },
+  progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,213,74,0.45)' },
+  progressFull: { backgroundColor: 'rgba(46,230,197,0.45)' },
+  progressText: { color: theme.text, fontSize: 10, fontWeight: '900', textAlign: 'center', letterSpacing: 0.3 },
   priceArmedText: { color: '#1A1330', fontSize: 13, fontWeight: '900' },
 
   error: { color: theme.danger, fontSize: 13, fontWeight: '700', textAlign: 'center' },

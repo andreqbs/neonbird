@@ -452,9 +452,9 @@ token na tela.
 
 # Parte 5 — compra com dinheiro (Google Play)
 
-Os pássaros da loja se compram com **moedas, com dinheiro ou dos dois jeitos**; o
-**Cometa é só com dinheiro**, porque o poder dele (moedas em dobro) pagaria
-qualquer outro pássaro rápido demais. Quem decide é o [catalog.go](catalog.go):
+Os pássaros da loja se compram com **moedas, com dinheiro ou dos dois jeitos**;
+**Brasa e Cometa são só com dinheiro** — o poder do Cometa (moedas em dobro)
+pagaria qualquer outro pássaro rápido demais. Quem decide é o [catalog.go](catalog.go):
 `Price` é o preço em moedas (0 = não se compra com moedas) e `ProductID` é o
 produto no Play Console (vazio = não se compra com dinheiro).
 
@@ -650,7 +650,8 @@ partida já foi usada"*); o código é o que o app usa para decidir o que fazer
 - **Poderes que mexem na economia** (moedas multiplicadas, chance extra) valem
   pelo pássaro registrado na **abertura** da partida (`game_sessions.bird`), não
   pelo que estiver escolhido na hora de fechar.
-- **Escudo**: gasta um guardado, dentro de uma partida aberta.
+- **Escudo**: gasta um guardado, dentro de uma partida aberta. Escudo e nova
+  chance guardados custam **300 moedas** cada (`ShieldPrice` e `ContinuePrice`).
 - Pássaro, escudo e nova chance se compram **só com moedas**, e pássaro não se
   compra duas vezes. Só dá para usar pássaro comprado.
 - Prêmio de anúncio **só com o aviso assinado do Google**, e **um prêmio por
@@ -694,17 +695,18 @@ partida.
 | --- | --- | --- | --- |
 | Major | grátis | — | O de sempre, sem poder. |
 | Geada | moedas ou dinheiro | ❄️ Câmera lenta | A fase anda **20% mais devagar** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
-| Brasa | moedas ou dinheiro | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
 | Toxina | moedas ou dinheiro | 🧲 Ímã | Puxa as moedas por perto por 4 s (8 s com 5 estrelas); depois recarrega 10 s. |
 | Fantasma | moedas ou dinheiro | 👻 Invisível | **Atravessa os obstáculos** por 2 s (6 s com 5 estrelas); depois recarrega 10 s. |
+| Brasa | **só dinheiro** | 🔥 Segunda chance | **Duas** novas chances por partida em vez de uma — a segunda, só assistindo a um vídeo. |
 | Cometa | **só dinheiro** | ☄️ Moedas em dobro | As moedas pegas no voo valem **o dobro** no fim da partida (o bônus de fase não dobra). |
 
 ### As estrelas
 
 Cada pássaro com poder de **tempo** evolui até **5 estrelas**, e cada estrela
 **estica o tempo do poder**. As estrelas se compram com **moedas**, na loja, e
-custam **10 · 20 · 40 · 80 · 160** (preços de teste). Pássaro recém-comprado
-começa sem estrela nenhuma.
+custam **100 · 300 · 500 · 700 · 1000**. Pássaro recém-comprado começa sem
+estrela nenhuma. Na loja, o botão **Upgrade** fica na linha das estrelas, com uma
+barra embaixo: as moedas do jogador contra o preço da próxima estrela.
 
 | Pássaro | Sem estrela | ★ | ★★ | ★★★ | ★★★★ | ★★★★★ |
 | --- | --- | --- | --- | --- | --- | --- |
